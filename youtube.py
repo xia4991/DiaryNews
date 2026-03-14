@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import feedparser
 import requests as _requests
 
-from config import ENABLE_WHISPER_API, ENABLE_WHISPER_LOCAL, MAX_VIDEOS, WHISPER_MODEL
+from config import ENABLE_WHISPER_API, ENABLE_WHISPER_LOCAL, MAX_VIDEOS, MINIMAX_API_URL, MINIMAX_MODEL, WHISPER_MODEL
 from utils import strip_html
 
 log = logging.getLogger("diarynews.youtube")
@@ -115,6 +115,40 @@ def merge_videos(existing: list, new_videos: list) -> list:
 
 
 CAPTION_LANG_PRIORITY = ["pt", "en", "zh-Hans", "zh-Hant", "zh"]
+
+
+def summarize_caption(title: str, raw_text: str) -> str:
+    api_key = os.environ.get("MINIMAX_API_KEY")
+    if not api_key:
+        return ""
+    prompt = (
+        f"Título do vídeo: {title}\n\n"
+        f"Transcrição (texto bruto, sem pontuação):\n{raw_text[:4000]}\n\n"
+        "请根据以上转录内容，用中文写一份结构化摘要。"
+        "严格使用以下格式：\n\n"
+        "**主题**\n"
+        "一句话描述视频的核心主题。\n\n"
+        "**要点**\n"
+        "- 要点1\n"
+        "- 要点2\n"
+        "- 要点3\n"
+        "（3到6个要点，每点1-2句话）\n\n"
+        "**结论**\n"
+        "一句话总结视频的核心观点或收获。\n\n"
+        "直接给出内容，不要使用"这个视频讲了"之类的开场白。"
+    )
+    try:
+        resp = _requests.post(
+            MINIMAX_API_URL,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={"model": MINIMAX_MODEL, "max_tokens": 600, "messages": [{"role": "user", "content": prompt}]},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"].strip()
+    except Exception as exc:
+        log.warning("summarize_caption failed for '%s': %s", title, exc)
+        return ""
 
 
 def fetch_caption(video_id: str) -> dict:

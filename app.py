@@ -20,6 +20,7 @@ from youtube import (
     fetch_caption,
     merge_videos,
     resolve_youtube_channel,
+    summarize_caption,
 )
 
 st.set_page_config(page_title="Notícias Portugal", page_icon="📰", layout="wide")
@@ -39,7 +40,7 @@ with st.sidebar:
     else:
         st.caption("Nunca actualizado")
 
-    if st.button("🔄 Fetch latest news", use_container_width=True):
+    if st.button("🔄 Fetch latest news", width="stretch"):
         with st.spinner("A carregar notícias..."):
             existing_urls = {a["link"] for a in articles}
             new_articles = fetch_all_feeds(existing_urls=existing_urls)
@@ -84,7 +85,7 @@ def show_article_detail(article: dict) -> None:
         st.markdown("**Artigo completo**")
         st.markdown(full_text)
     st.divider()
-    st.link_button("Ler artigo original →", article["link"], use_container_width=True)
+    st.link_button("Ler artigo original →", article["link"], width="stretch")
 
 
 @st.dialog("Legenda do Vídeo", width="large")
@@ -93,29 +94,41 @@ def show_caption_dialog(video: dict) -> None:
     st.caption(f"{video['channel_name']}  ·  {video['published'][:16].replace('T', ' ')}")
     st.divider()
 
+    attempted = "caption" in video
     caption = video.get("caption")
 
-    if caption is None:
+    if attempted and caption is None:
         st.warning("Legendas indisponíveis para este vídeo.")
         if st.button("🔄 Tentar novamente"):
             _clear_caption(video["video_id"])
             st.rerun()
         return
 
-    if not caption:
+    if not attempted:
         with st.spinner("A obter legendas..."):
             try:
                 result = fetch_caption(video["video_id"])
-                _save_caption(video["video_id"], result)
-                caption = result
             except ValueError as exc:
                 st.error(str(exc))
                 _save_caption(video["video_id"], None)
                 return
+        with st.spinner("A gerar resumo com IA..."):
+            result["summary"] = summarize_caption(video["title"], result["text"])
+        _save_caption(video["video_id"], result)
+        caption = result
 
     tier_label = {1: "YouTube captions", 2: "Whisper API", 3: "Whisper local"}.get(caption.get("tier", 1))
     st.caption(f"Idioma: `{caption['language']}`  ·  {tier_label}  ·  {caption['fetched_at'][:16].replace('T', ' ')}")
-    st.text_area("Texto", caption["text"], height=400, disabled=True)
+
+    summary = caption.get("summary", "")
+    if summary:
+        st.markdown(summary)
+    else:
+        st.info("Resumo IA não disponível (MINIMAX_API_KEY não configurada).")
+
+    with st.expander("📄 Transcrição bruta"):
+        st.text_area("", caption["text"], height=300, disabled=True, label_visibility="collapsed")
+
     if st.button("🔄 Re-fetch"):
         _clear_caption(video["video_id"])
         st.rerun()
@@ -176,7 +189,7 @@ def _render_youtube_tab() -> None:
 
     col_btn, col_ts = st.columns([2, 5])
     with col_btn:
-        fetch_clicked = st.button("🔄 Fetch latest videos", use_container_width=True, disabled=not channels)
+        fetch_clicked = st.button("🔄 Fetch latest videos", width="stretch", disabled=not channels)
     with col_ts:
         if yt_last:
             st.caption(f"Última actualização: {yt_last[:19].replace('T', ' ')}")
@@ -224,13 +237,13 @@ def _render_youtube_tab() -> None:
     for i, video in enumerate(videos):
         with cols[i % 3]:
             with st.container(border=True):
-                st.image(video["thumbnail"], use_container_width=True)
+                st.image(video["thumbnail"], width="stretch")
                 st.markdown(f"**[{video['title']}]({video['link']})**")
                 pub = video["published"][:16].replace("T", " ")
                 st.caption(f"{video['channel_name']}  ·  {pub}")
                 cap = video.get("caption")
-                cap_label = "✅ Legenda" if cap else ("⚠️ Sem legenda" if cap is None else "📄 Legenda")
-                if st.button(cap_label, key=f"cap_{video['video_id']}", use_container_width=True):
+                cap_label = "✅ Legenda" if cap else ("⚠️ Sem legenda" if ("caption" in video and cap is None) else "📄 Legenda")
+                if st.button(cap_label, key=f"cap_{video['video_id']}", width="stretch"):
                     show_caption_dialog(video)
 
 
@@ -254,7 +267,7 @@ with tab_news:
                 with cols[i % 3]:
                     pub = article["published"][:16].replace("T", " ")
                     with st.container(border=True):
-                        if st.button(article["title"], key=f"btn_{article['link']}", use_container_width=True):
+                        if st.button(article["title"], key=f"btn_{article['link']}", width="stretch"):
                             show_article_detail(article)
                         st.caption(article["summary"][:200])
                         col_src, col_date = st.columns([2, 1])
