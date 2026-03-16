@@ -1,5 +1,9 @@
 import os
 
+from dotenv import load_dotenv
+
+load_dotenv()
+
 DATA_PATH = "data/news.json"
 MAX_ARTICLES = 200
 

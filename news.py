@@ -31,7 +31,7 @@ def _parse_date(entry) -> str:
 def scrape_article(url: str) -> str:
     try:
         import trafilatura
-        resp = _requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0"})
+        resp = _requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"})
         resp.raise_for_status()
         text = trafilatura.extract(resp.text, include_comments=False, include_tables=False)
         return text or ""

@@ -14,7 +14,7 @@ from utils import strip_html
 log = logging.getLogger("diarynews.youtube")
 
 
-def _normalise_handle(raw: str) -> tuple:
+def normalise_handle(raw: str) -> tuple:
     raw = raw.strip().rstrip("/")
     raw = re.sub(r"^https?://", "", raw, flags=re.IGNORECASE)
     raw = re.sub(r"^(?:www\.)?youtube\.com/", "", raw, flags=re.IGNORECASE)
@@ -27,7 +27,7 @@ def _normalise_handle(raw: str) -> tuple:
 
 
 def resolve_youtube_channel(handle: str) -> dict:
-    handle, _ = _normalise_handle(handle)
+    handle, _ = normalise_handle(handle)
     api_key = os.environ.get("YOUTUBE_API_KEY", "")
     if not api_key:
         raise ValueError("YOUTUBE_API_KEY não configurada.")
@@ -123,7 +123,7 @@ def summarize_caption(title: str, raw_text: str) -> str:
         return ""
     prompt = (
         f"Título do vídeo: {title}\n\n"
-        f"Transcrição (texto bruto, sem pontuação):\n{raw_text[:4000]}\n\n"
+        f"Transcrição (texto bruto, sem pontuação):\n{raw_text[:12000]}\n\n"
         "请根据以上转录内容，用中文写一份结构化摘要。"
         "严格使用以下格式：\n\n"
         "**主题**\n"
@@ -135,7 +135,7 @@ def summarize_caption(title: str, raw_text: str) -> str:
         "（3到6个要点，每点1-2句话）\n\n"
         "**结论**\n"
         "一句话总结视频的核心观点或收获。\n\n"
-        "直接给出内容，不要使用"这个视频讲了"之类的开场白。"
+        "直接给出内容，不要使用「这个视频讲了」之类的开场白。"
     )
     try:
         resp = _requests.post(
@@ -158,13 +158,12 @@ def fetch_caption(video_id: str) -> dict:
     # --- Tier 1: youtube-transcript-api ---
     try:
         api = YouTubeTranscriptApi()
-        # Try preferred languages first, fall back to any available
         transcript = None
         for lang in CAPTION_LANG_PRIORITY:
             try:
                 transcript = api.fetch(video_id, languages=[lang])
                 break
-            except Exception:
+            except NoTranscriptFound:
                 continue
         if transcript is None:
             # Fall back to first available language
@@ -232,10 +231,11 @@ def fetch_caption(video_id: str) -> dict:
 
 def _download_audio(video_id: str) -> str:
     import yt_dlp
-    tmp = tempfile.mktemp(suffix=".mp3")
+    tmp_dir = tempfile.mkdtemp()
+    tmp = os.path.join(tmp_dir, "audio.mp3")
     opts = {
         "format": "bestaudio/best",
-        "outtmpl": tmp.replace(".mp3", ""),
+        "outtmpl": os.path.join(tmp_dir, "audio"),
         "postprocessors": [{"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "64"}],
         "quiet": True,
     }
@@ -247,6 +247,8 @@ def _download_audio(video_id: str) -> str:
 def _cleanup(path: str) -> None:
     try:
         if path and os.path.exists(path):
+            tmp_dir = os.path.dirname(path)
             os.remove(path)
+            os.rmdir(tmp_dir)
     except OSError:
         pass

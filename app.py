@@ -4,9 +4,6 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 import streamlit as st
-from dotenv import load_dotenv
-
-load_dotenv()
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
 logging.getLogger("urllib3").setLevel(logging.ERROR)
@@ -15,7 +12,7 @@ from config import CATEGORIES, ENABLE_WHISPER_API, ENABLE_WHISPER_LOCAL, RSS_SOU
 from news import fetch_all_feeds, merge_articles
 from storage import load_news, load_youtube, save_news, save_youtube
 from youtube import (
-    _normalise_handle,
+    normalise_handle,
     fetch_all_channels,
     fetch_caption,
     merge_videos,
@@ -26,7 +23,12 @@ from youtube import (
 st.set_page_config(page_title="Notícias Portugal", page_icon="📰", layout="wide")
 st.title("📰 Notícias Portugal")
 
-data = load_news()
+@st.cache_data(ttl=300)
+def _cached_news() -> dict:
+    return load_news()
+
+
+data = _cached_news()
 articles = data.get("articles", [])
 last_updated = data.get("last_updated")
 
@@ -47,6 +49,7 @@ with st.sidebar:
         articles = merge_articles(articles, new_articles)
         now_str = datetime.now(timezone.utc).isoformat()
         save_news({"last_updated": now_str, "articles": articles})
+        _cached_news.clear()
         st.success(f"{len(new_articles)} artigos obtidos.")
         st.rerun()
 
@@ -164,7 +167,7 @@ def _render_youtube_tab() -> None:
             submitted = st.form_submit_button("Adicionar")
         if submitted and raw_input.strip():
             try:
-                handle, _ = _normalise_handle(raw_input)
+                handle, _ = normalise_handle(raw_input)
             except ValueError as exc:
                 st.error(str(exc))
             else:
