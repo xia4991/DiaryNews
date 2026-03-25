@@ -13,7 +13,6 @@ from backend.news import fetch_all_feeds
 from backend.youtube import (
     fetch_all_channels,
     fetch_and_summarize_caption,
-    merge_videos,
     normalise_handle,
     resolve_youtube_channel,
 )
@@ -131,10 +130,9 @@ def fetch_videos():
     existing_ids = {v["video_id"] for v in yt_data.get("videos", [])}
     new_videos = fetch_all_channels(fetchable, existing_ids)
 
+    now = datetime.now(timezone.utc).isoformat()
     if new_videos:
-        merged = merge_videos(yt_data.get("videos", []), new_videos)
-        now = datetime.now(timezone.utc).isoformat()
-        storage.update_videos(merged, now)
+        storage.update_videos(new_videos, now)
 
     return {"new_count": len(new_videos), "resolve_errors": errors}
 

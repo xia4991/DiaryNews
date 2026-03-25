@@ -18,6 +18,7 @@ export default function App() {
   const [videos, setVideos] = useState([])
   const [ytLastUpdated, setYtLastUpdated] = useState(null)
   const [ytFilter, setYtFilter] = useState({ kind: 'all', value: '' })
+  const [fetchError, setFetchError] = useState(null)
 
   // Load initial data
   useEffect(() => {
@@ -46,12 +47,18 @@ export default function App() {
 
   const handleFetchVideos = async () => {
     setFetching(true)
+    setFetchError(null)
     try {
-      await api.fetchVideos()
+      const result = await api.fetchVideos()
       const d = await api.getYoutube()
       setChannels(d.channels || [])
       setVideos(d.videos || [])
       setYtLastUpdated(d.last_updated)
+      if (result.resolve_errors?.length) {
+        setFetchError(result.resolve_errors.map(e => `${e.handle}: ${e.error}`).join(' · '))
+      }
+    } catch (err) {
+      setFetchError(err.response?.data?.detail || 'Fetch failed. Check the server logs.')
     } finally {
       setFetching(false)
     }
@@ -132,6 +139,7 @@ export default function App() {
           <YoutubeTab
             channels={channels}
             videos={filteredVideos}
+            fetchError={fetchError}
             onChannelsUpdate={handleChannelsUpdate}
             onCaptionUpdate={handleCaptionUpdate}
           />

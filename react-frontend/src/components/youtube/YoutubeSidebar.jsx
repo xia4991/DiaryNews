@@ -41,7 +41,7 @@ export default function YoutubeSidebar({ channels, videos, activeFilter, onFilte
       {channels.length > 0 && (
         <>
           {sectionLabel('Channels')}
-          {channels.map(ch => (
+          {channels.map(ch => ch.channel_id ? (
             <button key={ch.handle} onClick={() => onFilterChange({ kind: 'channel', value: ch.channel_id })}
               className={navItemClass(isActive('channel', ch.channel_id))}>
               <div className="h-4 w-4 rounded flex items-center justify-center text-xs font-bold shrink-0"
@@ -51,6 +51,12 @@ export default function YoutubeSidebar({ channels, videos, activeFilter, onFilte
               <span className="flex-1 truncate">{ch.name || ch.handle}</span>
               <span className="text-on-surface-variant opacity-60">{videosByChannel[ch.channel_id] || 0}</span>
             </button>
+          ) : (
+            <div key={ch.handle} className="flex items-center gap-2 px-2 py-1.5 opacity-40 cursor-default">
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>hourglass_empty</span>
+              <span className="flex-1 truncate">{ch.handle}</span>
+              <span style={{ fontSize: 10 }}>pending</span>
+            </div>
           ))}
         </>
       )}

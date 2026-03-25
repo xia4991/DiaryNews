@@ -2,7 +2,7 @@ import { useState } from 'react'
 import VideoFeedItem from '../components/youtube/VideoFeedItem'
 import ChannelManager from '../components/youtube/ChannelManager'
 
-export default function YoutubeTab({ channels, videos, onChannelsUpdate, onCaptionUpdate }) {
+export default function YoutubeTab({ channels, videos, fetchError, onChannelsUpdate, onCaptionUpdate }) {
   const [showManager, setShowManager] = useState(!channels.length)
 
   return (
@@ -34,6 +34,14 @@ export default function YoutubeTab({ channels, videos, onChannelsUpdate, onCapti
       {showManager && (
         <div className="mb-5">
           <ChannelManager channels={channels} onUpdate={onChannelsUpdate} />
+        </div>
+      )}
+
+      {fetchError && (
+        <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg text-xs"
+          style={{ background: 'rgba(255,180,171,0.08)', border: '1px solid rgba(255,180,171,0.2)', color: '#ffb4ab' }}>
+          <span className="material-symbols-outlined shrink-0" style={{ fontSize: 14 }}>error</span>
+          {fetchError}
         </div>
       )}
 
