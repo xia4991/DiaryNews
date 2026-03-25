@@ -1,0 +1,162 @@
+import { useState, useEffect, useCallback } from 'react'
+import Header from './components/Header'
+import Sidebar from './components/Sidebar'
+import YoutubeSidebar from './components/youtube/YoutubeSidebar'
+import NewsTab from './pages/NewsTab'
+import YoutubeTab from './pages/YoutubeTab'
+import { api } from './api'
+
+export default function App() {
+  const [activeTab, setActiveTab] = useState('News')
+  const [fetching, setFetching] = useState(false)
+
+  const [articles, setArticles] = useState([])
+  const [newsLastUpdated, setNewsLastUpdated] = useState(null)
+  const [activeCategory, setActiveCategory] = useState('All')
+
+  const [channels, setChannels] = useState([])
+  const [videos, setVideos] = useState([])
+  const [ytLastUpdated, setYtLastUpdated] = useState(null)
+  const [ytFilter, setYtFilter] = useState({ kind: 'all', value: '' })
+
+  // Load initial data
+  useEffect(() => {
+    api.getNews().then(d => {
+      setArticles(d.articles || [])
+      setNewsLastUpdated(d.last_updated)
+    })
+    api.getYoutube().then(d => {
+      setChannels(d.channels || [])
+      setVideos(d.videos || [])
+      setYtLastUpdated(d.last_updated)
+    })
+  }, [])
+
+  const handleFetchNews = async () => {
+    setFetching(true)
+    try {
+      await api.fetchNews()
+      const d = await api.getNews()
+      setArticles(d.articles || [])
+      setNewsLastUpdated(d.last_updated)
+    } finally {
+      setFetching(false)
+    }
+  }
+
+  const handleFetchVideos = async () => {
+    setFetching(true)
+    try {
+      await api.fetchVideos()
+      const d = await api.getYoutube()
+      setChannels(d.channels || [])
+      setVideos(d.videos || [])
+      setYtLastUpdated(d.last_updated)
+    } finally {
+      setFetching(false)
+    }
+  }
+
+  const handleChannelsUpdate = useCallback(async () => {
+    const d = await api.getYoutube()
+    setChannels(d.channels || [])
+    setVideos(d.videos || [])
+  }, [])
+
+  const handleCaptionUpdate = useCallback((videoId, caption) => {
+    setVideos(prev => prev.map(v =>
+      v.video_id === videoId
+        ? (caption === undefined
+            ? (({ caption: _, ...rest }) => rest)(v)
+            : { ...v, caption })
+        : v
+    ))
+  }, [])
+
+  // Build category list with counts
+  const categoryMap = {}
+  for (const a of articles) {
+    categoryMap[a.category] = (categoryMap[a.category] || 0) + 1
+  }
+  const categories = Object.entries(categoryMap)
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+
+  const filteredArticles = activeCategory === 'All'
+    ? articles
+    : articles.filter(a => a.category === activeCategory)
+
+  const filteredVideos = (() => {
+    if (ytFilter.kind === 'channel') return videos.filter(v => v.channel_id === ytFilter.value)
+    if (ytFilter.kind === 'category') {
+      const ids = new Set(channels.filter(c => c.category === ytFilter.value).map(c => c.channel_id))
+      return videos.filter(v => ids.has(v.channel_id))
+    }
+    return videos
+  })()
+
+  return (
+    <div className="min-h-screen" style={{ background: '#0b1326', color: '#dae2fd' }}>
+      <Header
+        activeTab={activeTab}
+        onTabChange={tab => { setActiveTab(tab); setActiveCategory('All'); setYtFilter({ kind: 'all', value: '' }) }}
+        onFetchNews={handleFetchNews}
+        onFetchVideos={handleFetchVideos}
+        fetching={fetching}
+      />
+
+      {activeTab === 'News' && (
+        <Sidebar
+          categories={categories}
+          activeCategory={activeCategory}
+          onCategoryChange={setActiveCategory}
+          lastUpdated={newsLastUpdated}
+        />
+      )}
+
+      {activeTab === 'YouTube' && (
+        <YoutubeSidebar
+          channels={channels}
+          videos={videos}
+          activeFilter={ytFilter}
+          onFilterChange={setYtFilter}
+          lastUpdated={ytLastUpdated}
+        />
+      )}
+
+      <main className="pt-14 px-5 lg:px-8 pb-12 lg:ml-52">
+        {activeTab === 'News' && (
+          <NewsTab articles={filteredArticles} />
+        )}
+        {activeTab === 'YouTube' && (
+          <YoutubeTab
+            channels={channels}
+            videos={filteredVideos}
+            onChannelsUpdate={handleChannelsUpdate}
+            onCaptionUpdate={handleCaptionUpdate}
+          />
+        )}
+      </main>
+
+      {/* Mobile bottom nav */}
+      <div className="md:hidden fixed bottom-0 w-full glass-panel h-12 flex justify-around items-center z-50"
+        style={{ borderTop: '1px solid rgba(70,69,84,0.3)' }}>
+        {[
+          { label: 'News',    icon: 'newspaper',     tab: 'News' },
+          { label: 'YouTube', icon: 'video_library', tab: 'YouTube' },
+        ].map(({ label, icon, tab }) => (
+          <button key={tab} onClick={() => setActiveTab(tab)}
+            className={`flex flex-col items-center gap-1 transition-colors ${
+              activeTab === tab ? 'text-secondary' : 'text-on-surface-variant'
+            }`}>
+            <span className="material-symbols-outlined"
+              style={{ fontVariationSettings: activeTab === tab ? "'FILL' 1" : "'FILL' 0" }}>
+              {icon}
+            </span>
+            <span className="text-xs font-medium">{label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}

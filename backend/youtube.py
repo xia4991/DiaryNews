@@ -4,14 +4,18 @@ import re
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
+from typing import Optional
 
 import feedparser
 import requests as _requests
 
-from config import ENABLE_WHISPER_API, ENABLE_WHISPER_LOCAL, MAX_VIDEOS, MINIMAX_API_URL, MINIMAX_MODEL, WHISPER_MODEL
-from utils import strip_html
+from backend.config import ENABLE_WHISPER_API, ENABLE_WHISPER_LOCAL, MAX_VIDEOS, WHISPER_MODEL
+from backend.llm import call_minimax
+from backend.utils import strip_html
 
 log = logging.getLogger("diarynews.youtube")
+
+CAPTION_LANG_PRIORITY = ["pt", "en", "zh-Hans", "zh-Hant", "zh"]
 
 
 def normalise_handle(raw: str) -> tuple:
@@ -79,13 +83,13 @@ def fetch_channel_videos(channel: dict, existing_ids: set) -> list:
             else datetime.now(timezone.utc).isoformat()
         )
         videos.append({
-            "video_id":    video_id,
-            "title":       strip_html(entry.get("title", "")),
+            "video_id":     video_id,
+            "title":        strip_html(entry.get("title", "")),
             "channel_name": channel["name"],
-            "channel_id":  channel["channel_id"],
-            "published":   published,
-            "thumbnail":   thumbnail,
-            "link":        link,
+            "channel_id":   channel["channel_id"],
+            "published":    published,
+            "thumbnail":    thumbnail,
+            "link":         link,
         })
     return videos
 
@@ -114,43 +118,6 @@ def merge_videos(existing: list, new_videos: list) -> list:
     return merged[:MAX_VIDEOS]
 
 
-CAPTION_LANG_PRIORITY = ["pt", "en", "zh-Hans", "zh-Hant", "zh"]
-
-
-def summarize_caption(title: str, raw_text: str) -> str:
-    api_key = os.environ.get("MINIMAX_API_KEY")
-    if not api_key:
-        return ""
-    prompt = (
-        f"Título do vídeo: {title}\n\n"
-        f"Transcrição (texto bruto, sem pontuação):\n{raw_text[:12000]}\n\n"
-        "请根据以上转录内容，用中文写一份结构化摘要。"
-        "严格使用以下格式：\n\n"
-        "**主题**\n"
-        "一句话描述视频的核心主题。\n\n"
-        "**要点**\n"
-        "- 要点1\n"
-        "- 要点2\n"
-        "- 要点3\n"
-        "（3到6个要点，每点1-2句话）\n\n"
-        "**结论**\n"
-        "一句话总结视频的核心观点或收获。\n\n"
-        "直接给出内容，不要使用「这个视频讲了」之类的开场白。"
-    )
-    try:
-        resp = _requests.post(
-            MINIMAX_API_URL,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": MINIMAX_MODEL, "max_tokens": 600, "messages": [{"role": "user", "content": prompt}]},
-            timeout=30,
-        )
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"].strip()
-    except Exception as exc:
-        log.warning("summarize_caption failed for '%s': %s", title, exc)
-        return ""
-
-
 def fetch_caption(video_id: str) -> dict:
     from youtube_transcript_api import YouTubeTranscriptApi
     from youtube_transcript_api._errors import TranscriptsDisabled, NoTranscriptFound
@@ -166,7 +133,6 @@ def fetch_caption(video_id: str) -> dict:
             except NoTranscriptFound:
                 continue
         if transcript is None:
-            # Fall back to first available language
             transcript_list = api.list(video_id)
             first = next(iter(transcript_list))
             transcript = api.fetch(video_id, languages=[first.language_code])
@@ -227,6 +193,35 @@ def fetch_caption(video_id: str) -> dict:
             _cleanup(audio_path)
 
     raise ValueError("Não foi possível obter legendas (todos os tiers falharam ou estão desactivados).")
+
+
+def summarize_caption(title: str, raw_text: str) -> str:
+    prompt = (
+        f"Título do vídeo: {title}\n\n"
+        f"Transcrição (texto bruto, sem pontuação):\n{raw_text[:12000]}\n\n"
+        "请根据以上转录内容，用中文写一份结构化摘要。"
+        "严格使用以下格式：\n\n"
+        "**主题**\n"
+        "一句话描述视频的核心主题。\n\n"
+        "**要点**\n"
+        "- 要点1\n"
+        "- 要点2\n"
+        "- 要点3\n"
+        "（3到6个要点，每点1-2句话）\n\n"
+        "**结论**\n"
+        "一句话总结视频的核心观点或收获。\n\n"
+        "直接给出内容，不要使用「这个视频讲了」之类的开场白。"
+    )
+    return call_minimax(prompt, max_tokens=600, fallback="")
+
+
+def fetch_and_summarize_caption(video_id: str, title: str) -> Optional[dict]:
+    try:
+        result = fetch_caption(video_id)
+    except ValueError:
+        return None
+    result["summary"] = summarize_caption(title, result["text"])
+    return result
 
 
 def _download_audio(video_id: str) -> str:

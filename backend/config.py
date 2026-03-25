@@ -4,10 +4,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATA_PATH = "data/news.json"
+DB_PATH = "data/diarynews.db"
 MAX_ARTICLES = 200
-
-YOUTUBE_DATA_PATH = "data/youtube.json"
 MAX_VIDEOS = 100
 
 MINIMAX_API_URL = "https://api.minimaxi.com/v1/chat/completions"

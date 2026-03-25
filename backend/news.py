@@ -1,13 +1,13 @@
 import logging
-import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 
 import feedparser
 import requests as _requests
 
-from config import CATEGORIES, MAX_ARTICLES, MINIMAX_API_URL, MINIMAX_MODEL, RSS_SOURCES
-from utils import strip_html
+from backend.config import CATEGORIES, RSS_SOURCES
+from backend.llm import call_minimax
+from backend.utils import strip_html
 
 log = logging.getLogger("diarynews.news")
 
@@ -40,36 +40,17 @@ def scrape_article(url: str) -> str:
         return ""
 
 
-def summarize_with_llm(title: str, content: str, rss_summary: str) -> str:
-    api_key = os.environ.get("MINIMAX_API_KEY")
-    if not api_key:
-        return rss_summary
-    body = content[:3000] if content else rss_summary
+def _enrich_article(article: dict) -> dict:
+    content = scrape_article(article["link"])
     prompt = (
-        f"Título: {title}\n\nConteúdo:\n{body}\n\n"
+        f"Título: {article['title']}\n\nConteúdo:\n{content[:3000] if content else article['summary']}\n\n"
         "Escreve um resumo claro e objetivo em português com 2 a 3 frases. "
         "Vai direto aos factos, sem introduções como 'Este artigo fala de'."
     )
-    try:
-        resp = _requests.post(
-            MINIMAX_API_URL,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": MINIMAX_MODEL, "max_tokens": 180, "messages": [{"role": "user", "content": prompt}]},
-            timeout=30,
-        )
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"].strip()
-    except Exception as exc:
-        log.warning("summarize_with_llm failed for '%s': %s", title, exc)
-        return rss_summary
-
-
-def _enrich_article(article: dict) -> dict:
-    content = scrape_article(article["link"])
     return {
         **article,
         "scraped_content": content,
-        "ai_summary": summarize_with_llm(article["title"], content, article["summary"]),
+        "ai_summary": call_minimax(prompt, max_tokens=180, fallback=article["summary"]),
     }
 
 
@@ -108,12 +89,3 @@ def fetch_all_feeds(existing_urls: set = None) -> list:
     return enriched
 
 
-def merge_articles(existing: list, new_articles: list) -> list:
-    seen_urls = {a["link"] for a in existing}
-    merged = list(existing)
-    for article in new_articles:
-        if article["link"] not in seen_urls:
-            merged.append(article)
-            seen_urls.add(article["link"])
-    merged.sort(key=lambda a: a["published"], reverse=True)
-    return merged[:MAX_ARTICLES]
