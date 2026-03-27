@@ -1,7 +1,8 @@
+import asyncio
 import os
 from datetime import datetime, timezone
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -50,10 +51,10 @@ def get_news():
 
 
 @app.post("/api/news/fetch")
-def fetch_news():
+async def fetch_news():
     data = storage.load_news()
     existing_urls = {a["link"] for a in data.get("articles", [])}
-    new_articles = fetch_all_feeds(existing_urls=existing_urls)
+    new_articles = await asyncio.to_thread(fetch_all_feeds, existing_urls=existing_urls)
     now = datetime.now(timezone.utc).isoformat()
     storage.save_news({"last_updated": now, "articles": new_articles})
     return {"new_count": len(new_articles), "last_updated": now}
@@ -109,7 +110,7 @@ def resolve_channel(handle: str):
 # ── YouTube — videos ──────────────────────────────────────────────────────────
 
 @app.post("/api/youtube/fetch")
-def fetch_videos():
+async def fetch_videos():
     yt_data = storage.load_youtube()
     channels = yt_data.get("channels", [])
 
@@ -117,7 +118,7 @@ def fetch_videos():
     for ch in channels:
         if not ch.get("channel_id"):
             try:
-                resolved = resolve_youtube_channel(ch["handle"])
+                resolved = await asyncio.to_thread(resolve_youtube_channel, ch["handle"])
                 storage.update_channel_id(ch["handle"], resolved["channel_id"], resolved["name"])
             except Exception as exc:
                 errors.append({"handle": ch["handle"], "error": str(exc)})
@@ -128,7 +129,7 @@ def fetch_videos():
         raise HTTPException(status_code=400, detail="No resolvable channels.")
 
     existing_ids = {v["video_id"] for v in yt_data.get("videos", [])}
-    new_videos = fetch_all_channels(fetchable, existing_ids)
+    new_videos = await asyncio.to_thread(fetch_all_channels, fetchable, existing_ids)
 
     now = datetime.now(timezone.utc).isoformat()
     if new_videos:
@@ -140,7 +141,7 @@ def fetch_videos():
 # ── YouTube — captions ────────────────────────────────────────────────────────
 
 @app.get("/api/youtube/videos/{video_id}/caption")
-def get_caption(video_id: str):
+async def get_caption(video_id: str):
     yt_data = storage.load_youtube()
     video = next((v for v in yt_data["videos"] if v["video_id"] == video_id), None)
     if not video:
@@ -149,8 +150,8 @@ def get_caption(video_id: str):
     if "caption" in video:
         return {"caption": video["caption"], "attempted": True}
 
-    # Not yet attempted — fetch now
-    result = fetch_and_summarize_caption(video_id, video["title"])
+    # Not yet attempted — run blocking I/O in a thread so the server stays responsive
+    result = await asyncio.to_thread(fetch_and_summarize_caption, video_id, video["title"])
     storage.save_caption(video_id, result)
     return {"caption": result, "attempted": True}
 

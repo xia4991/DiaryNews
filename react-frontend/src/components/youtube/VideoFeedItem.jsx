@@ -4,15 +4,19 @@ import SummaryText from '../SummaryText'
 
 export default function VideoFeedItem({ video, onCaptionUpdate }) {
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
   const pub = video.published?.slice(0, 10)
   const caption = video.caption
   const attempted = 'caption' in video
 
   const handleGetCaption = async () => {
     setLoading(true)
+    setError(null)
     try {
       const res = await api.getCaption(video.video_id)
       onCaptionUpdate(video.video_id, res.caption)
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Request failed. Check server logs.')
     } finally {
       setLoading(false)
     }
@@ -69,12 +73,20 @@ export default function VideoFeedItem({ video, onCaptionUpdate }) {
               className="text-xs text-secondary font-bold hover:underline ml-1">Retry</button>
           </div>
         ) : (
-          <button onClick={handleGetCaption} disabled={loading}
-            className="self-start flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-on-primary transition-all hover:brightness-110 active:scale-95 disabled:opacity-50"
-            style={{ background: 'linear-gradient(135deg, #c2c1ff, #5e5ce6)' }}>
-            <span className="material-symbols-outlined" style={{ fontSize: 13 }}>{loading ? 'hourglass_empty' : 'auto_awesome'}</span>
-            {loading ? 'Generating…' : 'Generate Summary'}
-          </button>
+          <div className="flex flex-col gap-1">
+            <button onClick={handleGetCaption} disabled={loading}
+              className="self-start flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-on-primary transition-all hover:brightness-110 active:scale-95 disabled:opacity-50"
+              style={{ background: 'linear-gradient(135deg, #c2c1ff, #5e5ce6)' }}>
+              <span className="material-symbols-outlined" style={{ fontSize: 13 }}>{loading ? 'hourglass_empty' : 'auto_awesome'}</span>
+              {loading ? 'Generating…' : 'Generate Summary'}
+            </button>
+            {error && (
+              <span className="text-xs flex items-center gap-1" style={{ color: '#ffb4ab' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: 12 }}>error</span>
+                {error}
+              </span>
+            )}
+          </div>
         )}
 
         {/* Channel + date */}
