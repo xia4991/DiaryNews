@@ -2,38 +2,44 @@ import { useState } from 'react'
 import { api } from '../../api'
 import SummaryText from '../SummaryText'
 
-export default function VideoFeedItem({ video, onCaptionUpdate }) {
+const CAPTION_TIMEOUT_MS = 90_000
+
+export default function VideoFeedItem({ video, onCaptionUpdate, onError }) {
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
   const pub = video.published?.slice(0, 10)
   const caption = video.caption
   const attempted = 'caption' in video
 
   const handleGetCaption = async () => {
     setLoading(true)
-    setError(null)
     try {
-      const res = await api.getCaption(video.video_id)
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), CAPTION_TIMEOUT_MS)
+      let res
+      try {
+        res = await api.getCaption(video.video_id, controller.signal)
+      } finally {
+        clearTimeout(timer)
+      }
       onCaptionUpdate(video.video_id, res.caption)
     } catch (err) {
-      const msg = err.response?.data?.detail
-        || err.message
-        || 'Unknown error — check server logs.'
-      console.error('[VideoFeedItem] getCaption failed:', err)
-      setError(msg)
+      const msg = err.name === 'CanceledError' || err.name === 'AbortError'
+        ? 'Request timed out after 90 seconds.'
+        : err.response?.data?.detail || err.message || 'Unknown error.'
+      console.error('[caption] failed for', video.video_id, err)
+      onError(`${video.title}: ${msg}`)
     } finally {
       setLoading(false)
     }
   }
 
   const handleClearCaption = async () => {
-    setError(null)
     try {
       await api.clearCaption(video.video_id)
       onCaptionUpdate(video.video_id, undefined)
     } catch (err) {
-      console.error('[VideoFeedItem] clearCaption failed:', err)
-      setError(err.response?.data?.detail || err.message || 'Clear failed.')
+      console.error('[caption] clear failed for', video.video_id, err)
+      onError(`Clear failed: ${err.response?.data?.detail || err.message}`)
     }
   }
 
@@ -60,21 +66,6 @@ export default function VideoFeedItem({ video, onCaptionUpdate }) {
           className="text-sm font-bold leading-snug hover:text-secondary transition-colors">
           {video.title}
         </a>
-
-        {/* Error banner — shown regardless of caption state */}
-        {error && (
-          <div className="flex items-start gap-2 px-3 py-2 rounded-lg"
-            style={{ background: 'rgba(255,180,171,0.1)', border: '1px solid rgba(255,180,171,0.3)' }}>
-            <span className="material-symbols-outlined shrink-0 mt-px" style={{ fontSize: 14, color: '#ffb4ab' }}>error</span>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold mb-0.5" style={{ color: '#ffb4ab' }}>Error</p>
-              <p className="text-xs break-words" style={{ color: '#ffb4ab', opacity: 0.85 }}>{error}</p>
-            </div>
-            <button onClick={() => setError(null)} className="shrink-0 opacity-60 hover:opacity-100 transition-opacity">
-              <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#ffb4ab' }}>close</span>
-            </button>
-          </div>
-        )}
 
         {/* AI Summary */}
         {caption?.summary ? (

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import Header from './components/Header'
 import Sidebar from './components/Sidebar'
 import YoutubeSidebar from './components/youtube/YoutubeSidebar'
+import Toast from './components/Toast'
 import NewsTab from './pages/NewsTab'
 import YoutubeTab from './pages/YoutubeTab'
 import { api } from './api'
@@ -19,6 +20,8 @@ export default function App() {
   const [ytLastUpdated, setYtLastUpdated] = useState(null)
   const [ytFilter, setYtFilter] = useState({ kind: 'all', value: '' })
   const [fetchError, setFetchError] = useState(null)
+  const [toast, setToast] = useState(null)
+  const showToast = useCallback(msg => setToast(msg), [])
 
   // Load initial data
   useEffect(() => {
@@ -104,6 +107,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen" style={{ background: '#0b1326', color: '#dae2fd' }}>
+      <Toast message={toast} onDismiss={() => setToast(null)} />
       <Header
         activeTab={activeTab}
         onTabChange={tab => { setActiveTab(tab); setActiveCategory('All'); setYtFilter({ kind: 'all', value: '' }) }}
@@ -142,6 +146,7 @@ export default function App() {
             fetchError={fetchError}
             onChannelsUpdate={handleChannelsUpdate}
             onCaptionUpdate={handleCaptionUpdate}
+            onError={showToast}
           />
         )}
       </main>

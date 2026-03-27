@@ -23,8 +23,8 @@ export const api = {
     http.post(`/youtube/channels/${handle.replace('@', '')}/resolve`).then(r => r.data),
 
   // Captions
-  getCaption: (videoId) =>
-    http.get(`/youtube/videos/${videoId}/caption`).then(r => r.data),
+  getCaption: (videoId, signal) =>
+    http.get(`/youtube/videos/${videoId}/caption`, { signal }).then(r => r.data),
   clearCaption: (videoId) =>
     http.delete(`/youtube/videos/${videoId}/caption`).then(r => r.data),
 }

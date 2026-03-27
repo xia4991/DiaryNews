@@ -2,7 +2,7 @@ import { useState } from 'react'
 import VideoFeedItem from '../components/youtube/VideoFeedItem'
 import ChannelManager from '../components/youtube/ChannelManager'
 
-export default function YoutubeTab({ channels, videos, fetchError, onChannelsUpdate, onCaptionUpdate }) {
+export default function YoutubeTab({ channels, videos, fetchError, onChannelsUpdate, onCaptionUpdate, onError }) {
   const [showManager, setShowManager] = useState(!channels.length)
 
   return (
@@ -57,6 +57,7 @@ export default function YoutubeTab({ channels, videos, fetchError, onChannelsUpd
               key={video.video_id}
               video={video}
               onCaptionUpdate={onCaptionUpdate}
+              onError={onError}
             />
           ))}
         </div>
