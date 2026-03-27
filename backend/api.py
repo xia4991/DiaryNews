@@ -1,6 +1,9 @@
 import asyncio
+import logging
 import os
 from datetime import datetime, timezone
+
+log = logging.getLogger("diarynews.api")
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -145,13 +148,17 @@ async def get_caption(video_id: str):
     yt_data = storage.load_youtube()
     video = next((v for v in yt_data["videos"] if v["video_id"] == video_id), None)
     if not video:
-        raise HTTPException(status_code=404, detail="Video not found.")
+        raise HTTPException(status_code=404, detail=f"Video '{video_id}' not found in database.")
 
     if "caption" in video:
         return {"caption": video["caption"], "attempted": True}
 
-    # Not yet attempted — run blocking I/O in a thread so the server stays responsive
-    result = await asyncio.to_thread(fetch_and_summarize_caption, video_id, video["title"])
+    try:
+        result = await asyncio.to_thread(fetch_and_summarize_caption, video_id, video["title"])
+    except Exception as exc:
+        log.exception("Caption fetch crashed for %s", video_id)
+        raise HTTPException(status_code=500, detail=f"Caption fetch failed: {exc}")
+
     storage.save_caption(video_id, result)
     return {"caption": result, "attempted": True}
 

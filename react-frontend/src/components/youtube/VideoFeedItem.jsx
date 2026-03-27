@@ -16,15 +16,25 @@ export default function VideoFeedItem({ video, onCaptionUpdate }) {
       const res = await api.getCaption(video.video_id)
       onCaptionUpdate(video.video_id, res.caption)
     } catch (err) {
-      setError(err.response?.data?.detail || 'Request failed. Check server logs.')
+      const msg = err.response?.data?.detail
+        || err.message
+        || 'Unknown error — check server logs.'
+      console.error('[VideoFeedItem] getCaption failed:', err)
+      setError(msg)
     } finally {
       setLoading(false)
     }
   }
 
   const handleClearCaption = async () => {
-    await api.clearCaption(video.video_id)
-    onCaptionUpdate(video.video_id, undefined)
+    setError(null)
+    try {
+      await api.clearCaption(video.video_id)
+      onCaptionUpdate(video.video_id, undefined)
+    } catch (err) {
+      console.error('[VideoFeedItem] clearCaption failed:', err)
+      setError(err.response?.data?.detail || err.message || 'Clear failed.')
+    }
   }
 
   return (
@@ -51,6 +61,21 @@ export default function VideoFeedItem({ video, onCaptionUpdate }) {
           {video.title}
         </a>
 
+        {/* Error banner — shown regardless of caption state */}
+        {error && (
+          <div className="flex items-start gap-2 px-3 py-2 rounded-lg"
+            style={{ background: 'rgba(255,180,171,0.1)', border: '1px solid rgba(255,180,171,0.3)' }}>
+            <span className="material-symbols-outlined shrink-0 mt-px" style={{ fontSize: 14, color: '#ffb4ab' }}>error</span>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold mb-0.5" style={{ color: '#ffb4ab' }}>Error</p>
+              <p className="text-xs break-words" style={{ color: '#ffb4ab', opacity: 0.85 }}>{error}</p>
+            </div>
+            <button onClick={() => setError(null)} className="shrink-0 opacity-60 hover:opacity-100 transition-opacity">
+              <span className="material-symbols-outlined" style={{ fontSize: 14, color: '#ffb4ab' }}>close</span>
+            </button>
+          </div>
+        )}
+
         {/* AI Summary */}
         {caption?.summary ? (
           <div className="rounded-lg px-3 py-2"
@@ -73,20 +98,12 @@ export default function VideoFeedItem({ video, onCaptionUpdate }) {
               className="text-xs text-secondary font-bold hover:underline ml-1">Retry</button>
           </div>
         ) : (
-          <div className="flex flex-col gap-1">
-            <button onClick={handleGetCaption} disabled={loading}
-              className="self-start flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-on-primary transition-all hover:brightness-110 active:scale-95 disabled:opacity-50"
-              style={{ background: 'linear-gradient(135deg, #c2c1ff, #5e5ce6)' }}>
-              <span className="material-symbols-outlined" style={{ fontSize: 13 }}>{loading ? 'hourglass_empty' : 'auto_awesome'}</span>
-              {loading ? 'Generating…' : 'Generate Summary'}
-            </button>
-            {error && (
-              <span className="text-xs flex items-center gap-1" style={{ color: '#ffb4ab' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: 12 }}>error</span>
-                {error}
-              </span>
-            )}
-          </div>
+          <button onClick={handleGetCaption} disabled={loading}
+            className="self-start flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold text-on-primary transition-all hover:brightness-110 active:scale-95 disabled:opacity-50"
+            style={{ background: 'linear-gradient(135deg, #c2c1ff, #5e5ce6)' }}>
+            <span className="material-symbols-outlined" style={{ fontSize: 13 }}>{loading ? 'hourglass_empty' : 'auto_awesome'}</span>
+            {loading ? 'Generating…' : 'Generate Summary'}
+          </button>
         )}
 
         {/* Channel + date */}
