@@ -220,7 +220,10 @@ def fetch_and_summarize_caption(video_id: str, title: str) -> Optional[dict]:
         result = fetch_caption(video_id)
     except ValueError:
         return None
-    result["summary"] = summarize_caption(title, result["text"])
+    summary = summarize_caption(title, result["text"])
+    if not summary:
+        raise RuntimeError("LLM summarization returned empty result — check MINIMAX_API_KEY and model plan.")
+    result["summary"] = summary
     return result
 
 

@@ -5,6 +5,7 @@ import YoutubeSidebar from './components/youtube/YoutubeSidebar'
 import Toast from './components/Toast'
 import NewsTab from './pages/NewsTab'
 import YoutubeTab from './pages/YoutubeTab'
+import IdeasTab from './pages/IdeasTab'
 import { api } from './api'
 
 export default function App() {
@@ -19,6 +20,7 @@ export default function App() {
   const [videos, setVideos] = useState([])
   const [ytLastUpdated, setYtLastUpdated] = useState(null)
   const [ytFilter, setYtFilter] = useState({ kind: 'all', value: '' })
+  const [ideas, setIdeas] = useState([])
   const [fetchError, setFetchError] = useState(null)
   const [toast, setToast] = useState(null)
   const showToast = useCallback(msg => setToast(msg), [])
@@ -34,6 +36,7 @@ export default function App() {
       setVideos(d.videos || [])
       setYtLastUpdated(d.last_updated)
     })
+    api.getIdeas().then(d => setIdeas(d))
   }, [])
 
   const handleFetchNews = async () => {
@@ -71,6 +74,21 @@ export default function App() {
     const d = await api.getYoutube()
     setChannels(d.channels || [])
     setVideos(d.videos || [])
+  }, [])
+
+  const handleCreateIdea = useCallback(async (data) => {
+    const idea = await api.createIdea(data)
+    setIdeas(prev => [idea, ...prev])
+  }, [])
+
+  const handleUpdateIdea = useCallback(async (id, data) => {
+    const idea = await api.updateIdea(id, data)
+    setIdeas(prev => prev.map(i => i.id === id ? idea : i))
+  }, [])
+
+  const handleDeleteIdea = useCallback(async (id) => {
+    await api.deleteIdea(id)
+    setIdeas(prev => prev.filter(i => i.id !== id))
   }, [])
 
   const handleCaptionUpdate = useCallback((videoId, caption) => {
@@ -135,7 +153,7 @@ export default function App() {
         />
       )}
 
-      <main className="pt-14 px-5 lg:px-8 pb-12 lg:ml-52">
+      <main className={`pt-14 px-5 lg:px-8 pb-12 ${activeTab === 'Ideas' ? '' : 'lg:ml-52'}`}>
         {activeTab === 'News' && (
           <NewsTab articles={filteredArticles} />
         )}
@@ -149,6 +167,14 @@ export default function App() {
             onError={showToast}
           />
         )}
+        {activeTab === 'Ideas' && (
+          <IdeasTab
+            ideas={ideas}
+            onCreate={handleCreateIdea}
+            onUpdate={handleUpdateIdea}
+            onDelete={handleDeleteIdea}
+          />
+        )}
       </main>
 
       {/* Mobile bottom nav */}
@@ -157,6 +183,7 @@ export default function App() {
         {[
           { label: 'News',    icon: 'newspaper',     tab: 'News' },
           { label: 'YouTube', icon: 'video_library', tab: 'YouTube' },
+          { label: 'Ideas',   icon: 'lightbulb',     tab: 'Ideas' },
         ].map(({ label, icon, tab }) => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             className={`flex flex-col items-center gap-1 transition-colors ${

@@ -27,4 +27,10 @@ export const api = {
     http.get(`/youtube/videos/${videoId}/caption`, { signal }).then(r => r.data),
   clearCaption: (videoId) =>
     http.delete(`/youtube/videos/${videoId}/caption`).then(r => r.data),
+
+  // Ideas
+  getIdeas: () => http.get('/ideas').then(r => r.data),
+  createIdea: (data) => http.post('/ideas', data).then(r => r.data),
+  updateIdea: (id, data) => http.put(`/ideas/${id}`, data).then(r => r.data),
+  deleteIdea: (id) => http.delete(`/ideas/${id}`).then(r => r.data),
 }

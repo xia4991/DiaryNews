@@ -167,3 +167,35 @@ async def get_caption(video_id: str):
 def clear_caption(video_id: str):
     storage.clear_caption(video_id)
     return {"ok": True}
+
+
+# ── Ideas ─────────────────────────────────────────────────────────────────────
+
+class IdeaRequest(BaseModel):
+    title: str
+    category: str = "General"
+    content: str = ""
+
+
+@app.get("/api/ideas")
+def get_ideas():
+    return storage.load_ideas()
+
+
+@app.post("/api/ideas", status_code=201)
+def create_idea(req: IdeaRequest):
+    return storage.save_idea(req.title, req.category, req.content)
+
+
+@app.put("/api/ideas/{idea_id}")
+def update_idea(idea_id: int, req: IdeaRequest):
+    try:
+        return storage.update_idea(idea_id, req.title, req.category, req.content)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Idea {idea_id} not found.")
+
+
+@app.delete("/api/ideas/{idea_id}")
+def delete_idea(idea_id: int):
+    storage.delete_idea(idea_id)
+    return {"ok": True}

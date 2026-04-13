@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { api } from '../../api'
 import SummaryText from '../SummaryText'
+import VideoModal from './VideoModal'
 
 const CAPTION_TIMEOUT_MS = 90_000
 
 export default function VideoFeedItem({ video, onCaptionUpdate, onError }) {
   const [loading, setLoading] = useState(false)
+  const [showModal, setShowModal] = useState(false)
   const pub = video.published?.slice(0, 10)
   const caption = video.caption
   const attempted = 'caption' in video
@@ -44,28 +46,30 @@ export default function VideoFeedItem({ video, onCaptionUpdate, onError }) {
   }
 
   return (
+    <>
+    {showModal && <VideoModal video={video} onClose={() => setShowModal(false)} />}
     <div className="rounded-xl overflow-hidden flex flex-col lg:flex-row"
       style={{ background: '#131b2e', outline: '1px solid rgba(70,69,84,0.15)' }}>
 
       {/* Thumbnail */}
-      <a href={video.link} target="_blank" rel="noopener noreferrer"
-        className="lg:w-1/3 aspect-video relative group shrink-0 block overflow-hidden">
+      <button onClick={() => setShowModal(true)}
+        className="lg:w-1/3 aspect-video relative group shrink-0 block overflow-hidden text-left">
         <img src={video.thumbnail} alt={video.title}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
         <div className="absolute inset-0 bg-black/40 group-hover:bg-black/20 flex items-center justify-center transition-all">
           <span className="material-symbols-outlined text-white text-4xl opacity-0 group-hover:opacity-100 transition-opacity"
             style={{ fontVariationSettings: "'FILL' 1" }}>play_circle</span>
         </div>
-      </a>
+      </button>
 
       {/* Content */}
       <div className="p-4 flex-grow flex flex-col gap-2">
 
         {/* Title */}
-        <a href={video.link} target="_blank" rel="noopener noreferrer"
-          className="text-sm font-bold leading-snug hover:text-secondary transition-colors">
+        <button onClick={() => setShowModal(true)}
+          className="text-sm font-bold leading-snug hover:text-secondary transition-colors text-left">
           {video.title}
-        </a>
+        </button>
 
         {/* AI Summary */}
         {caption?.summary ? (
@@ -108,5 +112,6 @@ export default function VideoFeedItem({ video, onCaptionUpdate, onError }) {
         </div>
       </div>
     </div>
+    </>
   )
 }

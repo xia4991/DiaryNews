@@ -9,7 +9,7 @@ MAX_ARTICLES = 200
 MAX_VIDEOS = 100
 
 MINIMAX_API_URL = "https://api.minimaxi.com/v1/chat/completions"
-MINIMAX_MODEL = "MiniMax-Text-01"
+MINIMAX_MODEL = "minimax-m2.7"
 
 ENABLE_WHISPER_API   = os.environ.get("ENABLE_WHISPER_API", "false").lower() == "true"
 ENABLE_WHISPER_LOCAL = os.environ.get("ENABLE_WHISPER_LOCAL", "false").lower() == "true"
