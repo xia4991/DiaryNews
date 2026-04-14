@@ -1,6 +1,7 @@
 import logging
 import os
 import re
+import time
 
 import requests
 
@@ -15,6 +16,7 @@ def call_minimax(prompt: str, max_tokens: int, fallback: str = "") -> str:
     api_key = os.environ.get("MINIMAX_API_KEY")
     if not api_key:
         return fallback
+    time.sleep(1)
     try:
         resp = requests.post(
             MINIMAX_API_URL,
