@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-from datetime import datetime, timezone
 
 log = logging.getLogger("diarynews.api")
 
@@ -9,17 +8,9 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from backend import storage
-from backend.config import (
-    ENABLE_WHISPER_API, ENABLE_WHISPER_LOCAL, RSS_SOURCES, WHISPER_MODEL,
-)
-from backend.news import fetch_all_feeds
-from backend.youtube import (
-    fetch_all_channels,
-    fetch_and_summarize_caption,
-    normalise_handle,
-    resolve_youtube_channel,
-)
+from backend import services, storage
+from backend.config import ENABLE_WHISPER_API, ENABLE_WHISPER_LOCAL, WHISPER_MODEL
+from backend.sources import RSS_SOURCES
 
 app = FastAPI(title="DiaryNews API", version="2.0.0")
 
@@ -55,12 +46,7 @@ def get_news():
 
 @app.post("/api/news/fetch")
 async def fetch_news():
-    data = storage.load_news()
-    existing_urls = {a["link"] for a in data.get("articles", [])}
-    new_articles = await asyncio.to_thread(fetch_all_feeds, existing_urls=existing_urls)
-    now = datetime.now(timezone.utc).isoformat()
-    storage.save_news({"last_updated": now, "articles": new_articles})
-    return {"new_count": len(new_articles), "last_updated": now}
+    return await asyncio.to_thread(services.fetch_and_save_news)
 
 
 # ── YouTube — channels ────────────────────────────────────────────────────────
@@ -78,89 +64,48 @@ class AddChannelRequest(BaseModel):
 @app.post("/api/youtube/channels", status_code=201)
 def add_channel(req: AddChannelRequest):
     try:
-        handle, _ = normalise_handle(req.handle)
+        return services.add_youtube_channel(req.handle, req.category)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-
-    yt_data = storage.load_youtube()
-    if handle in {ch["handle"] for ch in yt_data.get("channels", [])}:
-        raise HTTPException(status_code=409, detail=f"{handle} already exists.")
-
-    storage.add_channel(handle, handle.lstrip("@"), req.category)
-    return {"handle": handle, "category": req.category}
+    except services.DuplicateChannelError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
 
 
 @app.delete("/api/youtube/channels/{handle}")
 def remove_channel(handle: str):
-    if not handle.startswith("@"):
-        handle = f"@{handle}"
-    storage.remove_channel(handle)
+    services.remove_youtube_channel(handle)
     return {"ok": True}
 
 
 @app.post("/api/youtube/channels/{handle}/resolve")
 def resolve_channel(handle: str):
-    if not handle.startswith("@"):
-        handle = f"@{handle}"
     try:
-        resolved = resolve_youtube_channel(handle)
+        return services.resolve_and_save_channel(handle)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    storage.update_channel_id(handle, resolved["channel_id"], resolved["name"])
-    return resolved
 
 
 # ── YouTube — videos ──────────────────────────────────────────────────────────
 
 @app.post("/api/youtube/fetch")
 async def fetch_videos():
-    yt_data = storage.load_youtube()
-    channels = yt_data.get("channels", [])
-
-    errors = []
-    for ch in channels:
-        if not ch.get("channel_id"):
-            try:
-                resolved = await asyncio.to_thread(resolve_youtube_channel, ch["handle"])
-                storage.update_channel_id(ch["handle"], resolved["channel_id"], resolved["name"])
-            except Exception as exc:
-                errors.append({"handle": ch["handle"], "error": str(exc)})
-
-    yt_data = storage.load_youtube()
-    fetchable = [ch for ch in yt_data["channels"] if ch.get("channel_id")]
-    if not fetchable:
-        raise HTTPException(status_code=400, detail="No resolvable channels.")
-
-    existing_ids = {v["video_id"] for v in yt_data.get("videos", [])}
-    new_videos = await asyncio.to_thread(fetch_all_channels, fetchable, existing_ids)
-
-    now = datetime.now(timezone.utc).isoformat()
-    if new_videos:
-        storage.update_videos(new_videos, now)
-
-    return {"new_count": len(new_videos), "resolve_errors": errors}
+    try:
+        return await asyncio.to_thread(services.fetch_and_save_videos)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 # ── YouTube — captions ────────────────────────────────────────────────────────
 
 @app.get("/api/youtube/videos/{video_id}/caption")
 async def get_caption(video_id: str):
-    yt_data = storage.load_youtube()
-    video = next((v for v in yt_data["videos"] if v["video_id"] == video_id), None)
-    if not video:
-        raise HTTPException(status_code=404, detail=f"Video '{video_id}' not found in database.")
-
-    if "caption" in video:
-        return {"caption": video["caption"], "attempted": True}
-
     try:
-        result = await asyncio.to_thread(fetch_and_summarize_caption, video_id, video["title"])
+        return await asyncio.to_thread(services.get_or_fetch_caption, video_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
     except Exception as exc:
         log.exception("Caption fetch crashed for %s", video_id)
         raise HTTPException(status_code=500, detail=f"Caption fetch failed: {exc}")
-
-    storage.save_caption(video_id, result)
-    return {"caption": result, "attempted": True}
 
 
 @app.delete("/api/youtube/videos/{video_id}/caption")

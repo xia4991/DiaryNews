@@ -9,39 +9,39 @@ DiaryNews has two independent features: a **news reader** that aggregates Portug
 ### Overview
 
 ```
-User clicks "Buscar notícias"
-        │
-        ▼
+User clicks "Fetch News"
+        |
+        v
+POST /api/news/fetch -> services.fetch_and_save_news()
+        |
+        v
 feedparser fetches all 6 RSS feeds in sequence
-        │
-        ▼
-Each new article → scrape full text → AI summary → classify by category
+        |
+        v
+Each new article -> scrape full text -> AI summary -> classify by category
 (runs in parallel, up to 8 articles at a time)
-        │
-        ▼
-Merge with existing articles (deduplicate by URL)
-        │
-        ▼
-Sort newest-first, cap at 200 → save to data/news.json
-        │
-        ▼
-Streamlit re-renders the page
+        |
+        v
+Save to SQLite (deduplicate by URL, cap at 200)
+        |
+        v
+Return new article count to frontend
 ```
 
 ### Step by step
 
 **1. RSS fetching**
 
-Six Portuguese outlets are configured in `backend/config.py`:
+Six Portuguese outlets are configured in `backend/sources.py`:
 
 | Source | Feed |
 |--------|------|
 | RTP | rtp.pt/noticias/rss |
 | Observador | observador.pt/feed |
-| SIC Notícias | sicnoticias.pt/feed |
+| SIC Noticias | sicnoticias.pt/feed |
 | TVI24 | tvi24.iol.pt/rss/ultimas |
-| Jornal de Notícias | jn.pt/rss |
-| Público | feedburner.com/PublicoRSS |
+| Jornal de Noticias | jn.pt/rss |
+| Publico | feedburner.com/PublicoRSS |
 
 `feedparser` parses each feed and extracts title, summary, link, and publish date. Articles already in storage are skipped before any scraping or AI calls happen.
 
@@ -51,29 +51,29 @@ For each new article, `trafilatura` fetches the full page and extracts the main 
 
 **3. AI summary**
 
-The scraped content (up to 3000 characters) is sent to the MiniMax API with a prompt asking for a 2–3 sentence factual summary in Portuguese. If `MINIMAX_API_KEY` is not set, the original RSS summary is used instead.
+The scraped content (up to 3000 characters) is sent to the MiniMax API with a prompt (defined in `backend/prompts.py`) asking for a 2-3 sentence factual summary in Portuguese. If `MINIMAX_API_KEY` is not set, the original RSS summary is used instead.
 
 **4. Classification**
 
-The article title and summary are lowercased and checked against a priority-ordered list of categories and their keywords:
+The article title and summary are lowercased and checked against a priority-ordered list of categories and their keywords (defined in `backend/sources.py`):
 
 ```
-Política      → ["governo", "ministro", "eleições", ...]
-Desporto      → ["futebol", "benfica", "golo", ...]
-Economia      → ["empresa", "bolsa", "inflação", ...]
+Politica      -> ["governo", "ministro", "eleicoes", ...]
+Desporto      -> ["futebol", "benfica", "golo", ...]
+Economia      -> ["empresa", "bolsa", "inflacao", ...]
 ...
-Geral         → fallback (no keyword matched)
+Geral         -> fallback (no keyword matched)
 ```
 
-The first category whose keyword appears in the text wins. Order matters — a sports article mentioning "lei do futebol" is correctly filed under Desporto, not Política.
+The first category whose keyword appears in the text wins. Order matters — a sports article mentioning "lei do futebol" is correctly filed under Desporto, not Politica.
 
 **5. Storage**
 
-Articles are saved to `data/news.json`. On startup, Streamlit loads this file so articles persist across page refreshes without re-fetching. The list is capped at 200 articles sorted newest-first.
+Articles are saved to the `articles` table in SQLite (`data/diarynews.db`). The list is capped at 200 articles sorted newest-first.
 
 **6. UI**
 
-Articles are displayed in a 3-column grid grouped by category. Clicking an article opens a dialog with the AI summary and the full scraped text in an expandable section.
+Articles are displayed in a card grid grouped by category. Clicking an article opens a modal with the AI summary and the full scraped text in an expandable section.
 
 ---
 
@@ -83,31 +83,40 @@ Articles are displayed in a 3-column grid grouped by category. Clicking an artic
 
 ```
 User adds a channel handle (e.g. @mkbhd)
-        │
-        ▼
-YouTube Data API resolves handle → channel ID (saved permanently)
-        │
-        ▼
-User clicks "Buscar vídeos"
-        │
-        ▼
+        |
+        v
+POST /api/youtube/channels -> services.add_youtube_channel()
+        |
+        v
+YouTube Data API resolves handle -> channel ID (saved permanently)
+        |
+        v
+User clicks "Fetch Videos"
+        |
+        v
+POST /api/youtube/fetch -> services.fetch_and_save_videos()
+        |
+        v
 Public Atom feed fetched per channel (no API quota)
-        │
-        ▼
-New videos merged into data/youtube.json
-        │
-        ▼
-User clicks "Legenda" on a video
-        │
-        ▼
-Caption fetched via 3-tier fallback → AI summary generated → saved on video
+        |
+        v
+New videos saved to SQLite
+        |
+        v
+User clicks caption button on a video
+        |
+        v
+GET /api/youtube/videos/{id}/caption -> services.get_or_fetch_caption()
+        |
+        v
+Caption fetched via 3-tier fallback -> AI summary generated -> saved to DB
 ```
 
 ### Step by step
 
 **1. Adding a channel**
 
-The user pastes a handle (`@mkbhd`) or full URL (`youtube.com/@mkbhd`). The app normalises it to a `@handle` format and calls the YouTube Data API v3 to resolve it to a permanent channel ID. This ID is saved in `data/youtube.json` — the API is only called once per channel.
+The user pastes a handle (`@mkbhd`) or full URL (`youtube.com/@mkbhd`). The app normalises it to a `@handle` format and calls the YouTube Data API v3 to resolve it to a permanent channel ID. This ID is saved in the `channels` table — the API is only called once per channel.
 
 **2. Fetching videos**
 
@@ -129,35 +138,21 @@ When the user clicks the caption button on a video, the app tries three methods 
 | 2 | OpenAI Whisper API — downloads audio via `yt-dlp`, transcribes via API | `ENABLE_WHISPER_API=true` + `OPENAI_API_KEY` |
 | 3 | Local Whisper — downloads audio via `yt-dlp`, transcribes on your machine | `ENABLE_WHISPER_LOCAL=true` + `pip install openai-whisper` |
 
-Language priority for Tier 1: Portuguese → English → Chinese → first available.
+Language priority for Tier 1: Portuguese -> English -> Chinese -> first available.
 
 If all tiers fail, the result is stored as `null` so the app does not re-attempt on the next visit. The "Re-fetch" button clears this and tries again.
 
 **4. AI caption summary**
 
-The raw transcript is sent to MiniMax with a prompt requesting a structured Chinese summary with three sections: 主题 (topic), 要点 (key points), 结论 (conclusion). If `MINIMAX_API_KEY` is not set, the raw transcript is still shown without a summary.
+The raw transcript is sent to MiniMax with a prompt (defined in `backend/prompts.py`) requesting a structured Chinese summary with three sections: topic, key points, conclusion. If `MINIMAX_API_KEY` is not set, the raw transcript is still shown without a summary.
 
 **5. Storage**
 
-Caption data is stored directly on the video object in `data/youtube.json`:
-
-```json
-{
-  "video_id": "abc123",
-  "title": "...",
-  "caption": {
-    "text": "raw transcript...",
-    "language": "en",
-    "tier": 1,
-    "fetched_at": "2026-03-25T10:00:00+00:00",
-    "summary": "**主题**\n..."
-  }
-}
-```
+Caption data is stored in the `captions` table in SQLite, linked to the video by `video_id`.
 
 **6. UI**
 
 Videos are available in two views:
 
 - **Grid** — thumbnail, title, channel name, caption button
-- **Feed** — 2-column list grouped by channel category, with the AI summary displayed inline if available. A "Gerar resumo" button fetches the caption on demand directly from the feed.
+- **Feed** — 2-column list grouped by channel category, with the AI summary displayed inline if available. A "Generate summary" button fetches the caption on demand directly from the feed.

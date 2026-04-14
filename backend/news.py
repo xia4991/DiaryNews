@@ -5,8 +5,9 @@ from datetime import datetime, timezone
 import feedparser
 import requests as _requests
 
-from backend.config import CATEGORIES, RSS_SOURCES
+from backend.sources import CATEGORIES, RSS_SOURCES
 from backend.llm import call_minimax
+from backend.prompts import article_summary_prompt
 from backend.utils import strip_html
 
 log = logging.getLogger("diarynews.news")
@@ -42,10 +43,9 @@ def scrape_article(url: str) -> str:
 
 def _enrich_article(article: dict) -> dict:
     content = scrape_article(article["link"])
-    prompt = (
-        f"Título: {article['title']}\n\nConteúdo:\n{content[:3000] if content else article['summary']}\n\n"
-        "Escreve um resumo claro e objetivo em português com 2 a 3 frases. "
-        "Vai direto aos factos, sem introduções como 'Este artigo fala de'."
+    prompt = article_summary_prompt(
+        article["title"],
+        content[:3000] if content else article["summary"],
     )
     return {
         **article,

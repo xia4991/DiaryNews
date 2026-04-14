@@ -5,20 +5,28 @@ Personal news and YouTube reader focused on Portuguese media. Fetches RSS feeds,
 ## Project Structure
 
 ```
-app.py                  ← Entry point: Streamlit page config, sidebar, tab routing
+main.py                 <- Entry point: starts FastAPI server via uvicorn
 backend/
-  config.py             ← Constants, env vars, RSS sources, category definitions
-  llm.py                ← MiniMax API wrapper (used by news and youtube)
-  news.py               ← RSS fetching, article scraping, classification, summarization
-  youtube.py            ← Channel resolution, video fetching, caption extraction
-  storage.py            ← Atomic JSON persistence + data mutation helpers
-  utils.py              ← Shared utilities (strip_html)
-frontend/
-  news.py               ← News tab UI: filters, article grid, article detail dialog
-  youtube.py            ← YouTube tab UI: channel management, video grid, feed, caption dialog
+  api.py                <- Thin FastAPI REST endpoints
+  services.py           <- Orchestration layer (fetch -> process -> save)
+  config.py             <- Infrastructure constants (DB path, API URLs, feature flags)
+  sources.py            <- Domain data (RSS feeds, category keywords)
+  prompts.py            <- LLM prompt templates
+  llm.py                <- MiniMax API wrapper
+  news.py               <- RSS fetching, article scraping, classification
+  youtube.py            <- Channel resolution, video fetching, caption extraction
+  database.py           <- SQLite schema init and connection management
+  utils.py              <- Shared utilities (strip_html)
+  storage/
+    __init__.py          <- Re-exports all public functions
+    base.py              <- DB initialization, metadata helpers
+    news.py              <- News article CRUD
+    youtube.py           <- Videos, channels, captions CRUD
+    ideas.py             <- Ideas CRUD
+    migration.py         <- JSON-to-SQLite migration (startup-only)
+react-frontend/          <- React SPA (Vite + Tailwind)
 data/
-  news.json             ← Persisted articles (auto-created)
-  youtube.json          ← Persisted channels and videos (auto-created)
+  diarynews.db           <- SQLite database (auto-created)
 ```
 
 ## Setup
@@ -29,7 +37,20 @@ source .venv/bin/activate
 pip install -r requirements.txt
 
 cp .env.example .env   # then fill in your API keys
-streamlit run app.py
+```
+
+### Run
+
+**Backend** (terminal 1):
+```bash
+python main.py
+```
+
+**Frontend** (terminal 2):
+```bash
+cd react-frontend
+npm install   # first time only
+npm run dev -- --host
 ```
 
 ## Environment Variables
