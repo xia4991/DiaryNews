@@ -1,3 +1,9 @@
+const CATEGORY_ZH = {
+  'Política': '政治', 'Desporto': '体育', 'Economia': '经济', 'Saúde': '健康',
+  'Tecnologia': '科技', 'Internacional': '国际', 'Cultura': '文化', 'Ambiente': '环境',
+  'Crime/Justiça': '法治', 'Sociedade': '社会', 'Geral': '综合',
+}
+
 export default function ArticleCardFeatured({ article, onClick }) {
   if (!article) return null
   const pub = article.published?.slice(0, 10)
@@ -16,7 +22,7 @@ export default function ArticleCardFeatured({ article, onClick }) {
         <div className="flex gap-2 mb-2">
           <span className="text-xs font-bold tracking-widest px-2 py-0.5 rounded-full uppercase"
             style={{ background: 'rgba(68,226,205,0.15)', color: '#44e2cd', border: '1px solid rgba(68,226,205,0.3)' }}>
-            {article.category}
+            {CATEGORY_ZH[article.category] || article.category}
           </span>
           <span className="text-xs text-on-surface-variant flex items-center gap-1">
             <span className="material-symbols-outlined" style={{ fontSize: 12 }}>schedule</span>

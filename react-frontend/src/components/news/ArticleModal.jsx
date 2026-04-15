@@ -1,6 +1,12 @@
 import { useEffect } from 'react'
 import SummaryText from '../SummaryText'
 
+const CATEGORY_ZH = {
+  'Política': '政治', 'Desporto': '体育', 'Economia': '经济', 'Saúde': '健康',
+  'Tecnologia': '科技', 'Internacional': '国际', 'Cultura': '文化', 'Ambiente': '环境',
+  'Crime/Justiça': '法治', 'Sociedade': '社会', 'Geral': '综合',
+}
+
 export default function ArticleModal({ article, onClose }) {
   useEffect(() => {
     const onKey = e => e.key === 'Escape' && onClose()
@@ -27,7 +33,7 @@ export default function ArticleModal({ article, onClose }) {
           <div className="flex items-center gap-2 mb-2">
             <span className="text-xs font-bold tracking-widest px-2 py-0.5 rounded-full uppercase"
               style={{ background: 'rgba(68,226,205,0.1)', color: '#44e2cd', border: '1px solid rgba(68,226,205,0.2)' }}>
-              {article.category}
+              {CATEGORY_ZH[article.category] || article.category}
             </span>
             <span className="text-xs text-on-surface-variant">{article.source} · {pub}</span>
           </div>
@@ -54,7 +60,7 @@ export default function ArticleModal({ article, onClose }) {
           <details className="group">
             <summary className="cursor-pointer text-xs font-bold text-on-surface-variant uppercase tracking-wider flex items-center gap-1 select-none">
               <span className="material-symbols-outlined transition-transform group-open:rotate-90" style={{ fontSize: 14 }}>chevron_right</span>
-              原文 (Original)
+              原文
             </summary>
             <div className="mt-3 text-xs text-on-surface-variant leading-relaxed whitespace-pre-wrap">
               {article.scraped_content}
@@ -65,7 +71,7 @@ export default function ArticleModal({ article, onClose }) {
         <a href={article.link} target="_blank" rel="noopener noreferrer"
           className="flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-bold text-on-primary hover:brightness-110 active:scale-95 transition-all"
           style={{ background: 'linear-gradient(135deg, #c2c1ff, #5e5ce6)' }}>
-          Read Original
+          查看原文
           <span className="material-symbols-outlined" style={{ fontSize: 14 }}>open_in_new</span>
         </a>
       </div>

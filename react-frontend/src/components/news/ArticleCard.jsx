@@ -7,6 +7,12 @@ const CATEGORY_COLORS = {
   'default':       { bg: 'rgba(145,143,160,0.08)', text: '#918fa0', border: 'rgba(145,143,160,0.2)' },
 }
 
+const CATEGORY_ZH = {
+  'Política': '政治', 'Desporto': '体育', 'Economia': '经济', 'Saúde': '健康',
+  'Tecnologia': '科技', 'Internacional': '国际', 'Cultura': '文化', 'Ambiente': '环境',
+  'Crime/Justiça': '法治', 'Sociedade': '社会', 'Geral': '综合',
+}
+
 export default function ArticleCard({ article, onClick }) {
   const pub = article.published?.slice(0, 10)
   const color = CATEGORY_COLORS[article.category] || CATEGORY_COLORS.default
@@ -21,7 +27,7 @@ export default function ArticleCard({ article, onClick }) {
       <div className="flex justify-between items-center mb-2">
         <span className="text-xs font-bold px-1.5 py-0.5 rounded"
           style={{ background: color.bg, color: color.text, border: `1px solid ${color.border}` }}>
-          {article.category}
+          {CATEGORY_ZH[article.category] || article.category}
         </span>
         <span className="text-xs text-on-surface-variant">{pub}</span>
       </div>
@@ -36,7 +42,7 @@ export default function ArticleCard({ article, onClick }) {
 
       <div className="mt-auto flex items-center justify-between">
         <span className="text-xs text-on-surface-variant">{article.source}</span>
-        <span className="text-secondary text-xs font-bold uppercase tracking-wider">Read →</span>
+        <span className="text-secondary text-xs font-bold tracking-wider">阅读 →</span>
       </div>
     </article>
   )

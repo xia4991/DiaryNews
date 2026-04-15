@@ -6,7 +6,7 @@ export default function Header({ activeTab, onTabChange, onFetchNews, onFetchVid
       <div className="flex items-center gap-6">
         <span className="text-base font-bold tracking-tighter text-primary font-headline">DiaryNews</span>
         <nav className="hidden md:flex items-center gap-6">
-          {['中文新闻', 'YouTube', 'Ideas'].map(tab => (
+          {['葡萄牙新闻', 'YouTube', 'Ideas'].map(tab => (
             <button key={tab} onClick={() => onTabChange(tab)}
               className={`text-sm font-bold pb-0.5 transition-colors ${
                 activeTab === tab ? 'text-primary border-b-2 border-primary' : 'text-on-surface-variant hover:text-on-surface'
@@ -22,15 +22,15 @@ export default function Header({ activeTab, onTabChange, onFetchNews, onFetchVid
           style={{ background: 'rgba(45,52,73,0.5)' }}>
           <span className="material-symbols-outlined text-primary" style={{ fontSize: 16 }}>search</span>
           <input className="bg-transparent border-none outline-none text-xs text-on-surface w-28 lg:w-36 placeholder-on-surface-variant"
-            placeholder="Search..." />
+            placeholder="搜索..." />
         </div>
         {activeTab !== 'Ideas' && (
-          <button onClick={activeTab === '中文新闻' ? onFetchNews : onFetchVideos}
+          <button onClick={activeTab === '葡萄牙新闻' ? onFetchNews : onFetchVideos}
             disabled={fetching}
             className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold text-on-primary transition-all active:scale-95 disabled:opacity-50"
             style={{ background: 'linear-gradient(135deg, #c2c1ff, #5e5ce6)' }}>
             <span className="material-symbols-outlined" style={{ fontSize: 14 }}>{fetching ? 'hourglass_empty' : 'refresh'}</span>
-            <span className="hidden sm:inline">{fetching ? 'Loading…' : `Fetch ${activeTab}`}</span>
+            <span className="hidden sm:inline">{fetching ? '加载中…' : `获取${activeTab}`}</span>
           </button>
         )}
       </div>
