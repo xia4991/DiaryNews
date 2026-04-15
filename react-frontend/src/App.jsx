@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Header from './components/Header'
 import Sidebar from './components/Sidebar'
+import CnSidebar from './components/CnSidebar'
 import YoutubeSidebar from './components/youtube/YoutubeSidebar'
 import Toast from './components/Toast'
 import NewsTab from './pages/NewsTab'
@@ -9,12 +10,13 @@ import IdeasTab from './pages/IdeasTab'
 import { api } from './api'
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('葡萄牙新闻')
+  const [activeTab, setActiveTab] = useState('华人关注')
   const [fetching, setFetching] = useState(false)
 
   const [articles, setArticles] = useState([])
   const [newsLastUpdated, setNewsLastUpdated] = useState(null)
   const [activeCategory, setActiveCategory] = useState('All')
+  const [activeCnTag, setActiveCnTag] = useState('All')
 
   const [channels, setChannels] = useState([])
   const [videos, setVideos] = useState([])
@@ -114,6 +116,34 @@ export default function App() {
     ? articles
     : articles.filter(a => a.category === activeCategory)
 
+  // Chinese-interest articles (have non-empty tags_zh)
+  const cnArticles = articles.filter(a => a.tags_zh && a.tags_zh.trim() !== '')
+  const cnTagMap = {}
+  for (const a of cnArticles) {
+    for (const tag of a.tags_zh.split(',').map(t => t.trim()).filter(Boolean)) {
+      cnTagMap[tag] = (cnTagMap[tag] || 0) + 1
+    }
+  }
+  const cnTags = Object.entries(cnTagMap)
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+
+  const cnTagFiltered = activeCnTag === 'All'
+    ? cnArticles
+    : cnArticles.filter(a => a.tags_zh.split(',').map(t => t.trim()).includes(activeCnTag))
+
+  const cnCategoryMap = {}
+  for (const a of cnTagFiltered) {
+    cnCategoryMap[a.category] = (cnCategoryMap[a.category] || 0) + 1
+  }
+  const cnCategories = Object.entries(cnCategoryMap)
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+
+  const filteredCnArticles = activeCategory === 'All'
+    ? cnTagFiltered
+    : cnTagFiltered.filter(a => a.category === activeCategory)
+
   const filteredVideos = (() => {
     if (ytFilter.kind === 'channel') return videos.filter(v => v.channel_id === ytFilter.value)
     if (ytFilter.kind === 'category') {
@@ -128,7 +158,7 @@ export default function App() {
       <Toast message={toast} onDismiss={() => setToast(null)} />
       <Header
         activeTab={activeTab}
-        onTabChange={tab => { setActiveTab(tab); setActiveCategory('All'); setYtFilter({ kind: 'all', value: '' }) }}
+        onTabChange={tab => { setActiveTab(tab); setActiveCategory('All'); setActiveCnTag('All'); setYtFilter({ kind: 'all', value: '' }) }}
         onFetchNews={handleFetchNews}
         onFetchVideos={handleFetchVideos}
         fetching={fetching}
@@ -137,6 +167,18 @@ export default function App() {
       {activeTab === '葡萄牙新闻' && (
         <Sidebar
           categories={categories}
+          activeCategory={activeCategory}
+          onCategoryChange={setActiveCategory}
+          lastUpdated={newsLastUpdated}
+        />
+      )}
+
+      {activeTab === '华人关注' && (
+        <CnSidebar
+          cnTags={cnTags}
+          activeCnTag={activeCnTag}
+          onCnTagChange={tag => { setActiveCnTag(tag); setActiveCategory('All') }}
+          categories={cnCategories}
           activeCategory={activeCategory}
           onCategoryChange={setActiveCategory}
           lastUpdated={newsLastUpdated}
@@ -156,6 +198,9 @@ export default function App() {
       <main className={`pt-14 px-5 lg:px-8 pb-12 ${activeTab === 'Ideas' ? '' : 'lg:ml-52'}`}>
         {activeTab === '葡萄牙新闻' && (
           <NewsTab articles={filteredArticles} />
+        )}
+        {activeTab === '华人关注' && (
+          <NewsTab articles={filteredCnArticles} tabTitle="华人关注" tabSubtitle="与在葡华人相关的新闻精选。" emptyHint="获取葡萄牙新闻" />
         )}
         {activeTab === 'YouTube' && (
           <YoutubeTab
@@ -181,6 +226,7 @@ export default function App() {
       <div className="md:hidden fixed bottom-0 w-full glass-panel h-12 flex justify-around items-center z-50"
         style={{ borderTop: '1px solid rgba(70,69,84,0.3)' }}>
         {[
+          { label: '华人',    icon: 'diversity_3',   tab: '华人关注' },
           { label: '新闻',    icon: 'newspaper',     tab: '葡萄牙新闻' },
           { label: 'YouTube', icon: 'video_library', tab: 'YouTube' },
           { label: 'Ideas',   icon: 'lightbulb',     tab: 'Ideas' },

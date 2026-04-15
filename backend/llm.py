@@ -16,7 +16,7 @@ def call_minimax(prompt: str, max_tokens: int, fallback: str = "") -> str:
     api_key = os.environ.get("MINIMAX_API_KEY")
     if not api_key:
         return fallback
-    time.sleep(1)
+    time.sleep(3)
     try:
         resp = requests.post(
             MINIMAX_API_URL,
@@ -24,7 +24,9 @@ def call_minimax(prompt: str, max_tokens: int, fallback: str = "") -> str:
             json={"model": MINIMAX_MODEL, "max_tokens": max_tokens, "messages": [{"role": "user", "content": prompt}]},
             timeout=60,
         )
-        resp.raise_for_status()
+        if resp.status_code != 200:
+            log.warning("call_minimax HTTP %d: %s", resp.status_code, resp.text[:500])
+            resp.raise_for_status()
         content = resp.json()["choices"][0]["message"]["content"]
         return _THINK_RE.sub("", content).strip()
     except Exception as exc:

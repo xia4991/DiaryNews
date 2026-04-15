@@ -30,11 +30,17 @@ export default function ArticleModal({ article, onClose }) {
         </button>
 
         <div>
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
             <span className="text-xs font-bold tracking-widest px-2 py-0.5 rounded-full uppercase"
               style={{ background: 'rgba(68,226,205,0.1)', color: '#44e2cd', border: '1px solid rgba(68,226,205,0.2)' }}>
               {CATEGORY_ZH[article.category] || article.category}
             </span>
+            {article.tags_zh && article.tags_zh.split(',').map(t => t.trim()).filter(Boolean).map(tag => (
+              <span key={tag} className="text-xs px-2 py-0.5 rounded-full"
+                style={{ background: 'rgba(255,183,77,0.1)', color: '#ffb74d', border: '1px solid rgba(255,183,77,0.2)' }}>
+                {tag}
+              </span>
+            ))}
             <span className="text-xs text-on-surface-variant">{article.source} · {pub}</span>
           </div>
           <h2 className="text-lg font-bold font-headline leading-snug">{article.title_zh || article.title}</h2>

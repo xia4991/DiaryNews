@@ -43,17 +43,20 @@ def scrape_article(url: str) -> str:
 
 def _parse_chinese_response(text: str) -> dict:
     title_zh = ""
+    tags_zh = ""
     content_zh = ""
     for line in text.split("\n"):
         if line.startswith("TITLE_ZH:"):
             title_zh = line[len("TITLE_ZH:"):].strip()
+        elif line.startswith("TAGS_ZH:"):
+            raw = line[len("TAGS_ZH:"):].strip()
+            tags_zh = "" if raw == "无" else raw
         elif line.startswith("CONTENT_ZH:"):
-            content_zh = line[len("CONTENT_ZH:"):].strip()
             # Everything after CONTENT_ZH: tag (may be multiline)
             idx = text.index("CONTENT_ZH:")
             content_zh = text[idx + len("CONTENT_ZH:"):].strip()
             break
-    return {"title_zh": title_zh, "content_zh": content_zh}
+    return {"title_zh": title_zh, "tags_zh": tags_zh, "content_zh": content_zh}
 
 
 def _enrich_article(article: dict) -> dict:
@@ -62,11 +65,11 @@ def _enrich_article(article: dict) -> dict:
 
     # Call 1: Portuguese summary
     pt_prompt = article_summary_prompt(article["title"], text_for_llm)
-    ai_summary = call_minimax(pt_prompt, max_tokens=180, fallback=article["summary"])
+    ai_summary = call_minimax(pt_prompt, max_tokens=512, fallback=article["summary"])
 
-    # Call 2: Chinese title + refined content
+    # Call 2: Chinese title + tags + refined content
     zh_prompt = article_chinese_prompt(article["title"], text_for_llm)
-    zh_raw = call_minimax(zh_prompt, max_tokens=600, fallback="")
+    zh_raw = call_minimax(zh_prompt, max_tokens=1024, fallback="")
     zh_fields = _parse_chinese_response(zh_raw)
 
     return {
@@ -74,14 +77,38 @@ def _enrich_article(article: dict) -> dict:
         "scraped_content": content,
         "ai_summary": ai_summary,
         "title_zh": zh_fields["title_zh"],
+        "tags_zh": zh_fields["tags_zh"],
         "content_zh": zh_fields["content_zh"],
     }
 
 
-def fetch_all_feeds(existing_urls: set = None) -> list:
-    existing_urls = existing_urls or set()
-    raw_articles = []
-    for source_name, url in RSS_SOURCES.items():
+def re_enrich_article(article: dict) -> dict:
+    """Retry LLM calls for an article that already has scraped_content stored."""
+    text_for_llm = (article.get("scraped_content") or "")[:3000] or article.get("summary", "")
+
+    if not article.get("ai_summary") or article["ai_summary"] == article.get("summary"):
+        pt_prompt = article_summary_prompt(article["title"], text_for_llm)
+        ai_summary = call_minimax(pt_prompt, max_tokens=512, fallback=article.get("ai_summary", ""))
+    else:
+        ai_summary = article["ai_summary"]
+
+    zh_prompt = article_chinese_prompt(article["title"], text_for_llm)
+    zh_raw = call_minimax(zh_prompt, max_tokens=1024, fallback="")
+    zh_fields = _parse_chinese_response(zh_raw)
+
+    return {
+        **article,
+        "ai_summary": ai_summary,
+        "title_zh": zh_fields["title_zh"] or article.get("title_zh", ""),
+        "tags_zh": zh_fields["tags_zh"] or article.get("tags_zh", ""),
+        "content_zh": zh_fields["content_zh"] or article.get("content_zh", ""),
+    }
+
+
+def _parse_feed(source_name: str, url: str) -> list:
+    """Parse a single RSS feed and return raw article dicts."""
+    articles = []
+    try:
         feed = feedparser.parse(url)
         for entry in feed.entries:
             title = strip_html(entry.get("title", ""))
@@ -89,7 +116,7 @@ def fetch_all_feeds(existing_urls: set = None) -> list:
             link = entry.get("link", "")
             if not title or not link:
                 continue
-            raw_articles.append({
+            articles.append({
                 "title":     title,
                 "summary":   summary[:500],
                 "link":      link,
@@ -97,11 +124,29 @@ def fetch_all_feeds(existing_urls: set = None) -> list:
                 "category":  classify(title, summary),
                 "published": _parse_date(entry),
             })
+    except Exception as exc:
+        log.warning("Failed to parse feed '%s': %s", source_name, exc)
+    return articles
+
+
+def fetch_all_feeds(existing_urls: set = None) -> list:
+    existing_urls = existing_urls or set()
+
+    # Parse all RSS feeds in parallel
+    raw_articles = []
+    with ThreadPoolExecutor(max_workers=6) as executor:
+        futures = {executor.submit(_parse_feed, name, url): name
+                   for name, url in RSS_SOURCES.items()}
+        for future in as_completed(futures):
+            raw_articles.extend(future.result())
 
     new_articles = [a for a in raw_articles if a["link"] not in existing_urls]
+    if not new_articles:
+        return []
 
+    # Enrich new articles (scrape + LLM) with limited concurrency
     enriched = []
-    with ThreadPoolExecutor(max_workers=8) as executor:
+    with ThreadPoolExecutor(max_workers=2) as executor:
         futures = {executor.submit(_enrich_article, a): a for a in new_articles}
         for future in as_completed(futures):
             try:

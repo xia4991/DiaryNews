@@ -19,11 +19,17 @@ export default function ArticleCardFeatured({ article, onClick }) {
         style={{ background: 'linear-gradient(135deg, #c2c1ff, #5e5ce6)' }} />
 
       <div className="absolute bottom-0 p-5 w-full">
-        <div className="flex gap-2 mb-2">
+        <div className="flex gap-2 mb-2 flex-wrap">
           <span className="text-xs font-bold tracking-widest px-2 py-0.5 rounded-full uppercase"
             style={{ background: 'rgba(68,226,205,0.15)', color: '#44e2cd', border: '1px solid rgba(68,226,205,0.3)' }}>
             {CATEGORY_ZH[article.category] || article.category}
           </span>
+          {article.tags_zh && article.tags_zh.split(',').map(t => t.trim()).filter(Boolean).map(tag => (
+            <span key={tag} className="text-xs px-2 py-0.5 rounded-full"
+              style={{ background: 'rgba(255,183,77,0.12)', color: '#ffb74d', border: '1px solid rgba(255,183,77,0.25)' }}>
+              {tag}
+            </span>
+          ))}
           <span className="text-xs text-on-surface-variant flex items-center gap-1">
             <span className="material-symbols-outlined" style={{ fontSize: 12 }}>schedule</span>
             {pub}

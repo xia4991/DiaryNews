@@ -5,7 +5,7 @@ from backend.config import DB_PATH
 
 
 def _migrate(conn) -> None:
-    for col in ["title_zh TEXT", "content_zh TEXT"]:
+    for col in ["title_zh TEXT", "content_zh TEXT", "tags_zh TEXT"]:
         try:
             conn.execute(f"ALTER TABLE articles ADD COLUMN {col}")
         except sqlite3.OperationalError:
@@ -30,7 +30,8 @@ def init_db() -> None:
                 scraped_content  TEXT,
                 ai_summary       TEXT,
                 title_zh         TEXT,
-                content_zh       TEXT
+                content_zh       TEXT,
+                tags_zh          TEXT
             );
 
             CREATE TABLE IF NOT EXISTS channels (

@@ -3,14 +3,19 @@ import ArticleCardFeatured from '../components/news/ArticleCardFeatured'
 import ArticleCard from '../components/news/ArticleCard'
 import ArticleModal from '../components/news/ArticleModal'
 
-export default function NewsTab({ articles }) {
+export default function NewsTab({
+  articles,
+  tabTitle = '葡萄牙新闻',
+  tabSubtitle = '葡萄牙新闻，AI翻译中文精炼版。',
+  emptyHint = '获取葡萄牙新闻',
+}) {
   const [selected, setSelected] = useState(null)
 
   if (!articles.length) {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-4">
         <span className="material-symbols-outlined text-4xl text-on-surface-variant">newspaper</span>
-        <p className="text-on-surface-variant">暂无新闻。点击 <strong className="text-on-surface">获取葡萄牙新闻</strong> 加载。</p>
+        <p className="text-on-surface-variant">暂无新闻。点击 <strong className="text-on-surface">{emptyHint}</strong> 加载。</p>
       </div>
     )
   }
@@ -21,10 +26,10 @@ export default function NewsTab({ articles }) {
     <>
       <div className="mb-6">
         <h1 className="text-3xl font-extrabold font-headline tracking-tighter mb-1">
-          葡萄牙新闻
+          {tabTitle}
         </h1>
         <p className="text-on-surface-variant text-sm max-w-xl">
-          葡萄牙新闻，AI翻译中文精炼版。
+          {tabSubtitle}
         </p>
       </div>
 

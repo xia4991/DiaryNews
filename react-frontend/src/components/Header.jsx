@@ -6,7 +6,7 @@ export default function Header({ activeTab, onTabChange, onFetchNews, onFetchVid
       <div className="flex items-center gap-6">
         <span className="text-base font-bold tracking-tighter text-primary font-headline">DiaryNews</span>
         <nav className="hidden md:flex items-center gap-6">
-          {['葡萄牙新闻', 'YouTube', 'Ideas'].map(tab => (
+          {['华人关注', '葡萄牙新闻', 'YouTube', 'Ideas'].map(tab => (
             <button key={tab} onClick={() => onTabChange(tab)}
               className={`text-sm font-bold pb-0.5 transition-colors ${
                 activeTab === tab ? 'text-primary border-b-2 border-primary' : 'text-on-surface-variant hover:text-on-surface'
@@ -25,7 +25,7 @@ export default function Header({ activeTab, onTabChange, onFetchNews, onFetchVid
             placeholder="搜索..." />
         </div>
         {activeTab !== 'Ideas' && (
-          <button onClick={activeTab === '葡萄牙新闻' ? onFetchNews : onFetchVideos}
+          <button onClick={(activeTab === '葡萄牙新闻' || activeTab === '华人关注') ? onFetchNews : onFetchVideos}
             disabled={fetching}
             className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold text-on-primary transition-all active:scale-95 disabled:opacity-50"
             style={{ background: 'linear-gradient(135deg, #c2c1ff, #5e5ce6)' }}>

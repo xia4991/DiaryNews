@@ -24,12 +24,18 @@ export default function ArticleCard({ article, onClick }) {
       onMouseEnter={e => e.currentTarget.style.background = '#1a2236'}
       onMouseLeave={e => e.currentTarget.style.background = '#131b2e'}>
 
-      <div className="flex justify-between items-center mb-2">
+      <div className="flex items-center gap-1.5 mb-2 flex-wrap">
         <span className="text-xs font-bold px-1.5 py-0.5 rounded"
           style={{ background: color.bg, color: color.text, border: `1px solid ${color.border}` }}>
           {CATEGORY_ZH[article.category] || article.category}
         </span>
-        <span className="text-xs text-on-surface-variant">{pub}</span>
+        {article.tags_zh && article.tags_zh.split(',').map(t => t.trim()).filter(Boolean).map(tag => (
+          <span key={tag} className="text-xs px-1.5 py-0.5 rounded"
+            style={{ background: 'rgba(255,183,77,0.08)', color: '#ffb74d', border: '1px solid rgba(255,183,77,0.2)' }}>
+            {tag}
+          </span>
+        ))}
+        <span className="text-xs text-on-surface-variant ml-auto">{pub}</span>
       </div>
 
       <h3 className="text-sm font-bold mb-2 leading-snug group-hover:text-secondary transition-colors line-clamp-2">

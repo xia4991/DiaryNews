@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timezone
 
 from backend import storage
-from backend.news import fetch_all_feeds
+from backend.news import fetch_all_feeds, re_enrich_article
 from backend.youtube import (
     fetch_all_channels,
     fetch_and_summarize_caption,
@@ -21,13 +21,40 @@ log = logging.getLogger("diarynews.services")
 # ── News ─────────────────────────────────────────────────────────────────────
 
 def fetch_and_save_news() -> dict:
-    """Load existing articles, fetch new feeds, save, return stats."""
+    """Fetch new feeds first (fast), then retry incomplete articles."""
     data = storage.load_news()
-    existing_urls = {a["link"] for a in data.get("articles", [])}
+    existing = data.get("articles", [])
+    existing_urls = {a["link"] for a in existing}
+
+    # Step 1: Fetch & save new articles (fast when most already exist)
     new_articles = fetch_all_feeds(existing_urls=existing_urls)
     now = datetime.now(timezone.utc).isoformat()
-    storage.save_news({"last_updated": now, "articles": new_articles})
-    return {"new_count": len(new_articles), "last_updated": now}
+    if new_articles:
+        storage.save_news({"last_updated": now, "articles": new_articles})
+
+    # Step 2: Retry incomplete articles (missing translation or tags)
+    incomplete = [a for a in existing
+                  if not a.get("title_zh") or not a.get("content_zh") or not a.get("tags_zh")][:20]
+    retried = []
+    for article in incomplete:
+        try:
+            retried.append(re_enrich_article(article))
+        except Exception as exc:
+            log.warning("re_enrich failed for '%s': %s", article["link"], exc)
+            retried.append(article)
+
+    if retried:
+        storage.save_news({"last_updated": now, "articles": retried})
+        log.info("Retried LLM for %d incomplete articles", len(retried))
+
+    if not new_articles and not retried:
+        storage.save_news({"last_updated": now, "articles": []})
+
+    return {
+        "new_count": len(new_articles),
+        "retried_count": len(retried),
+        "last_updated": now,
+    }
 
 
 # ── YouTube — channels ───────────────────────────────────────────────────────
