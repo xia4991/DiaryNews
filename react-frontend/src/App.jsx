@@ -9,7 +9,7 @@ import IdeasTab from './pages/IdeasTab'
 import { api } from './api'
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('News')
+  const [activeTab, setActiveTab] = useState('中文新闻')
   const [fetching, setFetching] = useState(false)
 
   const [articles, setArticles] = useState([])
@@ -134,7 +134,7 @@ export default function App() {
         fetching={fetching}
       />
 
-      {activeTab === 'News' && (
+      {activeTab === '中文新闻' && (
         <Sidebar
           categories={categories}
           activeCategory={activeCategory}
@@ -154,7 +154,7 @@ export default function App() {
       )}
 
       <main className={`pt-14 px-5 lg:px-8 pb-12 ${activeTab === 'Ideas' ? '' : 'lg:ml-52'}`}>
-        {activeTab === 'News' && (
+        {activeTab === '中文新闻' && (
           <NewsTab articles={filteredArticles} />
         )}
         {activeTab === 'YouTube' && (
@@ -181,7 +181,7 @@ export default function App() {
       <div className="md:hidden fixed bottom-0 w-full glass-panel h-12 flex justify-around items-center z-50"
         style={{ borderTop: '1px solid rgba(70,69,84,0.3)' }}>
         {[
-          { label: 'News',    icon: 'newspaper',     tab: 'News' },
+          { label: '新闻',    icon: 'newspaper',     tab: '中文新闻' },
           { label: 'YouTube', icon: 'video_library', tab: 'YouTube' },
           { label: 'Ideas',   icon: 'lightbulb',     tab: 'Ideas' },
         ].map(({ label, icon, tab }) => (

@@ -9,6 +9,19 @@ def article_summary_prompt(title: str, content: str) -> str:
     )
 
 
+def article_chinese_prompt(title: str, content: str) -> str:
+    return (
+        f"Título: {title}\n\nConteúdo:\n{content}\n\n"
+        "请将以上葡萄牙语新闻翻译成中文。要求：\n"
+        "1. 翻译标题为中文\n"
+        "2. 将正文内容翻译成中文，不是逐字翻译，而是精炼版本：去除重复和冗余内容，保留所有关键信息，"
+        "用自然流畅的中文新闻风格书写\n\n"
+        "严格使用以下格式输出：\n"
+        "TITLE_ZH: <中文标题>\n"
+        "CONTENT_ZH: <中文精炼内容>"
+    )
+
+
 def caption_summary_prompt(title: str, raw_text: str) -> str:
     return (
         f"Título do vídeo: {title}\n\n"

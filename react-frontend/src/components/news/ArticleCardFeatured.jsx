@@ -24,9 +24,9 @@ export default function ArticleCardFeatured({ article, onClick }) {
           </span>
         </div>
         <h2 className="text-xl font-bold font-headline mb-1.5 leading-tight group-hover:text-primary transition-colors line-clamp-2">
-          {article.title}
+          {article.title_zh || article.title}
         </h2>
-        <p className="text-on-surface-variant text-xs line-clamp-1 max-w-xl">{article.ai_summary || article.summary}</p>
+        <p className="text-on-surface-variant text-xs line-clamp-1 max-w-xl">{article.content_zh || article.ai_summary || article.summary}</p>
         <div className="mt-3 flex items-center gap-2">
           <div className="h-5 w-5 rounded flex items-center justify-center text-xs font-bold"
             style={{ background: 'rgba(255,255,255,0.1)' }}>

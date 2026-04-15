@@ -31,23 +31,30 @@ export default function ArticleModal({ article, onClose }) {
             </span>
             <span className="text-xs text-on-surface-variant">{article.source} · {pub}</span>
           </div>
-          <h2 className="text-lg font-bold font-headline leading-snug">{article.title}</h2>
+          <h2 className="text-lg font-bold font-headline leading-snug">{article.title_zh || article.title}</h2>
+          {article.title_zh && (
+            <p className="text-xs text-on-surface-variant mt-1">{article.title}</p>
+          )}
         </div>
 
-        <div className="rounded-lg p-4"
-          style={{ background: 'rgba(68,226,205,0.05)', borderLeft: '3px solid rgba(68,226,205,0.4)' }}>
-          <div className="flex items-center gap-1.5 mb-2">
-            <span className="material-symbols-outlined text-secondary" style={{ fontSize: 14, fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
-            <span className="text-xs font-bold text-secondary uppercase tracking-widest">AI Summary</span>
+        {(article.content_zh || article.ai_summary || article.summary) && (
+          <div className="rounded-lg p-4"
+            style={{ background: 'rgba(68,226,205,0.05)', borderLeft: '3px solid rgba(68,226,205,0.4)' }}>
+            <div className="flex items-center gap-1.5 mb-2">
+              <span className="material-symbols-outlined text-secondary" style={{ fontSize: 14, fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
+              <span className="text-xs font-bold text-secondary uppercase tracking-widest">
+                {article.content_zh ? '中文内容' : 'AI Summary'}
+              </span>
+            </div>
+            <SummaryText text={article.content_zh || article.ai_summary || article.summary} />
           </div>
-          <SummaryText text={article.ai_summary || article.summary} />
-        </div>
+        )}
 
         {article.scraped_content && (
           <details className="group">
             <summary className="cursor-pointer text-xs font-bold text-on-surface-variant uppercase tracking-wider flex items-center gap-1 select-none">
               <span className="material-symbols-outlined transition-transform group-open:rotate-90" style={{ fontSize: 14 }}>chevron_right</span>
-              Full Article
+              原文 (Original)
             </summary>
             <div className="mt-3 text-xs text-on-surface-variant leading-relaxed whitespace-pre-wrap">
               {article.scraped_content}

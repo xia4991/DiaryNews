@@ -27,11 +27,11 @@ export default function ArticleCard({ article, onClick }) {
       </div>
 
       <h3 className="text-sm font-bold mb-2 leading-snug group-hover:text-secondary transition-colors line-clamp-2">
-        {article.title}
+        {article.title_zh || article.title}
       </h3>
 
       <p className="text-on-surface-variant text-xs line-clamp-2 mb-3 flex-1">
-        {article.ai_summary || article.summary}
+        {article.content_zh || article.ai_summary || article.summary}
       </p>
 
       <div className="mt-auto flex items-center justify-between">

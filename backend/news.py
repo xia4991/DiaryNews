@@ -7,7 +7,7 @@ import requests as _requests
 
 from backend.sources import CATEGORIES, RSS_SOURCES
 from backend.llm import call_minimax
-from backend.prompts import article_summary_prompt
+from backend.prompts import article_summary_prompt, article_chinese_prompt
 from backend.utils import strip_html
 
 log = logging.getLogger("diarynews.news")
@@ -41,16 +41,40 @@ def scrape_article(url: str) -> str:
         return ""
 
 
+def _parse_chinese_response(text: str) -> dict:
+    title_zh = ""
+    content_zh = ""
+    for line in text.split("\n"):
+        if line.startswith("TITLE_ZH:"):
+            title_zh = line[len("TITLE_ZH:"):].strip()
+        elif line.startswith("CONTENT_ZH:"):
+            content_zh = line[len("CONTENT_ZH:"):].strip()
+            # Everything after CONTENT_ZH: tag (may be multiline)
+            idx = text.index("CONTENT_ZH:")
+            content_zh = text[idx + len("CONTENT_ZH:"):].strip()
+            break
+    return {"title_zh": title_zh, "content_zh": content_zh}
+
+
 def _enrich_article(article: dict) -> dict:
     content = scrape_article(article["link"])
-    prompt = article_summary_prompt(
-        article["title"],
-        content[:3000] if content else article["summary"],
-    )
+    text_for_llm = content[:3000] if content else article["summary"]
+
+    # Call 1: Portuguese summary
+    pt_prompt = article_summary_prompt(article["title"], text_for_llm)
+    ai_summary = call_minimax(pt_prompt, max_tokens=180, fallback=article["summary"])
+
+    # Call 2: Chinese title + refined content
+    zh_prompt = article_chinese_prompt(article["title"], text_for_llm)
+    zh_raw = call_minimax(zh_prompt, max_tokens=600, fallback="")
+    zh_fields = _parse_chinese_response(zh_raw)
+
     return {
         **article,
         "scraped_content": content,
-        "ai_summary": call_minimax(prompt, max_tokens=180, fallback=article["summary"]),
+        "ai_summary": ai_summary,
+        "title_zh": zh_fields["title_zh"],
+        "content_zh": zh_fields["content_zh"],
     }
 
 

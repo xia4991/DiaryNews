@@ -10,7 +10,7 @@ export default function NewsTab({ articles }) {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-4">
         <span className="material-symbols-outlined text-4xl text-on-surface-variant">newspaper</span>
-        <p className="text-on-surface-variant">No articles yet. Click <strong className="text-on-surface">Fetch News</strong> to load.</p>
+        <p className="text-on-surface-variant">暂无新闻。点击 <strong className="text-on-surface">Fetch 中文新闻</strong> 加载。</p>
       </div>
     )
   }
@@ -21,10 +21,10 @@ export default function NewsTab({ articles }) {
     <>
       <div className="mb-6">
         <h1 className="text-3xl font-extrabold font-headline tracking-tighter mb-1">
-          Morning Intelligence
+          中文新闻
         </h1>
         <p className="text-on-surface-variant text-sm max-w-xl">
-          Curated news synthesised by AI for high-velocity decision making.
+          葡萄牙新闻，AI翻译为中文精炼版。
         </p>
       </div>
 

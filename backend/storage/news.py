@@ -28,8 +28,10 @@ def _bulk_upsert_articles(articles: list) -> None:
     with get_db() as conn:
         conn.executemany(
             """INSERT OR REPLACE INTO articles
-               (link, title, summary, source, category, published, scraped_content, ai_summary)
-               VALUES (:link,:title,:summary,:source,:category,:published,:scraped_content,:ai_summary)""",
+               (link, title, summary, source, category, published, scraped_content, ai_summary,
+                title_zh, content_zh)
+               VALUES (:link,:title,:summary,:source,:category,:published,:scraped_content,:ai_summary,
+                :title_zh,:content_zh)""",
             [
                 {
                     "link":            a.get("link", ""),
@@ -40,6 +42,8 @@ def _bulk_upsert_articles(articles: list) -> None:
                     "published":       a.get("published", ""),
                     "scraped_content": a.get("scraped_content", ""),
                     "ai_summary":      a.get("ai_summary", ""),
+                    "title_zh":        a.get("title_zh", ""),
+                    "content_zh":      a.get("content_zh", ""),
                 }
                 for a in articles
             ],

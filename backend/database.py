@@ -4,6 +4,14 @@ from contextlib import contextmanager
 from backend.config import DB_PATH
 
 
+def _migrate(conn) -> None:
+    for col in ["title_zh TEXT", "content_zh TEXT"]:
+        try:
+            conn.execute(f"ALTER TABLE articles ADD COLUMN {col}")
+        except sqlite3.OperationalError:
+            pass
+
+
 def init_db() -> None:
     with get_db() as conn:
         conn.executescript("""
@@ -20,7 +28,9 @@ def init_db() -> None:
                 category         TEXT,
                 published        TEXT,
                 scraped_content  TEXT,
-                ai_summary       TEXT
+                ai_summary       TEXT,
+                title_zh         TEXT,
+                content_zh       TEXT
             );
 
             CREATE TABLE IF NOT EXISTS channels (
@@ -63,6 +73,7 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_videos_channel     ON videos (channel_id);
             CREATE INDEX IF NOT EXISTS idx_ideas_created      ON ideas (created_at DESC);
         """)
+        _migrate(conn)
 
 
 @contextmanager
