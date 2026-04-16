@@ -18,3 +18,7 @@ from backend.storage.ideas import (  # noqa: F401
     update_idea,
     delete_idea,
 )
+from backend.storage.users import (  # noqa: F401
+    get_or_create_user,
+    get_user_by_id,
+)

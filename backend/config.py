@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DB_PATH = "data/diarynews.db"
+DB_PATH = os.environ.get("DB_PATH", "data/diarynews.db")
 MAX_ARTICLES = 2000
 MAX_VIDEOS = 1000
 
@@ -16,3 +16,13 @@ MINIMAX_MODEL = "MiniMax-M2.5"
 ENABLE_WHISPER_API   = os.environ.get("ENABLE_WHISPER_API", "false").lower() == "true"
 ENABLE_WHISPER_LOCAL = os.environ.get("ENABLE_WHISPER_LOCAL", "false").lower() == "true"
 WHISPER_MODEL        = os.environ.get("WHISPER_MODEL", "base")
+
+# ── Auth ─────────────────────────────────────────────────────────────────────
+JWT_SECRET = os.environ.get("JWT_SECRET")
+JWT_EXPIRE_DAYS = int(os.environ.get("JWT_EXPIRE_DAYS", "7"))
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
+ADMIN_EMAILS = [e.strip() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()]
+
+# ── CORS ─────────────────────────────────────────────────────────────────────
+CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useAuth } from './auth'
 import Header from './components/Header'
 import Sidebar from './components/Sidebar'
 import CnSidebar from './components/CnSidebar'
@@ -7,11 +8,14 @@ import Toast from './components/Toast'
 import NewsTab from './pages/NewsTab'
 import YoutubeTab from './pages/YoutubeTab'
 import IdeasTab from './pages/IdeasTab'
+import LoginPage from './pages/LoginPage'
 import { api } from './api'
 
 export default function App() {
+  const { user, loading } = useAuth()
   const [activeTab, setActiveTab] = useState('华人关注')
   const [fetching, setFetching] = useState(false)
+  const [showLogin, setShowLogin] = useState(false)
 
   const [articles, setArticles] = useState([])
   const [newsLastUpdated, setNewsLastUpdated] = useState(null)
@@ -27,19 +31,31 @@ export default function App() {
   const [toast, setToast] = useState(null)
   const showToast = useCallback(msg => setToast(msg), [])
 
-  // Load initial data
+  // Load news (public)
   useEffect(() => {
     api.getNews().then(d => {
       setArticles(d.articles || [])
       setNewsLastUpdated(d.last_updated)
     })
+  }, [])
+
+  // Load YouTube + Ideas only when logged in
+  useEffect(() => {
+    if (!user) return
     api.getYoutube().then(d => {
       setChannels(d.channels || [])
       setVideos(d.videos || [])
       setYtLastUpdated(d.last_updated)
-    })
-    api.getIdeas().then(d => setIdeas(d))
-  }, [])
+    }).catch(() => {})
+    api.getIdeas().then(d => setIdeas(d)).catch(() => {})
+  }, [user])
+
+  // If user logs out while on a protected tab, switch to news
+  useEffect(() => {
+    if (!user && (activeTab === 'YouTube' || activeTab === 'Ideas')) {
+      setActiveTab('华人关注')
+    }
+  }, [user, activeTab])
 
   const handleFetchNews = async () => {
     setFetching(true)
@@ -153,15 +169,44 @@ export default function App() {
     return videos
   })()
 
+  // Available tabs based on auth
+  const tabs = user
+    ? ['华人关注', '葡萄牙新闻', 'YouTube', 'Ideas']
+    : ['华人关注', '葡萄牙新闻']
+
+  const mobileTabs = user
+    ? [
+        { label: '华人',    icon: 'diversity_3',   tab: '华人关注' },
+        { label: '新闻',    icon: 'newspaper',     tab: '葡萄牙新闻' },
+        { label: 'YouTube', icon: 'video_library', tab: 'YouTube' },
+        { label: 'Ideas',   icon: 'lightbulb',     tab: 'Ideas' },
+      ]
+    : [
+        { label: '华人',    icon: 'diversity_3',   tab: '华人关注' },
+        { label: '新闻',    icon: 'newspaper',     tab: '葡萄牙新闻' },
+      ]
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#0b1326' }}>
+        <span className="material-symbols-outlined text-primary animate-spin" style={{ fontSize: 32 }}>hourglass_empty</span>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen" style={{ background: '#0b1326', color: '#dae2fd' }}>
       <Toast message={toast} onDismiss={() => setToast(null)} />
+      {showLogin && <LoginPage onClose={() => setShowLogin(false)} />}
       <Header
         activeTab={activeTab}
+        tabs={tabs}
         onTabChange={tab => { setActiveTab(tab); setActiveCategory('All'); setActiveCnTag('All'); setYtFilter({ kind: 'all', value: '' }) }}
         onFetchNews={handleFetchNews}
         onFetchVideos={handleFetchVideos}
         fetching={fetching}
+        user={user}
+        onLoginClick={() => setShowLogin(true)}
       />
 
       {activeTab === '葡萄牙新闻' && (
@@ -225,12 +270,7 @@ export default function App() {
       {/* Mobile bottom nav */}
       <div className="md:hidden fixed bottom-0 w-full glass-panel h-12 flex justify-around items-center z-50"
         style={{ borderTop: '1px solid rgba(70,69,84,0.3)' }}>
-        {[
-          { label: '华人',    icon: 'diversity_3',   tab: '华人关注' },
-          { label: '新闻',    icon: 'newspaper',     tab: '葡萄牙新闻' },
-          { label: 'YouTube', icon: 'video_library', tab: 'YouTube' },
-          { label: 'Ideas',   icon: 'lightbulb',     tab: 'Ideas' },
-        ].map(({ label, icon, tab }) => (
+        {mobileTabs.map(({ label, icon, tab }) => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             className={`flex flex-col items-center gap-1 transition-colors ${
               activeTab === tab ? 'text-secondary' : 'text-on-surface-variant'
