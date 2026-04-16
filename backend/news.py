@@ -146,7 +146,7 @@ def fetch_all_feeds(existing_urls: set = None) -> list:
 
     # Enrich new articles (scrape + LLM) with limited concurrency
     enriched = []
-    with ThreadPoolExecutor(max_workers=2) as executor:
+    with ThreadPoolExecutor(max_workers=1) as executor:
         futures = {executor.submit(_enrich_article, a): a for a in new_articles}
         for future in as_completed(futures):
             try:

@@ -72,6 +72,16 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_articles_published ON articles (published DESC);
             CREATE INDEX IF NOT EXISTS idx_videos_published   ON videos (published DESC);
             CREATE INDEX IF NOT EXISTS idx_videos_channel     ON videos (channel_id);
+            CREATE TABLE IF NOT EXISTS users (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                google_id  TEXT    UNIQUE NOT NULL,
+                email      TEXT    UNIQUE NOT NULL,
+                name       TEXT,
+                avatar     TEXT,
+                is_admin   BOOLEAN NOT NULL DEFAULT 0,
+                created_at TEXT    NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_ideas_created      ON ideas (created_at DESC);
         """)
         _migrate(conn)
@@ -79,7 +89,8 @@ def init_db() -> None:
 
 @contextmanager
 def get_db():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=10)
+    conn.execute("PRAGMA journal_mode=WAL")
     conn.row_factory = sqlite3.Row
     try:
         yield conn

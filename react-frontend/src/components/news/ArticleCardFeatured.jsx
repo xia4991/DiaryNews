@@ -1,8 +1,4 @@
-const CATEGORY_ZH = {
-  'Política': '政治', 'Desporto': '体育', 'Economia': '经济', 'Saúde': '健康',
-  'Tecnologia': '科技', 'Internacional': '国际', 'Cultura': '文化', 'Ambiente': '环境',
-  'Crime/Justiça': '法治', 'Sociedade': '社会', 'Geral': '综合',
-}
+import { CATEGORY_ZH } from '../../constants/categories'
 
 export default function ArticleCardFeatured({ article, onClick }) {
   if (!article) return null

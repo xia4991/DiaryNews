@@ -1,26 +1,79 @@
 import asyncio
 import logging
-import os
 
 log = logging.getLogger("diarynews.api")
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from backend import services, storage
-from backend.config import ENABLE_WHISPER_API, ENABLE_WHISPER_LOCAL, WHISPER_MODEL
+from backend.auth import (
+    verify_google_token,
+    create_jwt,
+    get_current_user,
+    require_admin,
+)
+from backend.config import ADMIN_EMAILS, CORS_ORIGINS
 from backend.sources import RSS_SOURCES
 
 app = FastAPI(title="DiaryNews API", version="2.0.0")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ── Auth ─────────────────────────────────────────────────────────────────────
+
+class GoogleLoginRequest(BaseModel):
+    credential: str
+
+
+@app.post("/api/auth/google")
+def google_login(req: GoogleLoginRequest):
+    try:
+        info = verify_google_token(req.credential)
+    except Exception as exc:
+        log.warning("Google token verification failed: %s", exc)
+        raise HTTPException(status_code=401, detail="Invalid Google token")
+    is_admin = info["email"] in ADMIN_EMAILS
+    user = storage.get_or_create_user(
+        google_id=info["google_id"],
+        email=info["email"],
+        name=info["name"],
+        avatar=info["picture"],
+        is_admin=is_admin,
+    )
+    token = create_jwt(user["id"], user["email"], bool(user["is_admin"]))
+    return {
+        "token": token,
+        "user": {
+            "id": user["id"],
+            "email": user["email"],
+            "name": user["name"],
+            "avatar": user["avatar"],
+            "is_admin": bool(user["is_admin"]),
+        },
+    }
+
+
+@app.get("/api/auth/me")
+def get_me(user: dict = Depends(get_current_user)):
+    db_user = storage.get_user_by_id(int(user["sub"]))
+    if not db_user:
+        raise HTTPException(status_code=401, detail="User not found")
+    return {
+        "id": db_user["id"],
+        "email": db_user["email"],
+        "name": db_user["name"],
+        "avatar": db_user["avatar"],
+        "is_admin": bool(db_user["is_admin"]),
+    }
 
 
 # ── Status ────────────────────────────────────────────────────────────────────
@@ -28,16 +81,11 @@ app.add_middleware(
 @app.get("/api/status")
 def get_status():
     return {
-        "minimax_configured": bool(os.environ.get("MINIMAX_API_KEY")),
-        "youtube_configured": bool(os.environ.get("YOUTUBE_API_KEY")),
-        "whisper_api_enabled": ENABLE_WHISPER_API,
-        "whisper_local_enabled": ENABLE_WHISPER_LOCAL,
-        "whisper_model": WHISPER_MODEL,
         "sources": list(RSS_SOURCES.keys()),
     }
 
 
-# ── News ──────────────────────────────────────────────────────────────────────
+# ── News (public) ────────────────────────────────────────────────────────────
 
 @app.get("/api/news")
 def get_news():
@@ -45,14 +93,14 @@ def get_news():
 
 
 @app.post("/api/news/fetch")
-async def fetch_news():
+async def fetch_news(_admin: dict = Depends(require_admin)):
     return await asyncio.to_thread(services.fetch_and_save_news)
 
 
-# ── YouTube — channels ────────────────────────────────────────────────────────
+# ── YouTube (login required, admin for mutations) ───────────────────────────
 
 @app.get("/api/youtube")
-def get_youtube():
+def get_youtube(_user: dict = Depends(get_current_user)):
     return storage.load_youtube()
 
 
@@ -62,7 +110,7 @@ class AddChannelRequest(BaseModel):
 
 
 @app.post("/api/youtube/channels", status_code=201)
-def add_channel(req: AddChannelRequest):
+def add_channel(req: AddChannelRequest, _admin: dict = Depends(require_admin)):
     try:
         return services.add_youtube_channel(req.handle, req.category)
     except ValueError as exc:
@@ -72,33 +120,29 @@ def add_channel(req: AddChannelRequest):
 
 
 @app.delete("/api/youtube/channels/{handle}")
-def remove_channel(handle: str):
+def remove_channel(handle: str, _admin: dict = Depends(require_admin)):
     services.remove_youtube_channel(handle)
     return {"ok": True}
 
 
 @app.post("/api/youtube/channels/{handle}/resolve")
-def resolve_channel(handle: str):
+def resolve_channel(handle: str, _admin: dict = Depends(require_admin)):
     try:
         return services.resolve_and_save_channel(handle)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
 
-# ── YouTube — videos ──────────────────────────────────────────────────────────
-
 @app.post("/api/youtube/fetch")
-async def fetch_videos():
+async def fetch_videos(_admin: dict = Depends(require_admin)):
     try:
         return await asyncio.to_thread(services.fetch_and_save_videos)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
 
-# ── YouTube — captions ────────────────────────────────────────────────────────
-
 @app.get("/api/youtube/videos/{video_id}/caption")
-async def get_caption(video_id: str):
+async def get_caption(video_id: str, _user: dict = Depends(get_current_user)):
     try:
         return await asyncio.to_thread(services.get_or_fetch_caption, video_id)
     except KeyError as exc:
@@ -109,12 +153,12 @@ async def get_caption(video_id: str):
 
 
 @app.delete("/api/youtube/videos/{video_id}/caption")
-def clear_caption(video_id: str):
+def clear_caption(video_id: str, _admin: dict = Depends(require_admin)):
     storage.clear_caption(video_id)
     return {"ok": True}
 
 
-# ── Ideas ─────────────────────────────────────────────────────────────────────
+# ── Ideas (login required) ──────────────────────────────────────────────────
 
 class IdeaRequest(BaseModel):
     title: str
@@ -123,17 +167,17 @@ class IdeaRequest(BaseModel):
 
 
 @app.get("/api/ideas")
-def get_ideas():
+def get_ideas(_user: dict = Depends(get_current_user)):
     return storage.load_ideas()
 
 
 @app.post("/api/ideas", status_code=201)
-def create_idea(req: IdeaRequest):
+def create_idea(req: IdeaRequest, _user: dict = Depends(get_current_user)):
     return storage.save_idea(req.title, req.category, req.content)
 
 
 @app.put("/api/ideas/{idea_id}")
-def update_idea(idea_id: int, req: IdeaRequest):
+def update_idea(idea_id: int, req: IdeaRequest, _user: dict = Depends(get_current_user)):
     try:
         return storage.update_idea(idea_id, req.title, req.category, req.content)
     except KeyError:
@@ -141,6 +185,6 @@ def update_idea(idea_id: int, req: IdeaRequest):
 
 
 @app.delete("/api/ideas/{idea_id}")
-def delete_idea(idea_id: int):
+def delete_idea(idea_id: int, _user: dict = Depends(get_current_user)):
     storage.delete_idea(idea_id)
     return {"ok": True}
