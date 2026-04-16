@@ -64,7 +64,7 @@ def google_login(req: GoogleLoginRequest):
 
 @app.get("/api/auth/me")
 def get_me(user: dict = Depends(get_current_user)):
-    db_user = storage.get_user_by_id(user["sub"])
+    db_user = storage.get_user_by_id(int(user["sub"]))
     if not db_user:
         raise HTTPException(status_code=401, detail="User not found")
     return {

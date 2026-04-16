@@ -31,7 +31,7 @@ def verify_google_token(credential: str) -> dict:
 
 def create_jwt(user_id: int, email: str, is_admin: bool) -> str:
     payload = {
-        "sub": user_id,
+        "sub": str(user_id),
         "email": email,
         "is_admin": is_admin,
         "exp": datetime.now(timezone.utc) + timedelta(days=JWT_EXPIRE_DAYS),
@@ -51,10 +51,8 @@ async def get_current_user(
     try:
         payload = decode_jwt(credentials.credentials)
     except jwt.ExpiredSignatureError:
-        log.warning("JWT expired")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token expired")
-    except jwt.InvalidTokenError as e:
-        log.warning("JWT invalid: %s", e)
+    except jwt.InvalidTokenError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     return payload
 
