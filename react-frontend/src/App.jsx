@@ -8,7 +8,9 @@ import Toast from './components/Toast'
 import NewsTab from './pages/NewsTab'
 import YoutubeTab from './pages/YoutubeTab'
 import IdeasTab from './pages/IdeasTab'
+import JobsTab from './pages/JobsTab'
 import LoginPage from './pages/LoginPage'
+import JobsSidebar from './components/listings/JobsSidebar'
 import { api } from './api'
 
 export default function App() {
@@ -27,6 +29,8 @@ export default function App() {
   const [ytLastUpdated, setYtLastUpdated] = useState(null)
   const [ytFilter, setYtFilter] = useState({ kind: 'all', value: '' })
   const [ideas, setIdeas] = useState([])
+  const [jobsIndustry, setJobsIndustry] = useState('All')
+  const [jobsCounts, setJobsCounts] = useState({})
   const [fetchError, setFetchError] = useState(null)
   const [toast, setToast] = useState(null)
   const showToast = useCallback(msg => setToast(msg), [])
@@ -169,21 +173,23 @@ export default function App() {
     return videos
   })()
 
-  // Available tabs based on auth
+  // Available tabs based on auth (招聘 is public)
   const tabs = user
-    ? ['华人关注', '葡萄牙新闻', 'YouTube', 'Ideas']
-    : ['华人关注', '葡萄牙新闻']
+    ? ['华人关注', '葡萄牙新闻', '招聘', 'YouTube', 'Ideas']
+    : ['华人关注', '葡萄牙新闻', '招聘']
 
   const mobileTabs = user
     ? [
         { label: '华人',    icon: 'diversity_3',   tab: '华人关注' },
         { label: '新闻',    icon: 'newspaper',     tab: '葡萄牙新闻' },
+        { label: '招聘',    icon: 'work',          tab: '招聘' },
         { label: 'YouTube', icon: 'video_library', tab: 'YouTube' },
         { label: 'Ideas',   icon: 'lightbulb',     tab: 'Ideas' },
       ]
     : [
         { label: '华人',    icon: 'diversity_3',   tab: '华人关注' },
         { label: '新闻',    icon: 'newspaper',     tab: '葡萄牙新闻' },
+        { label: '招聘',    icon: 'work',          tab: '招聘' },
       ]
 
   if (loading) {
@@ -201,7 +207,7 @@ export default function App() {
       <Header
         activeTab={activeTab}
         tabs={tabs}
-        onTabChange={tab => { setActiveTab(tab); setActiveCategory('All'); setActiveCnTag('All'); setYtFilter({ kind: 'all', value: '' }) }}
+        onTabChange={tab => { setActiveTab(tab); setActiveCategory('All'); setActiveCnTag('All'); setYtFilter({ kind: 'all', value: '' }); setJobsIndustry('All') }}
         onFetchNews={handleFetchNews}
         onFetchVideos={handleFetchVideos}
         fetching={fetching}
@@ -230,6 +236,14 @@ export default function App() {
         />
       )}
 
+      {activeTab === '招聘' && (
+        <JobsSidebar
+          counts={jobsCounts}
+          activeIndustry={jobsIndustry}
+          onIndustryChange={setJobsIndustry}
+        />
+      )}
+
       {activeTab === 'YouTube' && (
         <YoutubeSidebar
           channels={channels}
@@ -255,6 +269,13 @@ export default function App() {
             onChannelsUpdate={handleChannelsUpdate}
             onCaptionUpdate={handleCaptionUpdate}
             onError={showToast}
+          />
+        )}
+        {activeTab === '招聘' && (
+          <JobsTab
+            activeIndustry={jobsIndustry}
+            onCountsChange={setJobsCounts}
+            onLoginRequired={() => setShowLogin(true)}
           />
         )}
         {activeTab === 'Ideas' && (

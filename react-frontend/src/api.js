@@ -54,6 +54,13 @@ export const api = {
   clearCaption: (videoId) =>
     http.delete(`/youtube/videos/${videoId}/caption`).then(r => r.data),
 
+  // Jobs
+  listJobs: (params) => http.get('/jobs', { params }).then(r => r.data),
+  getJob: (id) => http.get(`/jobs/${id}`).then(r => r.data),
+  createJob: (data) => http.post('/jobs', data).then(r => r.data),
+  updateJob: (id, data) => http.put(`/jobs/${id}`, data).then(r => r.data),
+  deleteJob: (id) => http.delete(`/jobs/${id}`).then(r => r.data),
+
   // Ideas
   getIdeas: () => http.get('/ideas').then(r => r.data),
   createIdea: (data) => http.post('/ideas', data).then(r => r.data),

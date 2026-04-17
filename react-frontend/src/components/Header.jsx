@@ -29,7 +29,7 @@ export default function Header({ activeTab, tabs, onTabChange, onFetchNews, onFe
             placeholder="搜索..." />
         </div>
 
-        {user?.is_admin && activeTab !== 'Ideas' && (
+        {user?.is_admin && activeTab !== 'Ideas' && activeTab !== '招聘' && (
           <button onClick={(activeTab === '葡萄牙新闻' || activeTab === '华人关注') ? onFetchNews : onFetchVideos}
             disabled={fetching}
             className="flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold text-on-primary transition-all active:scale-95 disabled:opacity-50"
