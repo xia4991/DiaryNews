@@ -39,31 +39,9 @@ def init_db() -> None:
                 tags_zh          TEXT
             );
 
-            CREATE TABLE IF NOT EXISTS channels (
-                handle      TEXT PRIMARY KEY,
-                name        TEXT,
-                channel_id  TEXT,
-                category    TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS videos (
-                video_id      TEXT PRIMARY KEY,
-                title         TEXT,
-                channel_name  TEXT,
-                channel_id    TEXT,
-                published     TEXT,
-                thumbnail     TEXT,
-                link          TEXT
-            );
-
-            CREATE TABLE IF NOT EXISTS captions (
-                video_id    TEXT PRIMARY KEY,
-                text        TEXT,
-                language    TEXT,
-                tier        INTEGER,
-                fetched_at  TEXT,
-                summary     TEXT
-            );
+            DROP TABLE IF EXISTS captions;
+            DROP TABLE IF EXISTS videos;
+            DROP TABLE IF EXISTS channels;
 
             CREATE TABLE IF NOT EXISTS ideas (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,8 +53,6 @@ def init_db() -> None:
             );
 
             CREATE INDEX IF NOT EXISTS idx_articles_published ON articles (published DESC);
-            CREATE INDEX IF NOT EXISTS idx_videos_published   ON videos (published DESC);
-            CREATE INDEX IF NOT EXISTS idx_videos_channel     ON videos (channel_id);
             CREATE TABLE IF NOT EXISTS users (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
                 google_id  TEXT    UNIQUE NOT NULL,

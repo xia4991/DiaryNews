@@ -6,7 +6,6 @@ const QUICK_ACTIONS = [
   { tab: '华人关注', label: '华人关注', icon: 'diversity_3', tone: '#9D3D33' },
   { tab: '葡萄牙新闻', label: '葡萄牙新闻', icon: 'newspaper', tone: '#2B6CB0' },
   { tab: '招聘', label: '招聘信息', icon: 'work', tone: '#2E7D5A' },
-  { tab: 'YouTube', label: '视频摘要', icon: 'play_circle', tone: '#B04444' },
 ]
 
 function formatDate(value) {
@@ -45,17 +44,14 @@ export default function HomePage({
   user,
   articles,
   cnArticles,
-  videos,
   jobs,
   ideas,
   newsLastUpdated,
-  ytLastUpdated,
   onTabChange,
   onLoginClick,
 }) {
   const featuredCn = cnArticles.slice(0, 3)
   const latestNews = articles.slice(0, 4)
-  const latestVideos = videos.slice(0, 2)
   const latestJobs = jobs.slice(0, 3)
   const leadArticle = featuredCn[0] || latestNews[0] || null
   const signalArticles = (featuredCn.slice(1, 3).length ? featuredCn.slice(1, 3) : latestNews.slice(1, 3))
@@ -221,7 +217,7 @@ export default function HomePage({
                   {[
                     ['看在葡华人最关心的信息', '华人关注'],
                     ['快速浏览公开招聘机会', '招聘'],
-                    [user ? '打开视频摘要继续看频道' : '登录后查看视频摘要', user ? 'YouTube' : '首页'],
+                    [user ? '打开私人 Ideas 记录灵感' : '登录后使用私人 Ideas', user ? 'Ideas' : '首页'],
                   ].map(([text, tab]) => (
                     <button
                       key={`${tab}-${text}`}
@@ -249,7 +245,7 @@ export default function HomePage({
               {user ? `欢迎回来，${user.name || '朋友'}` : '从这里开始今天的信息浏览'}
             </p>
             <p className="mt-2 text-sm leading-7 text-text-muted">
-              新闻更新时间 {formatDate(newsLastUpdated)}，视频更新时间 {formatDate(ytLastUpdated)}。
+              新闻更新时间 {formatDate(newsLastUpdated)}。
             </p>
           </div>
 
@@ -270,15 +266,15 @@ export default function HomePage({
             <div className="grid gap-3 sm:grid-cols-2">
               <StatCard label="华人相关" value={cnArticles.length} hint="已筛出与在葡华人更相关的新闻条目" />
               <StatCard label="招聘发布" value={jobs.length} hint="公开可见的工作机会，适合快速浏览" />
-              <StatCard label="视频摘要" value={videos.length} hint={user ? '已加载的频道视频摘要与字幕' : '登录后可查看视频频道与摘要'} />
+              <StatCard label="新闻来源" value={new Set(articles.map((article) => article.source)).size} hint="持续抓取的葡语媒体来源数量" />
               <StatCard label="灵感记录" value={user ? ideas.length : '...'} hint={user ? '你的 Ideas 会在这里继续积累' : '登录后管理私人灵感与草稿'} />
             </div>
 
             {!user && (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#1f2f4c] px-4 py-4 text-white">
                 <div>
-                  <p className="text-sm font-semibold">登录后解锁 YouTube 与 Ideas</p>
-                  <p className="mt-1 text-xs text-white/72">继续保存灵感、管理频道、查看摘要缓存。</p>
+                  <p className="text-sm font-semibold">登录后解锁 Ideas</p>
+                  <p className="mt-1 text-xs text-white/72">继续保存灵感与草稿。</p>
                 </div>
                 <Button variant="primary" size="sm" icon="login" onClick={onLoginClick} className="shrink-0 bg-white text-[#1f2f4c] hover:bg-[#f4ecdf]">
                   登录
@@ -289,11 +285,10 @@ export default function HomePage({
         </Card>
       </section>
 
-      <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard label="全部新闻" value={articles.length} hint="汇总葡萄牙重点媒体与分类内容" />
         <StatCard label="葡语来源" value={new Set(articles.map((article) => article.source)).size} hint="持续抓取的媒体来源数量" />
         <StatCard label="最新职位" value={jobs.filter((job) => job.status === 'active').length} hint="仍在开放中的招聘信息" />
-        <StatCard label="频道数量" value={user ? new Set(videos.map((video) => video.channel_id)).size : '--'} hint={user ? '已接入并生成摘要的频道范围' : '登录后查看频道内容'} />
       </section>
 
       <section className="mt-10 grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
@@ -390,43 +385,7 @@ export default function HomePage({
         </div>
       </section>
 
-      <section className="mt-10 grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
-        <Card className="rounded-[30px] border-white/80 bg-white/92 shadow-[0_20px_50px_rgba(58,44,31,0.08)]">
-          <div className="flex items-end justify-between gap-4">
-            <div>
-              <Badge color="#B04444">视频</Badge>
-              <h2 className="mt-3 text-xl font-black tracking-tight text-text" style={{ fontFamily: 'var(--font-headline)' }}>
-                YouTube 动态
-              </h2>
-              <p className="mt-1 text-sm text-text-muted">
-                {user ? '已接入频道的最新视频与摘要预览。' : '登录后查看频道、字幕与 AI 摘要。'}
-              </p>
-            </div>
-            {user && (
-              <button onClick={() => onTabChange('YouTube')} className="text-sm font-semibold text-accent hover:text-accent-hover">
-                进入 YouTube
-              </button>
-            )}
-          </div>
-
-          <PreviewList
-            items={latestVideos}
-            empty={user ? '还没有视频内容，先去获取 YouTube 数据。' : '登录后这里会展示视频摘要与频道更新。'}
-            renderItem={(video) => (
-              <div key={video.video_id} className="mt-4 flex gap-4 rounded-2xl border border-border bg-surface-muted p-3">
-                <img src={video.thumbnail} alt="" className="h-20 w-32 rounded-xl object-cover" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs uppercase tracking-[0.14em] text-text-subtle">{video.channel_name}</p>
-                  <h3 className="mt-2 line-clamp-2 text-sm font-bold leading-6 text-text">{video.title}</h3>
-                  <p className="mt-2 line-clamp-2 text-xs text-text-muted">
-                    {video.caption?.summary || '摘要将在打开视频后按需生成或读取缓存。'}
-                  </p>
-                </div>
-              </div>
-            )}
-          />
-        </Card>
-
+      <section className="mt-10 grid gap-6">
         <Card className="rounded-[30px] border-[#E4D5BF] bg-[linear-gradient(180deg,#fffaf0_0%,#f6efe2_100%)] shadow-[0_22px_54px_rgba(86,60,33,0.12)]">
           <Badge color="#B8843C">导航</Badge>
           <h2 className="mt-3 text-2xl font-black tracking-tight text-text" style={{ fontFamily: 'var(--font-headline)' }}>
@@ -441,7 +400,6 @@ export default function HomePage({
               ['先看与华人相关的重要信息', '华人关注', 'arrow_outward'],
               ['浏览更完整的葡语新闻与分类', '葡萄牙新闻', 'newsstand'],
               ['查看或发布招聘机会', '招聘', 'work_history'],
-              [user ? '继续管理频道与视频摘要' : '登录后管理视频频道与摘要', user ? 'YouTube' : '首页', 'play_circle'],
               [user ? '打开个人灵感与想法记录' : '登录后使用私人 Ideas', user ? 'Ideas' : '首页', 'lightbulb'],
             ].map(([copy, tab, icon]) => (
               <button

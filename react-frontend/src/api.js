@@ -37,24 +37,6 @@ export const api = {
   getNews: () => http.get('/news').then(r => r.data),
   fetchNews: () => http.post('/news/fetch').then(r => r.data),
 
-  // YouTube
-  getYoutube: () => http.get('/youtube').then(r => r.data),
-  fetchVideos: () => http.post('/youtube/fetch').then(r => r.data),
-
-  // Channels
-  addChannel: (handle, category) =>
-    http.post('/youtube/channels', { handle, category }).then(r => r.data),
-  removeChannel: (handle) =>
-    http.delete(`/youtube/channels/${handle.replace('@', '')}`).then(r => r.data),
-  resolveChannel: (handle) =>
-    http.post(`/youtube/channels/${handle.replace('@', '')}/resolve`).then(r => r.data),
-
-  // Captions
-  getCaption: (videoId, signal) =>
-    http.get(`/youtube/videos/${videoId}/caption`, { signal }).then(r => r.data),
-  clearCaption: (videoId) =>
-    http.delete(`/youtube/videos/${videoId}/caption`).then(r => r.data),
-
   // Jobs
   listJobs: (params) => http.get('/jobs', { params }).then(r => r.data),
   getJob: (id) => http.get(`/jobs/${id}`).then(r => r.data),
