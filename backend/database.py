@@ -103,6 +103,16 @@ def init_db() -> None:
                 salary_range TEXT
             );
 
+            CREATE TABLE IF NOT EXISTS listing_realestate (
+                listing_id   INTEGER PRIMARY KEY REFERENCES listings(id) ON DELETE CASCADE,
+                deal_type    TEXT    NOT NULL CHECK (deal_type IN ('sale','rent')),
+                price_cents  INTEGER NOT NULL,
+                rooms        INTEGER,
+                bathrooms    INTEGER,
+                area_m2      INTEGER,
+                furnished    INTEGER DEFAULT 0
+            );
+
             CREATE TABLE IF NOT EXISTS listing_reports (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
                 listing_id   INTEGER NOT NULL REFERENCES listings(id) ON DELETE CASCADE,

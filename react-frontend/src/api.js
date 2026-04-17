@@ -54,6 +54,13 @@ export const api = {
   updateJob: (id, data) => http.put(`/jobs/${id}`, data).then(r => r.data),
   deleteJob: (id) => http.delete(`/jobs/${id}`).then(r => r.data),
 
+  // Real Estate
+  listRealEstate: (params) => http.get('/realestate', { params }).then(r => r.data),
+  getRealEstate: (id) => http.get(`/realestate/${id}`).then(r => r.data),
+  createRealEstate: (data) => http.post('/realestate', data).then(r => r.data),
+  updateRealEstate: (id, data) => http.put(`/realestate/${id}`, data).then(r => r.data),
+  deleteRealEstate: (id) => http.delete(`/realestate/${id}`).then(r => r.data),
+
   // Ideas
   getIdeas: () => http.get('/ideas').then(r => r.data),
   createIdea: (data) => http.post('/ideas', data).then(r => r.data),

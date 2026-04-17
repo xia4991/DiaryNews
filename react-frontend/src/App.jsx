@@ -10,6 +10,8 @@ import IdeasTab from './pages/IdeasTab'
 import JobsTab from './pages/JobsTab'
 import LoginPage from './pages/LoginPage'
 import JobsSidebar from './components/listings/JobsSidebar'
+import RealEstateTab from './pages/RealEstateTab'
+import RealEstateSidebar from './components/listings/RealEstateSidebar'
 import { api } from './api'
 
 export default function App() {
@@ -27,6 +29,9 @@ export default function App() {
   const [ideas, setIdeas] = useState([])
   const [jobsIndustry, setJobsIndustry] = useState('All')
   const [jobsCounts, setJobsCounts] = useState({})
+  const [reDealType, setReDealType] = useState('All')
+  const [reRooms, setReRooms] = useState('All')
+  const [reCounts, setReCounts] = useState({})
   const [toast, setToast] = useState(null)
   const showToast = useCallback(msg => setToast(msg), [])
 
@@ -127,8 +132,8 @@ export default function App() {
 
   // Available tabs based on auth (招聘 is public)
   const tabs = user
-    ? ['首页', '华人关注', '葡萄牙新闻', '招聘', 'Ideas']
-    : ['首页', '华人关注', '葡萄牙新闻', '招聘']
+    ? ['首页', '华人关注', '葡萄牙新闻', '招聘', '房产', 'Ideas']
+    : ['首页', '华人关注', '葡萄牙新闻', '招聘', '房产']
 
   const mobileTabs = user
     ? [
@@ -136,6 +141,7 @@ export default function App() {
         { label: '华人',    icon: 'diversity_3',   tab: '华人关注' },
         { label: '新闻',    icon: 'newspaper',     tab: '葡萄牙新闻' },
         { label: '招聘',    icon: 'work',          tab: '招聘' },
+        { label: '房产',    icon: 'home_work',     tab: '房产' },
         { label: 'Ideas',   icon: 'lightbulb',     tab: 'Ideas' },
       ]
     : [
@@ -143,6 +149,7 @@ export default function App() {
         { label: '华人',    icon: 'diversity_3',   tab: '华人关注' },
         { label: '新闻',    icon: 'newspaper',     tab: '葡萄牙新闻' },
         { label: '招聘',    icon: 'work',          tab: '招聘' },
+        { label: '房产',    icon: 'home_work',     tab: '房产' },
       ]
 
   if (loading) {
@@ -158,6 +165,8 @@ export default function App() {
     setActiveCategory('All')
     setActiveCnTag('All')
     setJobsIndustry('All')
+    setReDealType('All')
+    setReRooms('All')
   }
 
   let sidebar = null
@@ -188,6 +197,16 @@ export default function App() {
         counts={jobsCounts}
         activeIndustry={jobsIndustry}
         onIndustryChange={setJobsIndustry}
+      />
+    )
+  } else if (activeTab === '房产') {
+    sidebar = (
+      <RealEstateSidebar
+        counts={reCounts}
+        activeDealType={reDealType}
+        onDealTypeChange={setReDealType}
+        activeRooms={reRooms}
+        onRoomsChange={setReRooms}
       />
     )
   }
@@ -241,6 +260,14 @@ export default function App() {
             onCountsChange={setJobsCounts}
             onLoginRequired={() => setShowLogin(true)}
             onJobsChanged={loadJobs}
+          />
+        )}
+        {activeTab === '房产' && (
+          <RealEstateTab
+            activeDealType={reDealType}
+            activeRooms={reRooms}
+            onCountsChange={setReCounts}
+            onLoginRequired={() => setShowLogin(true)}
           />
         )}
         {activeTab === 'Ideas' && (

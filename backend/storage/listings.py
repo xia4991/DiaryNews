@@ -12,7 +12,7 @@ _BASE_FIELDS = {
 _VALID_STATUSES = ("active", "hidden", "removed", "expired")
 
 # Per-kind extension tables; keys are the `listings.kind` values.
-_EXTENSION_TABLES = {"job": "listing_jobs"}
+_EXTENSION_TABLES = {"job": "listing_jobs", "realestate": "listing_realestate"}
 
 JOB_INDUSTRIES = ("Restaurant", "ShoppingStore", "Driving", "Other")
 
@@ -368,6 +368,161 @@ def update_job(
             conn.execute(
                 f"UPDATE listing_jobs SET {set_clause} WHERE listing_id = ?",
                 list(job_patch.values()) + [listing_id],
+            )
+            if not base_patch:
+                conn.execute(
+                    "UPDATE listings SET updated_at = ? WHERE id = ?",
+                    (now, listing_id),
+                )
+
+        return _fetch_listing(conn, listing_id)
+
+
+# ── Real Estate (per-kind wrapper) ───────────────────────────────────────────
+
+RE_DEAL_TYPES = ("sale", "rent")
+RE_DEFAULT_EXPIRY_DAYS = 90
+
+
+def _validate_deal_type(deal_type: str) -> None:
+    if deal_type not in RE_DEAL_TYPES:
+        raise ValueError(
+            f"Invalid deal_type: {deal_type!r}. Must be one of {RE_DEAL_TYPES}"
+        )
+
+
+def create_realestate(
+    owner_id: int,
+    base_fields: dict,
+    deal_type: str,
+    price_cents: int,
+    rooms: Optional[int] = None,
+    bathrooms: Optional[int] = None,
+    area_m2: Optional[int] = None,
+    furnished: bool = False,
+    images: Optional[list] = None,
+) -> dict:
+    _validate_deal_type(deal_type)
+
+    def _write_re(conn, listing_id):
+        conn.execute(
+            "INSERT INTO listing_realestate "
+            "(listing_id, deal_type, price_cents, rooms, bathrooms, area_m2, furnished) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (listing_id, deal_type, price_cents, rooms, bathrooms, area_m2, int(furnished)),
+        )
+
+    return create_listing("realestate", owner_id, base_fields, kind_writer=_write_re, images=images)
+
+
+def list_realestate(
+    filters: Optional[dict] = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    _ensure_db()
+    filters = filters or {}
+    clauses = ["l.kind = 'realestate'"]
+    params: list = []
+
+    status = filters.get("status", "public")
+    if status == "public":
+        clauses.append("l.status IN ('active','expired')")
+    elif status == "all":
+        pass
+    else:
+        clauses.append("l.status = ?")
+        params.append(status)
+
+    if filters.get("owner_id") is not None:
+        clauses.append("l.owner_id = ?")
+        params.append(filters["owner_id"])
+
+    if filters.get("location"):
+        clauses.append("l.location LIKE ?")
+        params.append(f"%{filters['location']}%")
+
+    if filters.get("deal_type"):
+        _validate_deal_type(filters["deal_type"])
+        clauses.append("r.deal_type = ?")
+        params.append(filters["deal_type"])
+
+    if filters.get("min_price_cents") is not None:
+        clauses.append("r.price_cents >= ?")
+        params.append(filters["min_price_cents"])
+
+    if filters.get("max_price_cents") is not None:
+        clauses.append("r.price_cents <= ?")
+        params.append(filters["max_price_cents"])
+
+    if filters.get("min_rooms") is not None:
+        clauses.append("r.rooms >= ?")
+        params.append(filters["min_rooms"])
+
+    where = " AND ".join(clauses)
+    with get_db() as conn:
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM listings l "
+            f"JOIN listing_realestate r ON r.listing_id = l.id WHERE {where}",
+            params,
+        ).fetchone()[0]
+        rows = conn.execute(
+            f"SELECT l.*, r.deal_type, r.price_cents, r.rooms, r.bathrooms, "
+            f"r.area_m2, r.furnished FROM listings l "
+            f"JOIN listing_realestate r ON r.listing_id = l.id WHERE {where} "
+            "ORDER BY l.created_at DESC LIMIT ? OFFSET ?",
+            params + [limit, offset],
+        ).fetchall()
+        items = []
+        for row in rows:
+            d = dict(row)
+            d["images"] = _fetch_images(conn, d["id"])
+            items.append(d)
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
+def update_realestate(
+    listing_id: int,
+    owner_id: int,
+    patch: dict,
+    is_admin: bool = False,
+) -> dict:
+    _ensure_db()
+    re_fields = ("deal_type", "price_cents", "rooms", "bathrooms", "area_m2", "furnished")
+    re_patch = {k: patch[k] for k in re_fields if k in patch}
+    if "deal_type" in re_patch:
+        _validate_deal_type(re_patch["deal_type"])
+    if "furnished" in re_patch:
+        re_patch["furnished"] = int(re_patch["furnished"])
+    base_patch = {k: v for k, v in patch.items() if k in _BASE_FIELDS}
+
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT owner_id, kind FROM listings WHERE id = ?", (listing_id,)
+        ).fetchone()
+        if not row:
+            raise KeyError(listing_id)
+        if row["kind"] != "realestate":
+            raise ValueError(f"Listing {listing_id} is not a realestate listing")
+        if row["owner_id"] != owner_id and not is_admin:
+            raise PermissionError(
+                f"User {owner_id} does not own listing {listing_id}"
+            )
+
+        now = _now()
+        if base_patch:
+            base_patch["updated_at"] = now
+            set_clause = ", ".join(f"{k} = ?" for k in base_patch)
+            conn.execute(
+                f"UPDATE listings SET {set_clause} WHERE id = ?",
+                list(base_patch.values()) + [listing_id],
+            )
+
+        if re_patch:
+            set_clause = ", ".join(f"{k} = ?" for k in re_patch)
+            conn.execute(
+                f"UPDATE listing_realestate SET {set_clause} WHERE listing_id = ?",
+                list(re_patch.values()) + [listing_id],
             )
             if not base_patch:
                 conn.execute(
