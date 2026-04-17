@@ -3,11 +3,9 @@ import { useAuth } from './auth'
 import AppShell from './components/AppShell'
 import Sidebar from './components/Sidebar'
 import CnSidebar from './components/CnSidebar'
-import YoutubeSidebar from './components/youtube/YoutubeSidebar'
 import Toast from './components/Toast'
 import HomePage from './pages/HomePage'
 import NewsTab from './pages/NewsTab'
-import YoutubeTab from './pages/YoutubeTab'
 import IdeasTab from './pages/IdeasTab'
 import JobsTab from './pages/JobsTab'
 import LoginPage from './pages/LoginPage'
@@ -25,15 +23,10 @@ export default function App() {
   const [activeCategory, setActiveCategory] = useState('All')
   const [activeCnTag, setActiveCnTag] = useState('All')
 
-  const [channels, setChannels] = useState([])
-  const [videos, setVideos] = useState([])
-  const [ytLastUpdated, setYtLastUpdated] = useState(null)
-  const [ytFilter, setYtFilter] = useState({ kind: 'all', value: '' })
   const [jobs, setJobs] = useState([])
   const [ideas, setIdeas] = useState([])
   const [jobsIndustry, setJobsIndustry] = useState('All')
   const [jobsCounts, setJobsCounts] = useState({})
-  const [fetchError, setFetchError] = useState(null)
   const [toast, setToast] = useState(null)
   const showToast = useCallback(msg => setToast(msg), [])
 
@@ -46,20 +39,15 @@ export default function App() {
     api.listJobs({ limit: 12 }).then(d => setJobs(d.items || [])).catch(() => {})
   }, [])
 
-  // Load YouTube + Ideas only when logged in
+  // Load Ideas only when logged in
   useEffect(() => {
     if (!user) return
-    api.getYoutube().then(d => {
-      setChannels(d.channels || [])
-      setVideos(d.videos || [])
-      setYtLastUpdated(d.last_updated)
-    }).catch(() => {})
     api.getIdeas().then(d => setIdeas(d)).catch(() => {})
   }, [user])
 
   // If user logs out while on a protected tab, switch to news
   useEffect(() => {
-    if (!user && (activeTab === 'YouTube' || activeTab === 'Ideas')) {
+    if (!user && activeTab === 'Ideas') {
       setActiveTab('华人关注')
     }
   }, [user, activeTab])
@@ -76,31 +64,6 @@ export default function App() {
     }
   }
 
-  const handleFetchVideos = async () => {
-    setFetching(true)
-    setFetchError(null)
-    try {
-      const result = await api.fetchVideos()
-      const d = await api.getYoutube()
-      setChannels(d.channels || [])
-      setVideos(d.videos || [])
-      setYtLastUpdated(d.last_updated)
-      if (result.resolve_errors?.length) {
-        setFetchError(result.resolve_errors.map(e => `${e.handle}: ${e.error}`).join(' · '))
-      }
-    } catch (err) {
-      setFetchError(err.response?.data?.detail || 'Fetch failed. Check the server logs.')
-    } finally {
-      setFetching(false)
-    }
-  }
-
-  const handleChannelsUpdate = useCallback(async () => {
-    const d = await api.getYoutube()
-    setChannels(d.channels || [])
-    setVideos(d.videos || [])
-  }, [])
-
   const handleCreateIdea = useCallback(async (data) => {
     const idea = await api.createIdea(data)
     setIdeas(prev => [idea, ...prev])
@@ -114,20 +77,6 @@ export default function App() {
   const handleDeleteIdea = useCallback(async (id) => {
     await api.deleteIdea(id)
     setIdeas(prev => prev.filter(i => i.id !== id))
-  }, [])
-
-  const handleCaptionUpdate = useCallback((videoId, caption) => {
-    setVideos(prev => prev.map(v =>
-      v.video_id === videoId
-        ? (caption === undefined
-            ? (() => {
-                const next = { ...v }
-                delete next.caption
-                return next
-              })()
-            : { ...v, caption })
-        : v
-    ))
   }, [])
 
   const loadJobs = useCallback(async () => {
@@ -176,18 +125,9 @@ export default function App() {
     ? cnTagFiltered
     : cnTagFiltered.filter(a => a.category === activeCategory)
 
-  const filteredVideos = (() => {
-    if (ytFilter.kind === 'channel') return videos.filter(v => v.channel_id === ytFilter.value)
-    if (ytFilter.kind === 'category') {
-      const ids = new Set(channels.filter(c => c.category === ytFilter.value).map(c => c.channel_id))
-      return videos.filter(v => ids.has(v.channel_id))
-    }
-    return videos
-  })()
-
   // Available tabs based on auth (招聘 is public)
   const tabs = user
-    ? ['首页', '华人关注', '葡萄牙新闻', '招聘', 'YouTube', 'Ideas']
+    ? ['首页', '华人关注', '葡萄牙新闻', '招聘', 'Ideas']
     : ['首页', '华人关注', '葡萄牙新闻', '招聘']
 
   const mobileTabs = user
@@ -196,7 +136,6 @@ export default function App() {
         { label: '华人',    icon: 'diversity_3',   tab: '华人关注' },
         { label: '新闻',    icon: 'newspaper',     tab: '葡萄牙新闻' },
         { label: '招聘',    icon: 'work',          tab: '招聘' },
-        { label: 'YouTube', icon: 'video_library', tab: 'YouTube' },
         { label: 'Ideas',   icon: 'lightbulb',     tab: 'Ideas' },
       ]
     : [
@@ -218,7 +157,6 @@ export default function App() {
     setActiveTab(tab)
     setActiveCategory('All')
     setActiveCnTag('All')
-    setYtFilter({ kind: 'all', value: '' })
     setJobsIndustry('All')
   }
 
@@ -252,16 +190,6 @@ export default function App() {
         onIndustryChange={setJobsIndustry}
       />
     )
-  } else if (activeTab === 'YouTube') {
-    sidebar = (
-      <YoutubeSidebar
-        channels={channels}
-        videos={videos}
-        activeFilter={ytFilter}
-        onFilterChange={setYtFilter}
-        lastUpdated={ytLastUpdated}
-      />
-    )
   }
 
   return (
@@ -274,7 +202,6 @@ export default function App() {
         mobileTabs={mobileTabs}
         onTabChange={handleTabChange}
         onFetchNews={handleFetchNews}
-        onFetchVideos={handleFetchVideos}
         fetching={fetching}
         user={user}
         onLoginClick={() => setShowLogin(true)}
@@ -286,11 +213,9 @@ export default function App() {
             user={user}
             articles={articles}
             cnArticles={cnArticles}
-            videos={videos}
             jobs={jobs}
             ideas={ideas}
             newsLastUpdated={newsLastUpdated}
-            ytLastUpdated={ytLastUpdated}
             onTabChange={handleTabChange}
             onLoginClick={() => setShowLogin(true)}
           />
@@ -308,16 +233,6 @@ export default function App() {
             tabSubtitle="与在葡华人相关的新闻精选。"
             emptyHint="获取葡萄牙新闻"
             layout="china"
-          />
-        )}
-        {activeTab === 'YouTube' && (
-          <YoutubeTab
-            channels={channels}
-            videos={filteredVideos}
-            fetchError={fetchError}
-            onChannelsUpdate={handleChannelsUpdate}
-            onCaptionUpdate={handleCaptionUpdate}
-            onError={showToast}
           />
         )}
         {activeTab === '招聘' && (

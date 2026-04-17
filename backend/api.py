@@ -144,67 +144,6 @@ async def fetch_news(_admin: dict = Depends(require_admin)):
     return await asyncio.to_thread(services.fetch_and_save_news)
 
 
-# ── YouTube (login required, admin for mutations) ───────────────────────────
-
-@app.get("/api/youtube")
-def get_youtube(_user: dict = Depends(get_current_user)):
-    return storage.load_youtube()
-
-
-class AddChannelRequest(BaseModel):
-    handle: str
-    category: str
-
-
-@app.post("/api/youtube/channels", status_code=201)
-def add_channel(req: AddChannelRequest, _admin: dict = Depends(require_admin)):
-    try:
-        return services.add_youtube_channel(req.handle, req.category)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except services.DuplicateChannelError as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
-
-
-@app.delete("/api/youtube/channels/{handle}")
-def remove_channel(handle: str, _admin: dict = Depends(require_admin)):
-    services.remove_youtube_channel(handle)
-    return {"ok": True}
-
-
-@app.post("/api/youtube/channels/{handle}/resolve")
-def resolve_channel(handle: str, _admin: dict = Depends(require_admin)):
-    try:
-        return services.resolve_and_save_channel(handle)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-
-@app.post("/api/youtube/fetch")
-async def fetch_videos(_admin: dict = Depends(require_admin)):
-    try:
-        return await asyncio.to_thread(services.fetch_and_save_videos)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-
-@app.get("/api/youtube/videos/{video_id}/caption")
-async def get_caption(video_id: str, _user: dict = Depends(get_current_user)):
-    try:
-        return await asyncio.to_thread(services.get_or_fetch_caption, video_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-    except Exception as exc:
-        log.exception("Caption fetch crashed for %s", video_id)
-        raise HTTPException(status_code=500, detail=f"Caption fetch failed: {exc}")
-
-
-@app.delete("/api/youtube/videos/{video_id}/caption")
-def clear_caption(video_id: str, _admin: dict = Depends(require_admin)):
-    storage.clear_caption(video_id)
-    return {"ok": True}
-
-
 # ── Media upload ─────────────────────────────────────────────────────────────
 
 @app.post("/api/media/upload")

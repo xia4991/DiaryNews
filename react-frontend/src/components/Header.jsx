@@ -3,7 +3,7 @@ import { useAuth } from '../auth'
 import Button from './ui/Button'
 import ProfileModal from './ProfileModal'
 
-export default function Header({ activeTab, tabs, onTabChange, onFetchNews, onFetchVideos, fetching, user, onLoginClick }) {
+export default function Header({ activeTab, tabs, onTabChange, onFetchNews, fetching, user, onLoginClick }) {
   const { logout } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
@@ -18,9 +18,8 @@ export default function Header({ activeTab, tabs, onTabChange, onFetchNews, onFe
     return () => document.removeEventListener('mousedown', handler)
   }, [menuOpen])
 
-  const showFetchButton = user?.is_admin && activeTab !== 'Ideas' && activeTab !== '招聘' && activeTab !== '首页'
+  const showFetchButton = user?.is_admin && (activeTab === '葡萄牙新闻' || activeTab === '华人关注')
   const fetchLabel = fetching ? '加载中' : `获取${activeTab}`
-  const onFetchClick = (activeTab === '葡萄牙新闻' || activeTab === '华人关注') ? onFetchNews : onFetchVideos
 
   return (
     <header
@@ -80,7 +79,7 @@ export default function Header({ activeTab, tabs, onTabChange, onFetchNews, onFe
             size="sm"
             icon={fetching ? undefined : 'refresh'}
             loading={fetching}
-            onClick={onFetchClick}
+            onClick={onFetchNews}
           >
             <span className="hidden sm:inline">{fetchLabel}</span>
           </Button>

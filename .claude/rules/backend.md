@@ -12,13 +12,12 @@ paths:
 - **`api.py`** — thin FastAPI REST endpoints (HTTP only: parsing, status codes, responses)
 - **`services.py`** — orchestration: coordinates fetching, processing, storage; no FastAPI imports
 - **`news.py`** — RSS fetching, scraping (`trafilatura`), keyword classification, LLM enrichment; parallel via `ThreadPoolExecutor(max_workers=2)`
-- **`youtube.py`** — channel resolution, Atom feed video fetching, 3-tier caption extraction
 - **`llm.py`** — single `call_minimax(prompt, max_tokens, fallback)` wrapper for MiniMax API
 - **`prompts.py`** — all LLM prompt templates (see llm-prompts rule for contract details)
 - **`database.py`** — SQLite schema init, connection manager, column migrations
 - **`config.py`** — constants (DB_PATH, API URLs, feature flags)
 - **`sources.py`** — RSS feed URLs, category keyword lists (Portuguese keywords, first-match wins)
-- **`storage/`** — SQLite CRUD split by domain: `base.py`, `news.py`, `youtube.py`, `ideas.py`, `migration.py`
+- **`storage/`** — SQLite CRUD split by domain: `base.py`, `news.py`, `ideas.py`, `listings.py`, `users.py`, `migration.py`
 
 ## DB Schema — articles table
 
@@ -36,7 +35,7 @@ scraped_content, ai_summary, title_zh, content_zh, tags_zh
 - All CRUD uses `INSERT OR REPLACE` (upsert by primary key)
 - `_trim_articles()` keeps DB at MAX_ARTICLES (2000)
 - `_migrate()` adds new columns safely with try/except on ALTER TABLE
-- `load_*()` returns `{"last_updated": str, "articles/videos/channels": [dict]}`
+- `load_*()` returns `{"last_updated": str, "articles": [dict]}`
 
 ## Fetch Flow
 

@@ -14,20 +14,19 @@ App.jsx (state, tabs, filtering)
   Header.jsx (tab nav, fetch button)
   Sidebar.jsx (news category filter)
   CnSidebar.jsx (Chinese-interest tags + category filter)
-  YoutubeSidebar.jsx (channel/category filter)
   NewsTab.jsx (article grid — reused for both news tabs)
     ArticleCardFeatured.jsx (first article, large)
     ArticleCard.jsx (regular cards)
     ArticleModal.jsx (detail overlay)
-  YoutubeTab.jsx / IdeasTab.jsx
+  HomePage.jsx / JobsTab.jsx / IdeasTab.jsx
 ```
 
 ## Tab System
 
-4 tabs: `华人关注` (default), `葡萄牙新闻`, `YouTube`, `Ideas`
+5 tabs: `首页` (default), `华人关注`, `葡萄牙新闻`, `招聘`, `Ideas`
 - Both news tabs share the same data source (`articles` state) and `<NewsTab>` component
 - `华人关注` filters to articles with non-empty `tags_zh`
-- Tab switching resets all filters (`activeCategory`, `activeCnTag`, `ytFilter`)
+- Tab switching resets all filters (`activeCategory`, `activeCnTag`, `jobsIndustry`)
 
 ## Chinese Translation Pattern
 
