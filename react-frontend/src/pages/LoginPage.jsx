@@ -21,7 +21,7 @@ export default function LoginPage({ onClose }) {
           className="text-2xl font-extrabold text-accent tracking-tight"
           style={{ fontFamily: 'var(--font-headline)' }}
         >
-          DiaryNews
+          葡萄牙华人信息中心
         </h1>
         <p className="text-sm text-text-muted">登录以访问更多功能</p>
         <div className="flex justify-center pt-1">

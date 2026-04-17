@@ -1,4 +1,5 @@
-import SidebarShell, { navItemClass, navCountClass, sectionLabel } from './SidebarShell'
+import SidebarShell from './SidebarShell'
+import { navItemClass, navCountClass, sectionLabel } from './sidebarShellStyles.jsx'
 import { CATEGORY_ZH, CATEGORY_ICONS } from '../constants/categories'
 
 export default function Sidebar({ categories, activeCategory, onCategoryChange, lastUpdated }) {

@@ -1,4 +1,5 @@
-import SidebarShell, { navItemClass, navCountClass, sectionLabel } from '../SidebarShell'
+import SidebarShell from '../SidebarShell'
+import { navItemClass, navCountClass, sectionLabel } from '../sidebarShellStyles.jsx'
 import { JOB_INDUSTRIES, INDUSTRY_ZH, INDUSTRY_ICONS } from '../../constants/industries'
 
 export default function JobsSidebar({ counts, activeIndustry, onIndustryChange, lastUpdated }) {

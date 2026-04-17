@@ -18,7 +18,7 @@ export default function Header({ activeTab, tabs, onTabChange, onFetchNews, onFe
     return () => document.removeEventListener('mousedown', handler)
   }, [menuOpen])
 
-  const showFetchButton = user?.is_admin && activeTab !== 'Ideas' && activeTab !== '招聘'
+  const showFetchButton = user?.is_admin && activeTab !== 'Ideas' && activeTab !== '招聘' && activeTab !== '首页'
   const fetchLabel = fetching ? '加载中' : `获取${activeTab}`
   const onFetchClick = (activeTab === '葡萄牙新闻' || activeTab === '华人关注') ? onFetchNews : onFetchVideos
 
@@ -27,12 +27,20 @@ export default function Header({ activeTab, tabs, onTabChange, onFetchNews, onFe
       className="fixed top-0 w-full z-40 h-14 flex items-center justify-between px-4 lg:px-6 bg-surface/90 backdrop-blur border-b border-border"
     >
       <div className="flex items-center gap-8 min-w-0">
-        <span
-          className="text-lg font-extrabold tracking-tight text-text shrink-0"
-          style={{ fontFamily: 'var(--font-headline)' }}
+        <button
+          onClick={() => onTabChange('首页')}
+          className="min-w-0 shrink-0 text-left"
         >
-          DiaryNews
-        </span>
+          <span
+            className="block max-w-[220px] truncate text-base font-black tracking-tight text-text lg:max-w-none lg:text-lg"
+            style={{ fontFamily: 'var(--font-headline)' }}
+          >
+            葡萄牙华人信息中心
+          </span>
+          <span className="hidden text-[10px] uppercase tracking-[0.18em] text-text-subtle lg:block">
+            Portugal Chinese Hub
+          </span>
+        </button>
         <nav className="hidden md:flex items-center gap-6">
           {tabs.map(tab => {
             const active = activeTab === tab

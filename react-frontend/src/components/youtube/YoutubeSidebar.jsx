@@ -1,4 +1,5 @@
-import SidebarShell, { navItemClass, navCountClass, sectionLabel } from '../SidebarShell'
+import SidebarShell from '../SidebarShell'
+import { navItemClass, navCountClass, sectionLabel } from '../sidebarShellStyles.jsx'
 
 const CATEGORY_ICONS = {
   'Tecnologia':     'memory',

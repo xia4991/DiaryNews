@@ -1,3 +1,5 @@
+import { createElement } from 'react'
+
 const PAD = {
   none: '',
   sm: 'p-3',
@@ -6,7 +8,7 @@ const PAD = {
 }
 
 export default function Card({
-  as: Tag = 'div',
+  as: tag = 'div',
   interactive = false,
   padding = 'md',
   className = '',
@@ -17,9 +19,9 @@ export default function Card({
   const hover = interactive
     ? 'transition-shadow transition-colors cursor-pointer hover:shadow-lift hover:bg-bg-subtle'
     : ''
-  return (
-    <Tag className={`${base} ${PAD[padding]} ${hover} ${className}`.trim()} {...rest}>
-      {children}
-    </Tag>
+  return createElement(
+    tag,
+    { className: `${base} ${PAD[padding]} ${hover} ${className}`.trim(), ...rest },
+    children,
   )
 }

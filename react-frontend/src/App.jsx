@@ -5,6 +5,7 @@ import Sidebar from './components/Sidebar'
 import CnSidebar from './components/CnSidebar'
 import YoutubeSidebar from './components/youtube/YoutubeSidebar'
 import Toast from './components/Toast'
+import HomePage from './pages/HomePage'
 import NewsTab from './pages/NewsTab'
 import YoutubeTab from './pages/YoutubeTab'
 import IdeasTab from './pages/IdeasTab'
@@ -15,7 +16,7 @@ import { api } from './api'
 
 export default function App() {
   const { user, loading } = useAuth()
-  const [activeTab, setActiveTab] = useState('华人关注')
+  const [activeTab, setActiveTab] = useState('首页')
   const [fetching, setFetching] = useState(false)
   const [showLogin, setShowLogin] = useState(false)
 
@@ -28,6 +29,7 @@ export default function App() {
   const [videos, setVideos] = useState([])
   const [ytLastUpdated, setYtLastUpdated] = useState(null)
   const [ytFilter, setYtFilter] = useState({ kind: 'all', value: '' })
+  const [jobs, setJobs] = useState([])
   const [ideas, setIdeas] = useState([])
   const [jobsIndustry, setJobsIndustry] = useState('All')
   const [jobsCounts, setJobsCounts] = useState({})
@@ -41,6 +43,7 @@ export default function App() {
       setArticles(d.articles || [])
       setNewsLastUpdated(d.last_updated)
     })
+    api.listJobs({ limit: 12 }).then(d => setJobs(d.items || [])).catch(() => {})
   }, [])
 
   // Load YouTube + Ideas only when logged in
@@ -117,10 +120,19 @@ export default function App() {
     setVideos(prev => prev.map(v =>
       v.video_id === videoId
         ? (caption === undefined
-            ? (({ caption: _, ...rest }) => rest)(v)
+            ? (() => {
+                const next = { ...v }
+                delete next.caption
+                return next
+              })()
             : { ...v, caption })
         : v
     ))
+  }, [])
+
+  const loadJobs = useCallback(async () => {
+    const d = await api.listJobs({ limit: 12 })
+    setJobs(d.items || [])
   }, [])
 
   // Build category list with counts
@@ -175,11 +187,12 @@ export default function App() {
 
   // Available tabs based on auth (招聘 is public)
   const tabs = user
-    ? ['华人关注', '葡萄牙新闻', '招聘', 'YouTube', 'Ideas']
-    : ['华人关注', '葡萄牙新闻', '招聘']
+    ? ['首页', '华人关注', '葡萄牙新闻', '招聘', 'YouTube', 'Ideas']
+    : ['首页', '华人关注', '葡萄牙新闻', '招聘']
 
   const mobileTabs = user
     ? [
+        { label: '首页',    icon: 'home',          tab: '首页' },
         { label: '华人',    icon: 'diversity_3',   tab: '华人关注' },
         { label: '新闻',    icon: 'newspaper',     tab: '葡萄牙新闻' },
         { label: '招聘',    icon: 'work',          tab: '招聘' },
@@ -187,6 +200,7 @@ export default function App() {
         { label: 'Ideas',   icon: 'lightbulb',     tab: 'Ideas' },
       ]
     : [
+        { label: '首页',    icon: 'home',          tab: '首页' },
         { label: '华人',    icon: 'diversity_3',   tab: '华人关注' },
         { label: '新闻',    icon: 'newspaper',     tab: '葡萄牙新闻' },
         { label: '招聘',    icon: 'work',          tab: '招聘' },
@@ -265,11 +279,36 @@ export default function App() {
         user={user}
         onLoginClick={() => setShowLogin(true)}
         sidebar={sidebar}
-        fullWidth={activeTab === 'Ideas'}
+        fullWidth={activeTab === 'Ideas' || activeTab === '首页'}
       >
-        {activeTab === '葡萄牙新闻' && <NewsTab articles={filteredArticles} />}
+        {activeTab === '首页' && (
+          <HomePage
+            user={user}
+            articles={articles}
+            cnArticles={cnArticles}
+            videos={videos}
+            jobs={jobs}
+            ideas={ideas}
+            newsLastUpdated={newsLastUpdated}
+            ytLastUpdated={ytLastUpdated}
+            onTabChange={handleTabChange}
+            onLoginClick={() => setShowLogin(true)}
+          />
+        )}
+        {activeTab === '葡萄牙新闻' && (
+          <NewsTab
+            articles={filteredArticles}
+            layout="portugal"
+          />
+        )}
         {activeTab === '华人关注' && (
-          <NewsTab articles={filteredCnArticles} tabTitle="华人关注" tabSubtitle="与在葡华人相关的新闻精选。" emptyHint="获取葡萄牙新闻" />
+          <NewsTab
+            articles={filteredCnArticles}
+            tabTitle="华人关注"
+            tabSubtitle="与在葡华人相关的新闻精选。"
+            emptyHint="获取葡萄牙新闻"
+            layout="china"
+          />
         )}
         {activeTab === 'YouTube' && (
           <YoutubeTab
@@ -286,6 +325,7 @@ export default function App() {
             activeIndustry={jobsIndustry}
             onCountsChange={setJobsCounts}
             onLoginRequired={() => setShowLogin(true)}
+            onJobsChanged={loadJobs}
           />
         )}
         {activeTab === 'Ideas' && (
