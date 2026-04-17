@@ -258,6 +258,21 @@ def create_job(
     return create_listing("job", owner_id, base_fields, kind_writer=_write_job)
 
 
+def expire_stale_jobs() -> int:
+    """Flip active jobs whose expires_at is in the past to status='expired'.
+    Returns the number of rows updated."""
+    _ensure_db()
+    now = _now()
+    with get_db() as conn:
+        cur = conn.execute(
+            "UPDATE listings SET status = 'expired', updated_at = ? "
+            "WHERE kind = 'job' AND status = 'active' "
+            "AND expires_at IS NOT NULL AND expires_at < ?",
+            (now, now),
+        )
+        return cur.rowcount
+
+
 def list_jobs(
     filters: Optional[dict] = None,
     limit: int = 50,
