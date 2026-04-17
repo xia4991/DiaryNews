@@ -11,6 +11,11 @@ _BASE_FIELDS = {
 }
 _VALID_STATUSES = ("active", "hidden", "removed", "expired")
 
+# Per-kind extension tables; keys are the `listings.kind` values.
+_EXTENSION_TABLES = {"job": "listing_jobs"}
+
+JOB_INDUSTRIES = ("Restaurant", "ShoppingStore", "Driving", "Other")
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -26,11 +31,26 @@ def _fetch_images(conn, listing_id: int) -> list:
     return [dict(r) for r in rows]
 
 
+def _fetch_extension(conn, kind: str, listing_id: int) -> dict:
+    table = _EXTENSION_TABLES.get(kind)
+    if not table:
+        return {}
+    row = conn.execute(
+        f"SELECT * FROM {table} WHERE listing_id = ?", (listing_id,)
+    ).fetchone()
+    if not row:
+        return {}
+    ext = dict(row)
+    ext.pop("listing_id", None)
+    return ext
+
+
 def _fetch_listing(conn, listing_id: int) -> Optional[dict]:
     row = conn.execute("SELECT * FROM listings WHERE id = ?", (listing_id,)).fetchone()
     if not row:
         return None
     d = dict(row)
+    d.update(_fetch_extension(conn, d["kind"], listing_id))
     d["images"] = _fetch_images(conn, listing_id)
     return d
 
@@ -141,6 +161,7 @@ def list_listings(
         items = []
         for r in rows:
             d = dict(r)
+            d.update(_fetch_extension(conn, d["kind"], d["id"]))
             d["images"] = _fetch_images(conn, d["id"])
             items.append(d)
     return {"items": items, "total": total, "limit": limit, "offset": offset}
@@ -210,6 +231,84 @@ def set_listing_status(listing_id: int, status: str) -> dict:
         return _fetch_listing(conn, listing_id)
 
 
+# ── Jobs (per-kind wrapper) ──────────────────────────────────────────────────
+
+def _validate_industry(industry: str) -> None:
+    if industry not in JOB_INDUSTRIES:
+        raise ValueError(
+            f"Invalid industry: {industry!r}. Must be one of {JOB_INDUSTRIES}"
+        )
+
+
+def create_job(
+    owner_id: int,
+    base_fields: dict,
+    industry: str,
+    salary_range: Optional[str] = None,
+) -> dict:
+    _validate_industry(industry)
+
+    def _write_job(conn, listing_id):
+        conn.execute(
+            "INSERT INTO listing_jobs (listing_id, industry, salary_range) "
+            "VALUES (?, ?, ?)",
+            (listing_id, industry, salary_range),
+        )
+
+    return create_listing("job", owner_id, base_fields, kind_writer=_write_job)
+
+
+def update_job(
+    listing_id: int,
+    owner_id: int,
+    patch: dict,
+    is_admin: bool = False,
+) -> dict:
+    """Update a job listing. Accepts base listing fields plus
+    industry/salary_range in a single atomic transaction."""
+    _ensure_db()
+    job_patch = {k: patch[k] for k in ("industry", "salary_range") if k in patch}
+    if "industry" in job_patch:
+        _validate_industry(job_patch["industry"])
+    base_patch = {k: v for k, v in patch.items() if k in _BASE_FIELDS}
+
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT owner_id, kind FROM listings WHERE id = ?", (listing_id,)
+        ).fetchone()
+        if not row:
+            raise KeyError(listing_id)
+        if row["kind"] != "job":
+            raise ValueError(f"Listing {listing_id} is not a job")
+        if row["owner_id"] != owner_id and not is_admin:
+            raise PermissionError(
+                f"User {owner_id} does not own listing {listing_id}"
+            )
+
+        now = _now()
+        if base_patch:
+            base_patch["updated_at"] = now
+            set_clause = ", ".join(f"{k} = ?" for k in base_patch)
+            conn.execute(
+                f"UPDATE listings SET {set_clause} WHERE id = ?",
+                list(base_patch.values()) + [listing_id],
+            )
+
+        if job_patch:
+            set_clause = ", ".join(f"{k} = ?" for k in job_patch)
+            conn.execute(
+                f"UPDATE listing_jobs SET {set_clause} WHERE listing_id = ?",
+                list(job_patch.values()) + [listing_id],
+            )
+            if not base_patch:
+                conn.execute(
+                    "UPDATE listings SET updated_at = ? WHERE id = ?",
+                    (now, listing_id),
+                )
+
+        return _fetch_listing(conn, listing_id)
+
+
 # ── Reports ───────────────────────────────────────────────────────────────────
 
 def create_report(listing_id: int, reporter_id: int, reason: str) -> dict:
@@ -246,6 +345,18 @@ def list_unresolved_reports(limit: int = 50, offset: int = 0) -> dict:
             (limit, offset),
         ).fetchall()
     return {"items": [dict(r) for r in rows], "total": total}
+
+
+def resolve_reports_for_listing(listing_id: int, resolution: str) -> int:
+    """Mark all unresolved reports for a listing as resolved. Returns count."""
+    _ensure_db()
+    with get_db() as conn:
+        cur = conn.execute(
+            "UPDATE listing_reports SET resolved_at = ?, resolution = ? "
+            "WHERE listing_id = ? AND resolved_at IS NULL",
+            (_now(), resolution, listing_id),
+        )
+        return cur.rowcount
 
 
 def resolve_report(report_id: int, resolution: str) -> dict:

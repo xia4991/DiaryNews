@@ -29,7 +29,11 @@ from backend.storage.listings import (  # noqa: F401
     update_listing,
     delete_listing,
     set_listing_status,
+    create_job,
+    update_job,
+    JOB_INDUSTRIES,
     create_report,
     list_unresolved_reports,
     resolve_report,
+    resolve_reports_for_listing,
 )

@@ -113,6 +113,13 @@ def init_db() -> None:
                 created_at         TEXT
             );
 
+            CREATE TABLE IF NOT EXISTS listing_jobs (
+                listing_id   INTEGER PRIMARY KEY REFERENCES listings(id) ON DELETE CASCADE,
+                industry     TEXT    NOT NULL CHECK (industry IN
+                               ('Restaurant','ShoppingStore','Driving','Other')),
+                salary_range TEXT
+            );
+
             CREATE TABLE IF NOT EXISTS listing_reports (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
                 listing_id   INTEGER NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
