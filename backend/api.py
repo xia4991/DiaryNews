@@ -1,9 +1,11 @@
 import asyncio
 import logging
+from datetime import datetime, timedelta, timezone
+from typing import Literal, Optional
 
 log = logging.getLogger("diarynews.api")
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -155,6 +157,130 @@ async def get_caption(video_id: str, _user: dict = Depends(get_current_user)):
 @app.delete("/api/youtube/videos/{video_id}/caption")
 def clear_caption(video_id: str, _admin: dict = Depends(require_admin)):
     storage.clear_caption(video_id)
+    return {"ok": True}
+
+
+# ── Jobs ─────────────────────────────────────────────────────────────────────
+
+Industry = Literal["Restaurant", "ShoppingStore", "Driving", "Other"]
+JOB_DEFAULT_EXPIRY_DAYS = 30
+_PUBLIC_JOB_STATUSES = {"active", "expired"}
+
+
+class JobCreateRequest(BaseModel):
+    title: str
+    industry: Industry
+    description: Optional[str] = None
+    location: Optional[str] = None
+    salary_range: Optional[str] = None
+    contact_phone: Optional[str] = None
+    contact_whatsapp: Optional[str] = None
+    contact_email: Optional[str] = None
+    source_url: Optional[str] = None
+    expires_at: Optional[str] = None
+
+
+class JobUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    industry: Optional[Industry] = None
+    description: Optional[str] = None
+    location: Optional[str] = None
+    salary_range: Optional[str] = None
+    contact_phone: Optional[str] = None
+    contact_whatsapp: Optional[str] = None
+    contact_email: Optional[str] = None
+    source_url: Optional[str] = None
+    expires_at: Optional[str] = None
+
+
+def _require_job(listing_id: int, include_nonpublic: bool = False) -> dict:
+    job = storage.get_listing(listing_id)
+    if not job or job["kind"] != "job":
+        raise HTTPException(status_code=404, detail=f"Job {listing_id} not found")
+    if not include_nonpublic and job["status"] not in _PUBLIC_JOB_STATUSES:
+        raise HTTPException(status_code=404, detail=f"Job {listing_id} not found")
+    return job
+
+
+@app.get("/api/jobs")
+def list_jobs(
+    industry: Optional[Industry] = None,
+    location: Optional[str] = None,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
+    filters = {}
+    if industry:
+        filters["industry"] = industry
+    if location:
+        filters["location"] = location
+    return storage.list_jobs(filters, limit=limit, offset=offset)
+
+
+@app.get("/api/jobs/{listing_id}")
+def get_job(listing_id: int):
+    return _require_job(listing_id)
+
+
+@app.post("/api/jobs", status_code=201)
+def create_job(req: JobCreateRequest, user: dict = Depends(get_current_user)):
+    expires_at = req.expires_at or (
+        datetime.now(timezone.utc) + timedelta(days=JOB_DEFAULT_EXPIRY_DAYS)
+    ).isoformat()
+    base_fields = {
+        "title": req.title,
+        "description": req.description,
+        "location": req.location,
+        "contact_phone": req.contact_phone,
+        "contact_whatsapp": req.contact_whatsapp,
+        "contact_email": req.contact_email,
+        "source_url": req.source_url,
+        "expires_at": expires_at,
+    }
+    return storage.create_job(
+        owner_id=int(user["sub"]),
+        base_fields=base_fields,
+        industry=req.industry,
+        salary_range=req.salary_range,
+    )
+
+
+@app.put("/api/jobs/{listing_id}")
+def update_job(
+    listing_id: int,
+    req: JobUpdateRequest,
+    user: dict = Depends(get_current_user),
+):
+    existing = storage.get_listing(listing_id)
+    if not existing or existing["kind"] != "job":
+        raise HTTPException(status_code=404, detail=f"Job {listing_id} not found")
+    patch = {k: v for k, v in req.model_dump(exclude_unset=True).items() if v is not None}
+    try:
+        return storage.update_job(
+            listing_id,
+            owner_id=int(user["sub"]),
+            patch=patch,
+            is_admin=bool(user.get("is_admin")),
+        )
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not the owner of this job")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.delete("/api/jobs/{listing_id}")
+def delete_job(listing_id: int, user: dict = Depends(get_current_user)):
+    existing = storage.get_listing(listing_id)
+    if not existing or existing["kind"] != "job":
+        raise HTTPException(status_code=404, detail=f"Job {listing_id} not found")
+    try:
+        storage.delete_listing(
+            listing_id,
+            owner_id=int(user["sub"]),
+            is_admin=bool(user.get("is_admin")),
+        )
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not the owner of this job")
     return {"ok": True}
 
 
