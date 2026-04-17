@@ -43,7 +43,7 @@ export function AuthProvider({ children }) {
 
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
-      <AuthContext.Provider value={{ user, loading, login, logout }}>
+      <AuthContext.Provider value={{ user, loading, login, logout, setUser }}>
         {children}
       </AuthContext.Provider>
     </GoogleOAuthProvider>

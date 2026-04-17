@@ -21,6 +21,7 @@ from backend.storage.ideas import (  # noqa: F401
 from backend.storage.users import (  # noqa: F401
     get_or_create_user,
     get_user_by_id,
+    update_user_profile,
 )
 from backend.storage.listings import (  # noqa: F401
     create_listing,
