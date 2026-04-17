@@ -82,15 +82,17 @@ def google_login(req: GoogleLoginRequest):
         is_admin=is_admin,
     )
     token = create_jwt(user["id"], user["email"], bool(user["is_admin"]))
+    return {"token": token, "user": _user_public(user)}
+
+
+def _user_public(u: dict) -> dict:
     return {
-        "token": token,
-        "user": {
-            "id": user["id"],
-            "email": user["email"],
-            "name": user["name"],
-            "avatar": user["avatar"],
-            "is_admin": bool(user["is_admin"]),
-        },
+        "id": u["id"],
+        "email": u["email"],
+        "name": u["name"],
+        "avatar": u["avatar"],
+        "phone": u["phone"] if "phone" in u.keys() else None,
+        "is_admin": bool(u["is_admin"]),
     }
 
 
@@ -99,13 +101,26 @@ def get_me(user: dict = Depends(get_current_user)):
     db_user = storage.get_user_by_id(int(user["sub"]))
     if not db_user:
         raise HTTPException(status_code=401, detail="User not found")
-    return {
-        "id": db_user["id"],
-        "email": db_user["email"],
-        "name": db_user["name"],
-        "avatar": db_user["avatar"],
-        "is_admin": bool(db_user["is_admin"]),
-    }
+    return _user_public(db_user)
+
+
+class UpdateMeRequest(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+
+
+@app.put("/api/auth/me")
+def update_me(req: UpdateMeRequest, user: dict = Depends(get_current_user)):
+    name = req.name.strip() if req.name is not None else None
+    phone = req.phone.strip() if req.phone is not None else None
+    if name is not None and not name:
+        raise HTTPException(status_code=400, detail="Name cannot be empty")
+    if phone is not None and len(phone) > 40:
+        raise HTTPException(status_code=400, detail="Phone too long")
+    updated = storage.update_user_profile(int(user["sub"]), name=name, phone=phone)
+    if not updated:
+        raise HTTPException(status_code=404, detail="User not found")
+    return _user_public(updated)
 
 
 # ── Status ────────────────────────────────────────────────────────────────────

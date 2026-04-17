@@ -1,7 +1,21 @@
+import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../auth'
+import ProfileModal from './ProfileModal'
 
 export default function Header({ activeTab, tabs, onTabChange, onFetchNews, onFetchVideos, fetching, user, onLoginClick }) {
   const { logout } = useAuth()
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const menuRef = useRef(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const handler = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [menuOpen])
 
   return (
     <header className="fixed top-0 w-full z-50 h-12 flex justify-between items-center px-4 lg:px-6"
@@ -40,15 +54,37 @@ export default function Header({ activeTab, tabs, onTabChange, onFetchNews, onFe
         )}
 
         {user ? (
-          <div className="flex items-center gap-2">
-            {user.avatar && (
-              <img src={user.avatar} alt="" className="w-7 h-7 rounded-full" referrerPolicy="no-referrer" />
-            )}
-            <span className="hidden lg:inline text-xs text-on-surface-variant">{user.name}</span>
-            <button onClick={logout}
-              className="text-xs text-on-surface-variant hover:text-on-surface transition-colors px-2 py-1">
-              退出
+          <div className="relative" ref={menuRef}>
+            <button onClick={() => setMenuOpen(v => !v)}
+              className="flex items-center gap-2 rounded-full px-1.5 py-1 hover:bg-white/5 transition-colors">
+              {user.avatar ? (
+                <img src={user.avatar} alt="" className="w-7 h-7 rounded-full" referrerPolicy="no-referrer" />
+              ) : (
+                <span className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold"
+                  style={{ background: 'rgba(45,52,73,0.8)', color: '#dae2fd' }}>
+                  {(user.name || '?').charAt(0).toUpperCase()}
+                </span>
+              )}
+              <span className="hidden lg:inline text-xs text-on-surface-variant">{user.name}</span>
             </button>
+
+            {menuOpen && (
+              <div className="absolute right-0 top-full mt-1 min-w-[160px] rounded-lg overflow-hidden py-1"
+                style={{ background: '#131b2e', boxShadow: '0 12px 32px rgba(0,0,0,0.5)' }}>
+                <button onClick={() => { setMenuOpen(false); setProfileOpen(true) }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-white/5 flex items-center gap-2"
+                  style={{ color: '#dae2fd' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>person</span>
+                  个人资料
+                </button>
+                <button onClick={() => { setMenuOpen(false); logout() }}
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-white/5 flex items-center gap-2"
+                  style={{ color: '#dae2fd' }}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>logout</span>
+                  退出
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <button onClick={onLoginClick}
@@ -59,6 +95,8 @@ export default function Header({ activeTab, tabs, onTabChange, onFetchNews, onFe
           </button>
         )}
       </div>
+
+      {profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}
     </header>
   )
 }

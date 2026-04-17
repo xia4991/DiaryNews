@@ -10,6 +10,11 @@ def _migrate(conn) -> None:
             conn.execute(f"ALTER TABLE articles ADD COLUMN {col}")
         except sqlite3.OperationalError:
             pass
+    for col in ["phone TEXT", "updated_at TEXT"]:
+        try:
+            conn.execute(f"ALTER TABLE users ADD COLUMN {col}")
+        except sqlite3.OperationalError:
+            pass
 
 
 def init_db() -> None:
@@ -78,8 +83,10 @@ def init_db() -> None:
                 email      TEXT    UNIQUE NOT NULL,
                 name       TEXT,
                 avatar     TEXT,
+                phone      TEXT,
                 is_admin   BOOLEAN NOT NULL DEFAULT 0,
-                created_at TEXT    NOT NULL
+                created_at TEXT    NOT NULL,
+                updated_at TEXT
             );
 
             CREATE TABLE IF NOT EXISTS listings (

@@ -28,6 +28,7 @@ export const api = {
   // Auth
   googleLogin: (credential) => http.post('/auth/google', { credential }).then(r => r.data),
   getMe: () => http.get('/auth/me').then(r => r.data),
+  updateMe: (data) => http.put('/auth/me', data).then(r => r.data),
 
   // Status
   getStatus: () => http.get('/status').then(r => r.data),
