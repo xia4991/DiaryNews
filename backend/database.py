@@ -82,7 +82,54 @@ def init_db() -> None:
                 created_at TEXT    NOT NULL
             );
 
-            CREATE INDEX IF NOT EXISTS idx_ideas_created      ON ideas (created_at DESC);
+            CREATE TABLE IF NOT EXISTS listings (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind              TEXT    NOT NULL CHECK (kind IN ('job','realestate','secondhand')),
+                owner_id          INTEGER NOT NULL REFERENCES users(id),
+                title             TEXT    NOT NULL,
+                description       TEXT,
+                location          TEXT,
+                status            TEXT    NOT NULL DEFAULT 'active'
+                                  CHECK (status IN ('active','hidden','removed','expired')),
+                contact_phone     TEXT,
+                contact_whatsapp  TEXT,
+                contact_email     TEXT,
+                source_url        TEXT,
+                created_at        TEXT    NOT NULL,
+                updated_at        TEXT    NOT NULL,
+                expires_at        TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS listing_images (
+                id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                listing_id         INTEGER NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+                position           INTEGER NOT NULL,
+                storage_key        TEXT    NOT NULL,
+                thumb_key          TEXT    NOT NULL,
+                original_filename  TEXT,
+                bytes              INTEGER,
+                width              INTEGER,
+                height             INTEGER,
+                created_at         TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS listing_reports (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                listing_id   INTEGER NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+                reporter_id  INTEGER NOT NULL REFERENCES users(id),
+                reason       TEXT    NOT NULL,
+                created_at   TEXT    NOT NULL,
+                resolved_at  TEXT,
+                resolution   TEXT
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_ideas_created                ON ideas (created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_listings_kind_status_created ON listings (kind, status, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_listings_owner               ON listings (owner_id);
+            CREATE INDEX IF NOT EXISTS idx_listing_images_listing       ON listing_images (listing_id, position);
+            CREATE INDEX IF NOT EXISTS idx_reports_listing              ON listing_reports (listing_id);
+            CREATE INDEX IF NOT EXISTS idx_reports_unresolved           ON listing_reports (created_at DESC)
+                WHERE resolved_at IS NULL;
         """)
         _migrate(conn)
 
@@ -91,6 +138,7 @@ def init_db() -> None:
 def get_db():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False, timeout=10)
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
     conn.row_factory = sqlite3.Row
     try:
         yield conn
