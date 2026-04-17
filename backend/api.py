@@ -5,8 +5,9 @@ from typing import Literal, Optional
 
 log = logging.getLogger("diarynews.api")
 
-from fastapi import FastAPI, HTTPException, Depends, Query
+from fastapi import FastAPI, HTTPException, Depends, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from backend import services, storage
@@ -16,7 +17,10 @@ from backend.auth import (
     get_current_user,
     require_admin,
 )
-from backend.config import ADMIN_EMAILS, CORS_ORIGINS
+from backend.config import (
+    ADMIN_EMAILS, CORS_ORIGINS,
+    MEDIA_BACKEND, MEDIA_LOCAL_ROOT, MEDIA_PUBLIC_URL,
+)
 from backend.sources import RSS_SOURCES
 
 JOB_EXPIRY_SWEEP_INTERVAL_SECONDS = 24 * 60 * 60
@@ -40,6 +44,12 @@ app = FastAPI(title="DiaryNews API", version="2.0.0")
 @app.on_event("startup")
 async def _start_background_tasks():
     asyncio.create_task(_job_expiry_loop())
+
+
+if MEDIA_BACKEND == "local":
+    import os
+    os.makedirs(MEDIA_LOCAL_ROOT, exist_ok=True)
+    app.mount(MEDIA_PUBLIC_URL, StaticFiles(directory=MEDIA_LOCAL_ROOT), name="uploads")
 
 app.add_middleware(
     CORSMiddleware,
@@ -178,6 +188,20 @@ async def get_caption(video_id: str, _user: dict = Depends(get_current_user)):
 def clear_caption(video_id: str, _admin: dict = Depends(require_admin)):
     storage.clear_caption(video_id)
     return {"ok": True}
+
+
+# ── Media upload ─────────────────────────────────────────────────────────────
+
+@app.post("/api/media/upload")
+async def upload_media(
+    image: UploadFile = File(...),
+    _user: dict = Depends(get_current_user),
+):
+    data = await image.read()
+    try:
+        return services.process_and_store_image(data, image.content_type or "")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
 
 
 # ── Jobs ─────────────────────────────────────────────────────────────────────
