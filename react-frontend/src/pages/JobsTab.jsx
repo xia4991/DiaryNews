@@ -4,13 +4,15 @@ import { useAuth } from '../auth'
 import JobCard from '../components/listings/JobCard'
 import JobDetailModal from '../components/listings/JobDetailModal'
 import JobFormModal from '../components/listings/JobFormModal'
+import SectionHeader from '../components/ui/SectionHeader'
+import Button from '../components/ui/Button'
 
 export default function JobsTab({ activeIndustry, onCountsChange, onLoginRequired }) {
   const { user } = useAuth()
   const [jobs, setJobs] = useState([])
   const [loading, setLoading] = useState(true)
-  const [selected, setSelected] = useState(null)    // detail modal
-  const [formMode, setFormMode] = useState(null)    // 'new' | { job } | null
+  const [selected, setSelected] = useState(null)
+  const [formMode, setFormMode] = useState(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -62,7 +64,7 @@ export default function JobsTab({ activeIndustry, onCountsChange, onLoginRequire
     Boolean(user && (user.id === job.owner_id || user.is_admin))
 
   return (
-    <div className="pt-6">
+    <>
       {selected && (
         <JobDetailModal
           job={selected}
@@ -81,27 +83,31 @@ export default function JobsTab({ activeIndustry, onCountsChange, onLoginRequire
         />
       )}
 
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <h2 className="text-sm font-bold font-headline">招聘信息</h2>
-          <p className="text-xs text-on-surface-variant mt-0.5">在葡华人社区招聘与求职</p>
-        </div>
-        <button onClick={handleCreateClick}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-on-primary transition-all hover:brightness-110 active:scale-95 shrink-0"
-          style={{ background: 'linear-gradient(135deg, #c2c1ff, #5e5ce6)' }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>add</span>
-          发布招聘
-        </button>
-      </div>
+      <SectionHeader
+        title="招聘信息"
+        subtitle="在葡华人社区招聘与求职"
+        action={
+          <Button variant="primary" icon="add" onClick={handleCreateClick}>
+            发布招聘
+          </Button>
+        }
+      />
 
       {loading ? (
         <div className="flex items-center justify-center py-20">
-          <span className="material-symbols-outlined text-primary animate-spin" style={{ fontSize: 28 }}>hourglass_empty</span>
+          <span
+            className="material-symbols-outlined animate-spin text-accent"
+            style={{ fontSize: 28 }}
+          >
+            progress_activity
+          </span>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-3 text-on-surface-variant">
-          <span className="material-symbols-outlined" style={{ fontSize: 40, opacity: 0.4 }}>work_off</span>
-          <p className="text-sm">{jobs.length === 0 ? '还没有招聘信息，来发布第一条吧！' : '该行业暂无招聘'}</p>
+        <div className="flex flex-col items-center justify-center py-20 gap-3 text-text-muted">
+          <span className="material-symbols-outlined text-text-subtle" style={{ fontSize: 40 }}>work_off</span>
+          <p className="text-sm">
+            {jobs.length === 0 ? '还没有招聘信息，来发布第一条吧！' : '该行业暂无招聘'}
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -110,6 +116,6 @@ export default function JobsTab({ activeIndustry, onCountsChange, onLoginRequire
           ))}
         </div>
       )}
-    </div>
+    </>
   )
 }

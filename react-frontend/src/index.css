@@ -1,59 +1,87 @@
 @import "tailwindcss";
 
+/*
+ * Porcelain Blue — DiaryNews design tokens
+ *
+ * All colors referenced by components go through semantic names defined here.
+ * Tailwind @theme maps these to utilities (bg-bg, bg-surface, text-text, text-accent, ...).
+ * Raw hex/rgba values should NOT appear in components — lift anything new into this file
+ * or into src/constants/colors.js (category/industry palette).
+ */
+
 @theme {
-  /* Design token colors from Stitch */
-  --color-background:               #0b1326;
-  --color-surface:                  #0b1326;
-  --color-surface-dim:              #0b1326;
-  --color-surface-container-lowest: #060e20;
-  --color-surface-container-low:    #131b2e;
-  --color-surface-container:        #171f33;
-  --color-surface-container-high:   #222a3d;
-  --color-surface-container-highest:#2d3449;
-  --color-surface-variant:          #2d3449;
-  --color-surface-bright:           #31394d;
-  --color-primary:                  #c2c1ff;
-  --color-primary-container:        #5e5ce6;
-  --color-on-primary:               #1800a7;
-  --color-on-primary-container:     #f4f1ff;
-  --color-secondary:                #44e2cd;
-  --color-secondary-container:      #03c6b2;
-  --color-on-secondary:             #003731;
-  --color-on-secondary-container:   #004d44;
-  --color-tertiary:                 #a4c9ff;
-  --color-tertiary-container:       #1c70c2;
-  --color-on-tertiary-container:    #eef3ff;
-  --color-on-surface:               #dae2fd;
-  --color-on-surface-variant:       #c7c4d7;
-  --color-outline:                  #918fa0;
-  --color-outline-variant:          #464554;
-  --color-error:                    #ffb4ab;
-  --color-error-container:          #93000a;
+  /* Surfaces */
+  --color-bg:             #F5F3EE;
+  --color-bg-subtle:      #EDEAE2;
+  --color-surface:        #FFFFFF;
+  --color-surface-muted:  #FAF8F3;
+
+  /* Text */
+  --color-text:           #1A2036;
+  --color-text-muted:     #5E6478;
+  --color-text-subtle:    #8A90A3;
+  --color-text-onaccent:  #FFFFFF;
+
+  /* Lines */
+  --color-border:         #E3DED2;
+  --color-border-strong:  #CFC8B8;
+
+  /* Accent */
+  --color-accent:         #2B6CB0;
+  --color-accent-hover:   #1F5490;
+  --color-accent-subtle:  #E8F0FA;
+
+  /* Semantic states */
+  --color-success:        #2E7D5A;
+  --color-warning:        #B8843C;
+  --color-danger:         #B04444;
 
   /* Typography */
-  --font-headline: "Manrope", system-ui, sans-serif;
-  --font-body:     "Inter", system-ui, sans-serif;
-  --font-label:    "Inter", system-ui, sans-serif;
+  --font-headline: "Inter Tight", "Noto Sans SC", system-ui, sans-serif;
+  --font-body:     "Inter", "Noto Sans SC", system-ui, sans-serif;
+
+  /* Shadow scale */
+  --shadow-card:   0 2px 6px rgba(26, 32, 54, 0.05);
+  --shadow-lift:   0 6px 16px rgba(26, 32, 54, 0.08);
+  --shadow-modal:  0 24px 48px rgba(26, 32, 54, 0.10);
+
+  /* Focus ring */
+  --ring-focus:    0 0 0 3px rgba(43, 108, 176, 0.35);
 }
 
 * { box-sizing: border-box; }
 
+html, body, #root {
+  min-height: 100%;
+}
+
 body {
-  background-color: #0b1326;
-  color: #dae2fd;
-  font-family: "Inter", system-ui, sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.7;
   margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-headline);
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--ring-focus);
+  border-radius: 6px;
 }
 
 .material-symbols-outlined {
   font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
   vertical-align: middle;
   line-height: 1;
-}
-
-.glass-panel {
-  background: rgba(45, 52, 73, 0.6);
-  backdrop-filter: blur(12px);
 }
 
 .no-scrollbar::-webkit-scrollbar { display: none; }

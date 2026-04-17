@@ -1,5 +1,6 @@
 import { GoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../auth'
+import Modal from '../components/ui/Modal'
 
 export default function LoginPage({ onClose }) {
   const { login } = useAuth()
@@ -14,26 +15,32 @@ export default function LoginPage({ onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}>
-      <div className="relative rounded-2xl p-8 w-80 text-center"
-        style={{ background: '#131b2e', border: '1px solid rgba(70,69,84,0.4)' }}>
-        <button onClick={onClose}
-          className="absolute top-3 right-3 text-on-surface-variant hover:text-on-surface transition-colors">
-          <span className="material-symbols-outlined" style={{ fontSize: 20 }}>close</span>
-        </button>
-        <h1 className="text-xl font-bold text-primary font-headline mb-2">DiaryNews</h1>
-        <p className="text-sm text-on-surface-variant mb-6">登录以访问更多功能</p>
-        <div className="flex justify-center">
+    <Modal onClose={onClose} size="sm" hideClose>
+      <div className="flex flex-col items-center text-center gap-4 py-2">
+        <h1
+          className="text-2xl font-extrabold text-accent tracking-tight"
+          style={{ fontFamily: 'var(--font-headline)' }}
+        >
+          DiaryNews
+        </h1>
+        <p className="text-sm text-text-muted">登录以访问更多功能</p>
+        <div className="flex justify-center pt-1">
           <GoogleLogin
             onSuccess={handleSuccess}
             onError={() => console.error('Google login error')}
-            theme="filled_black"
+            theme="outline"
             shape="pill"
             size="large"
           />
         </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-xs text-text-subtle hover:text-text transition-colors mt-2"
+        >
+          取消
+        </button>
       </div>
-    </div>
+    </Modal>
   )
 }
