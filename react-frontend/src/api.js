@@ -37,6 +37,16 @@ export const api = {
   getNews: () => http.get('/news').then(r => r.data),
   fetchNews: () => http.post('/news/fetch').then(r => r.data),
 
+  // Media
+  uploadMedia: (file) => {
+    const form = new FormData()
+    form.append('image', file)
+    return http.post('/media/upload', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000,
+    }).then(r => r.data)
+  },
+
   // Jobs
   listJobs: (params) => http.get('/jobs', { params }).then(r => r.data),
   getJob: (id) => http.get(`/jobs/${id}`).then(r => r.data),
