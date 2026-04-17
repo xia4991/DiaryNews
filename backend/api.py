@@ -19,7 +19,27 @@ from backend.auth import (
 from backend.config import ADMIN_EMAILS, CORS_ORIGINS
 from backend.sources import RSS_SOURCES
 
+JOB_EXPIRY_SWEEP_INTERVAL_SECONDS = 24 * 60 * 60
+
+
+async def _job_expiry_loop():
+    """Background task: sweep expired jobs once at boot, then every 24h."""
+    while True:
+        try:
+            count = await asyncio.to_thread(storage.expire_stale_jobs)
+            if count:
+                log.info("Expired %d stale job listings", count)
+        except Exception:
+            log.exception("Job expiry sweep failed")
+        await asyncio.sleep(JOB_EXPIRY_SWEEP_INTERVAL_SECONDS)
+
+
 app = FastAPI(title="DiaryNews API", version="2.0.0")
+
+
+@app.on_event("startup")
+async def _start_background_tasks():
+    asyncio.create_task(_job_expiry_loop())
 
 app.add_middleware(
     CORSMiddleware,
