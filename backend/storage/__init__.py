@@ -31,6 +31,7 @@ from backend.storage.listings import (  # noqa: F401
     set_listing_status,
     create_job,
     update_job,
+    list_jobs,
     JOB_INDUSTRIES,
     create_report,
     list_unresolved_reports,

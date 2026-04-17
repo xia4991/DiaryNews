@@ -258,6 +258,60 @@ def create_job(
     return create_listing("job", owner_id, base_fields, kind_writer=_write_job)
 
 
+def list_jobs(
+    filters: Optional[dict] = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    """List job listings with industry/location/status filters via a single JOIN."""
+    _ensure_db()
+    filters = filters or {}
+    clauses = ["l.kind = 'job'"]
+    params: list = []
+
+    status = filters.get("status", "public")
+    if status == "public":
+        clauses.append("l.status IN ('active','expired')")
+    elif status == "all":
+        pass
+    else:
+        clauses.append("l.status = ?")
+        params.append(status)
+
+    if filters.get("owner_id") is not None:
+        clauses.append("l.owner_id = ?")
+        params.append(filters["owner_id"])
+
+    if filters.get("location"):
+        clauses.append("l.location LIKE ?")
+        params.append(f"%{filters['location']}%")
+
+    if filters.get("industry"):
+        _validate_industry(filters["industry"])
+        clauses.append("j.industry = ?")
+        params.append(filters["industry"])
+
+    where = " AND ".join(clauses)
+    with get_db() as conn:
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM listings l "
+            f"JOIN listing_jobs j ON j.listing_id = l.id WHERE {where}",
+            params,
+        ).fetchone()[0]
+        rows = conn.execute(
+            f"SELECT l.*, j.industry, j.salary_range FROM listings l "
+            f"JOIN listing_jobs j ON j.listing_id = l.id WHERE {where} "
+            "ORDER BY l.created_at DESC LIMIT ? OFFSET ?",
+            params + [limit, offset],
+        ).fetchall()
+        items = []
+        for r in rows:
+            d = dict(r)
+            d["images"] = _fetch_images(conn, d["id"])
+            items.append(d)
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
 def update_job(
     listing_id: int,
     owner_id: int,
