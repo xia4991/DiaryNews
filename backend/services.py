@@ -5,9 +5,11 @@ No FastAPI imports. All functions are synchronous.
 
 import logging
 from datetime import datetime, timezone
+from io import BytesIO
 
 from backend import storage
 from backend.news import fetch_all_feeds, re_enrich_article
+from backend.storage_media import get_media_storage
 from backend.youtube import (
     fetch_all_channels,
     fetch_and_summarize_caption,
@@ -54,6 +56,57 @@ def fetch_and_save_news() -> dict:
         "new_count": len(new_articles),
         "retried_count": len(retried),
         "last_updated": now,
+    }
+
+
+# ── Media upload ─────────────────────────────────────────────────────────────
+
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+THUMB_MAX_SIDE = 400
+THUMB_QUALITY = 85
+
+_CONTENT_TYPE_EXT = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+}
+
+
+def process_and_store_image(data: bytes, content_type: str, directory: str = "listings") -> dict:
+    """Validate, thumbnail, and persist an uploaded image. Returns storage keys + URLs."""
+    from PIL import Image, UnidentifiedImageError  # lazy: Pillow only needed for uploads
+
+    ext = _CONTENT_TYPE_EXT.get((content_type or "").lower())
+    if not ext:
+        raise ValueError(f"Unsupported content type: {content_type!r}")
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise ValueError(f"File exceeds {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit")
+
+    try:
+        img = Image.open(BytesIO(data))
+        img.verify()  # detects truncation / format mismatch
+        img = Image.open(BytesIO(data))  # reopen after verify
+    except (UnidentifiedImageError, OSError) as exc:
+        raise ValueError(f"Invalid or corrupt image: {exc}")
+
+    thumb = img.convert("RGB")
+    thumb.thumbnail((THUMB_MAX_SIDE, THUMB_MAX_SIDE))
+    buf = BytesIO()
+    thumb.save(buf, format="JPEG", quality=THUMB_QUALITY, optimize=True)
+    thumb_bytes = buf.getvalue()
+
+    media = get_media_storage()
+    storage_key = media.store(data, directory, ext)
+    thumb_key = media.store(thumb_bytes, directory, "jpg")
+
+    return {
+        "storage_key": storage_key,
+        "thumb_key": thumb_key,
+        "url": media.url(storage_key),
+        "thumb_url": media.url(thumb_key),
+        "bytes": len(data),
+        "width": img.width,
+        "height": img.height,
     }
 
 
