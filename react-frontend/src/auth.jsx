@@ -1,3 +1,5 @@
+/* eslint-disable react-refresh/only-export-components */
+
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
 import { GoogleOAuthProvider } from '@react-oauth/google'
 import { api } from './api'
@@ -8,15 +10,12 @@ const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => Boolean(localStorage.getItem('token')))
 
   // Validate existing token on mount
   useEffect(() => {
     const token = localStorage.getItem('token')
-    if (!token) {
-      setLoading(false)
-      return
-    }
+    if (!token) return
     api.getMe()
       .then(u => setUser(u))
       .catch(() => localStorage.removeItem('token'))

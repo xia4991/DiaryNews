@@ -1,4 +1,5 @@
-import SidebarShell, { navItemClass, sectionLabel } from '../SidebarShell'
+import SidebarShell from '../SidebarShell'
+import { navItemClass, navCountClass, sectionLabel } from '../sidebarShellStyles.jsx'
 import { JOB_INDUSTRIES, INDUSTRY_ZH, INDUSTRY_ICONS } from '../../constants/industries'
 
 export default function JobsSidebar({ counts, activeIndustry, onIndustryChange, lastUpdated }) {
@@ -9,7 +10,7 @@ export default function JobsSidebar({ counts, activeIndustry, onIndustryChange, 
       <button onClick={() => onIndustryChange('All')} className={navItemClass(activeIndustry === 'All')}>
         <span className="material-symbols-outlined" style={{ fontSize: 16 }}>work</span>
         <span className="flex-1">全部</span>
-        <span className="text-on-surface-variant opacity-60">{total}</span>
+        <span className={navCountClass}>{total}</span>
       </button>
 
       {sectionLabel('行业')}
@@ -19,7 +20,7 @@ export default function JobsSidebar({ counts, activeIndustry, onIndustryChange, 
           className={navItemClass(activeIndustry === ind)}>
           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{INDUSTRY_ICONS[ind]}</span>
           <span className="flex-1">{INDUSTRY_ZH[ind]}</span>
-          <span className="text-on-surface-variant opacity-60">{counts[ind] || 0}</span>
+          <span className={navCountClass}>{counts[ind] || 0}</span>
         </button>
       ))}
     </SidebarShell>

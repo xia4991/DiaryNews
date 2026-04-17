@@ -1,43 +1,45 @@
-import { INDUSTRY_ZH, INDUSTRY_ICONS, INDUSTRY_COLORS } from '../../constants/industries'
+import Card from '../ui/Card'
+import Badge from '../ui/Badge'
+import { INDUSTRY_ZH, INDUSTRY_ICONS } from '../../constants/industries'
+import { INDUSTRY_COLORS } from '../../constants/colors'
 
 export default function JobCard({ job, onClick }) {
   const color = INDUSTRY_COLORS[job.industry] || INDUSTRY_COLORS.Other
   return (
-    <div
-      onClick={onClick}
-      className="rounded-xl flex flex-col gap-2.5 p-4 cursor-pointer transition-all hover:brightness-110"
-      style={{ background: '#131b2e', outline: '1px solid rgba(70,69,84,0.15)' }}
-    >
+    <Card interactive padding="md" onClick={onClick} className="flex flex-col gap-2.5 group">
       <div className="flex items-center justify-between">
-        <span className="inline-flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full"
-          style={{ background: color.bg, color: color.text, border: `1px solid ${color.border}` }}>
-          <span className="material-symbols-outlined" style={{ fontSize: 12 }}>{INDUSTRY_ICONS[job.industry]}</span>
+        <Badge color={color} icon={INDUSTRY_ICONS[job.industry]}>
           {INDUSTRY_ZH[job.industry] || job.industry}
-        </span>
+        </Badge>
         {job.status === 'expired' && (
-          <span className="text-xs font-bold text-on-surface-variant opacity-60">已过期</span>
+          <Badge variant="pill" color="#8A90A3">已过期</Badge>
         )}
       </div>
 
-      <h3 className="text-sm font-bold leading-snug line-clamp-2">{job.title}</h3>
+      <h3
+        className="text-[15px] font-bold text-text leading-snug line-clamp-2 group-hover:text-accent transition-colors"
+        style={{ fontFamily: 'var(--font-headline)' }}
+      >
+        {job.title}
+      </h3>
 
       {job.salary_range && (
-        <div className="flex items-center gap-1 text-xs" style={{ color: '#44e2cd' }}>
+        <div className="flex items-center gap-1 text-xs text-success">
           <span className="material-symbols-outlined" style={{ fontSize: 14 }}>payments</span>
-          <span className="font-bold">{job.salary_range}</span>
+          <span className="font-semibold">{job.salary_range}</span>
         </div>
       )}
 
       {job.location && (
-        <div className="flex items-center gap-1 text-xs text-on-surface-variant">
+        <div className="flex items-center gap-1 text-xs text-text-muted">
           <span className="material-symbols-outlined" style={{ fontSize: 14 }}>location_on</span>
           <span>{job.location}</span>
         </div>
       )}
 
-      <span className="text-xs text-on-surface-variant mt-auto opacity-60">
+      <span className="text-[11px] text-text-subtle mt-auto tabular-nums">
         {job.created_at?.slice(0, 10)}
       </span>
-    </div>
+    </Card>
   )
 }

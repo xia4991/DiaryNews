@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from './auth'
-import Header from './components/Header'
+import AppShell from './components/AppShell'
 import Sidebar from './components/Sidebar'
 import CnSidebar from './components/CnSidebar'
 import YoutubeSidebar from './components/youtube/YoutubeSidebar'
 import Toast from './components/Toast'
+import HomePage from './pages/HomePage'
 import NewsTab from './pages/NewsTab'
 import YoutubeTab from './pages/YoutubeTab'
 import IdeasTab from './pages/IdeasTab'
@@ -15,7 +16,7 @@ import { api } from './api'
 
 export default function App() {
   const { user, loading } = useAuth()
-  const [activeTab, setActiveTab] = useState('华人关注')
+  const [activeTab, setActiveTab] = useState('首页')
   const [fetching, setFetching] = useState(false)
   const [showLogin, setShowLogin] = useState(false)
 
@@ -28,6 +29,7 @@ export default function App() {
   const [videos, setVideos] = useState([])
   const [ytLastUpdated, setYtLastUpdated] = useState(null)
   const [ytFilter, setYtFilter] = useState({ kind: 'all', value: '' })
+  const [jobs, setJobs] = useState([])
   const [ideas, setIdeas] = useState([])
   const [jobsIndustry, setJobsIndustry] = useState('All')
   const [jobsCounts, setJobsCounts] = useState({})
@@ -41,6 +43,7 @@ export default function App() {
       setArticles(d.articles || [])
       setNewsLastUpdated(d.last_updated)
     })
+    api.listJobs({ limit: 12 }).then(d => setJobs(d.items || [])).catch(() => {})
   }, [])
 
   // Load YouTube + Ideas only when logged in
@@ -117,10 +120,19 @@ export default function App() {
     setVideos(prev => prev.map(v =>
       v.video_id === videoId
         ? (caption === undefined
-            ? (({ caption: _, ...rest }) => rest)(v)
+            ? (() => {
+                const next = { ...v }
+                delete next.caption
+                return next
+              })()
             : { ...v, caption })
         : v
     ))
+  }, [])
+
+  const loadJobs = useCallback(async () => {
+    const d = await api.listJobs({ limit: 12 })
+    setJobs(d.items || [])
   }, [])
 
   // Build category list with counts
@@ -175,11 +187,12 @@ export default function App() {
 
   // Available tabs based on auth (招聘 is public)
   const tabs = user
-    ? ['华人关注', '葡萄牙新闻', '招聘', 'YouTube', 'Ideas']
-    : ['华人关注', '葡萄牙新闻', '招聘']
+    ? ['首页', '华人关注', '葡萄牙新闻', '招聘', 'YouTube', 'Ideas']
+    : ['首页', '华人关注', '葡萄牙新闻', '招聘']
 
   const mobileTabs = user
     ? [
+        { label: '首页',    icon: 'home',          tab: '首页' },
         { label: '华人',    icon: 'diversity_3',   tab: '华人关注' },
         { label: '新闻',    icon: 'newspaper',     tab: '葡萄牙新闻' },
         { label: '招聘',    icon: 'work',          tab: '招聘' },
@@ -187,6 +200,7 @@ export default function App() {
         { label: 'Ideas',   icon: 'lightbulb',     tab: 'Ideas' },
       ]
     : [
+        { label: '首页',    icon: 'home',          tab: '首页' },
         { label: '华人',    icon: 'diversity_3',   tab: '华人关注' },
         { label: '新闻',    icon: 'newspaper',     tab: '葡萄牙新闻' },
         { label: '招聘',    icon: 'work',          tab: '招聘' },
@@ -194,72 +208,107 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#0b1326' }}>
-        <span className="material-symbols-outlined text-primary animate-spin" style={{ fontSize: 32 }}>hourglass_empty</span>
+      <div className="min-h-screen flex items-center justify-center bg-bg text-accent">
+        <span className="material-symbols-outlined animate-spin" style={{ fontSize: 32 }}>progress_activity</span>
       </div>
     )
   }
 
+  const handleTabChange = (tab) => {
+    setActiveTab(tab)
+    setActiveCategory('All')
+    setActiveCnTag('All')
+    setYtFilter({ kind: 'all', value: '' })
+    setJobsIndustry('All')
+  }
+
+  let sidebar = null
+  if (activeTab === '葡萄牙新闻') {
+    sidebar = (
+      <Sidebar
+        categories={categories}
+        activeCategory={activeCategory}
+        onCategoryChange={setActiveCategory}
+        lastUpdated={newsLastUpdated}
+      />
+    )
+  } else if (activeTab === '华人关注') {
+    sidebar = (
+      <CnSidebar
+        cnTags={cnTags}
+        activeCnTag={activeCnTag}
+        onCnTagChange={tag => { setActiveCnTag(tag); setActiveCategory('All') }}
+        categories={cnCategories}
+        activeCategory={activeCategory}
+        onCategoryChange={setActiveCategory}
+        lastUpdated={newsLastUpdated}
+      />
+    )
+  } else if (activeTab === '招聘') {
+    sidebar = (
+      <JobsSidebar
+        counts={jobsCounts}
+        activeIndustry={jobsIndustry}
+        onIndustryChange={setJobsIndustry}
+      />
+    )
+  } else if (activeTab === 'YouTube') {
+    sidebar = (
+      <YoutubeSidebar
+        channels={channels}
+        videos={videos}
+        activeFilter={ytFilter}
+        onFilterChange={setYtFilter}
+        lastUpdated={ytLastUpdated}
+      />
+    )
+  }
+
   return (
-    <div className="min-h-screen" style={{ background: '#0b1326', color: '#dae2fd' }}>
+    <>
       <Toast message={toast} onDismiss={() => setToast(null)} />
       {showLogin && <LoginPage onClose={() => setShowLogin(false)} />}
-      <Header
+      <AppShell
         activeTab={activeTab}
         tabs={tabs}
-        onTabChange={tab => { setActiveTab(tab); setActiveCategory('All'); setActiveCnTag('All'); setYtFilter({ kind: 'all', value: '' }); setJobsIndustry('All') }}
+        mobileTabs={mobileTabs}
+        onTabChange={handleTabChange}
         onFetchNews={handleFetchNews}
         onFetchVideos={handleFetchVideos}
         fetching={fetching}
         user={user}
         onLoginClick={() => setShowLogin(true)}
-      />
-
-      {activeTab === '葡萄牙新闻' && (
-        <Sidebar
-          categories={categories}
-          activeCategory={activeCategory}
-          onCategoryChange={setActiveCategory}
-          lastUpdated={newsLastUpdated}
-        />
-      )}
-
-      {activeTab === '华人关注' && (
-        <CnSidebar
-          cnTags={cnTags}
-          activeCnTag={activeCnTag}
-          onCnTagChange={tag => { setActiveCnTag(tag); setActiveCategory('All') }}
-          categories={cnCategories}
-          activeCategory={activeCategory}
-          onCategoryChange={setActiveCategory}
-          lastUpdated={newsLastUpdated}
-        />
-      )}
-
-      {activeTab === '招聘' && (
-        <JobsSidebar
-          counts={jobsCounts}
-          activeIndustry={jobsIndustry}
-          onIndustryChange={setJobsIndustry}
-        />
-      )}
-
-      {activeTab === 'YouTube' && (
-        <YoutubeSidebar
-          channels={channels}
-          videos={videos}
-          activeFilter={ytFilter}
-          onFilterChange={setYtFilter}
-          lastUpdated={ytLastUpdated}
-        />
-      )}
-
-      <main className={`pt-14 px-5 lg:px-8 pb-12 ${activeTab === 'Ideas' ? '' : 'lg:ml-52'}`}>
+        sidebar={sidebar}
+        fullWidth={activeTab === 'Ideas' || activeTab === '首页'}
+      >
+        {activeTab === '首页' && (
+          <HomePage
+            user={user}
+            articles={articles}
+            cnArticles={cnArticles}
+            videos={videos}
+            jobs={jobs}
+            ideas={ideas}
+            newsLastUpdated={newsLastUpdated}
+            ytLastUpdated={ytLastUpdated}
+            onTabChange={handleTabChange}
+            onLoginClick={() => setShowLogin(true)}
+          />
+        )}
         {activeTab === '葡萄牙新闻' && (
-          <NewsTab articles={filteredArticles} />
+          <NewsTab
+            articles={filteredArticles}
+            layout="portugal"
+          />
         )}
         {activeTab === '华人关注' && (
-          <NewsTab articles={filteredCnArticles} tabTitle="华人关注" tabSubtitle="与在葡华人相关的新闻精选。" emptyHint="获取葡萄牙新闻" />
+          <NewsTab
+            articles={filteredCnArticles}
+            tabTitle="华人关注"
+            tabSubtitle="与在葡华人相关的新闻精选。"
+            emptyHint="获取葡萄牙新闻"
+            layout="china"
+          />
         )}
         {activeTab === 'YouTube' && (
           <YoutubeTab
@@ -276,6 +325,7 @@ export default function App() {
             activeIndustry={jobsIndustry}
             onCountsChange={setJobsCounts}
             onLoginRequired={() => setShowLogin(true)}
+            onJobsChanged={loadJobs}
           />
         )}
         {activeTab === 'Ideas' && (
@@ -286,24 +336,7 @@ export default function App() {
             onDelete={handleDeleteIdea}
           />
         )}
-      </main>
-
-      {/* Mobile bottom nav */}
-      <div className="md:hidden fixed bottom-0 w-full glass-panel h-12 flex justify-around items-center z-50"
-        style={{ borderTop: '1px solid rgba(70,69,84,0.3)' }}>
-        {mobileTabs.map(({ label, icon, tab }) => (
-          <button key={tab} onClick={() => setActiveTab(tab)}
-            className={`flex flex-col items-center gap-1 transition-colors ${
-              activeTab === tab ? 'text-secondary' : 'text-on-surface-variant'
-            }`}>
-            <span className="material-symbols-outlined"
-              style={{ fontVariationSettings: activeTab === tab ? "'FILL' 1" : "'FILL' 0" }}>
-              {icon}
-            </span>
-            <span className="text-xs font-medium">{label}</span>
-          </button>
-        ))}
-      </div>
-    </div>
+      </AppShell>
+    </>
   )
 }

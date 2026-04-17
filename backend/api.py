@@ -38,7 +38,7 @@ async def _job_expiry_loop():
         await asyncio.sleep(JOB_EXPIRY_SWEEP_INTERVAL_SECONDS)
 
 
-app = FastAPI(title="DiaryNews API", version="2.0.0")
+app = FastAPI(title="葡萄牙华人信息中心 API", version="2.0.0")
 
 
 @app.on_event("startup")

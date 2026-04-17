@@ -1,4 +1,5 @@
-import SidebarShell, { navItemClass, sectionLabel } from './SidebarShell'
+import SidebarShell from './SidebarShell'
+import { navItemClass, navCountClass, sectionLabel } from './sidebarShellStyles.jsx'
 import { CATEGORY_ZH, CATEGORY_ICONS } from '../constants/categories'
 
 const TAG_ICONS = {
@@ -24,7 +25,7 @@ export default function CnSidebar({
       <button onClick={() => { onCnTagChange('All'); onCategoryChange('All') }}
         className={navItemClass(activeCnTag === 'All' && activeCategory === 'All')}>
         <span className="material-symbols-outlined" style={{ fontSize: 16 }}>trending_up</span>
-        <span>全部</span>
+        <span className="flex-1">全部</span>
       </button>
 
       {cnTags.length > 0 && sectionLabel('华人话题')}
@@ -34,7 +35,7 @@ export default function CnSidebar({
           className={navItemClass(activeCnTag === tag.name)}>
           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{TAG_ICONS[tag.name] || 'label'}</span>
           <span className="flex-1">{tag.name}</span>
-          <span className="text-on-surface-variant opacity-60">{tag.count}</span>
+          <span className={navCountClass}>{tag.count}</span>
         </button>
       ))}
 
@@ -45,7 +46,7 @@ export default function CnSidebar({
           className={navItemClass(activeCategory === cat.name)}>
           <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{CATEGORY_ICONS[cat.name] || 'label'}</span>
           <span className="flex-1">{CATEGORY_ZH[cat.name] || cat.name}</span>
-          <span className="text-on-surface-variant opacity-60">{cat.count}</span>
+          <span className={navCountClass}>{cat.count}</span>
         </button>
       ))}
     </SidebarShell>

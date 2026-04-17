@@ -2,7 +2,7 @@
 function renderInline(text) {
   const parts = text.split(/\*\*(.+?)\*\*/)
   return parts.map((p, i) =>
-    i % 2 === 1 ? <strong key={i} className="text-on-surface font-semibold">{p}</strong> : p
+    i % 2 === 1 ? <strong key={i} className="text-text font-semibold">{p}</strong> : p
   )
 }
 
@@ -19,7 +19,7 @@ export default function SummaryText({ text }) {
       <ul key={`ul-${elements.length}`} className="flex flex-col gap-1 pl-1">
         {bullets.map((b, i) => (
           <li key={i} className="flex gap-1.5">
-            <span className="text-secondary mt-px shrink-0" style={{ fontSize: 10 }}>▸</span>
+            <span className="text-accent mt-px shrink-0" style={{ fontSize: 10 }}>▸</span>
             <span>{renderInline(b)}</span>
           </li>
         ))}
@@ -37,7 +37,7 @@ export default function SummaryText({ text }) {
     if (header) {
       flushBullets()
       elements.push(
-        <p key={`h-${elements.length}`} className="text-secondary font-bold uppercase tracking-widest" style={{ fontSize: 10 }}>
+        <p key={`h-${elements.length}`} className="text-accent font-bold uppercase tracking-widest" style={{ fontSize: 10 }}>
           {header[1]}
         </p>
       )
@@ -67,7 +67,7 @@ export default function SummaryText({ text }) {
   flushBullets()
 
   return (
-    <div className="flex flex-col gap-1.5 text-xs text-on-surface-variant leading-relaxed">
+    <div className="flex flex-col gap-1.5 text-[13px] text-text-muted leading-relaxed">
       {elements}
     </div>
   )
