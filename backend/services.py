@@ -57,6 +57,24 @@ def fetch_and_save_news() -> dict:
     }
 
 
+# ── Listings moderation ──────────────────────────────────────────────────────
+
+ADMIN_STATUSES = ("active", "hidden", "removed")
+
+
+def moderate_listing(listing_id: int, admin_id: int, status: str) -> dict:
+    """Admin status transition that also resolves any open reports for the listing."""
+    if status not in ADMIN_STATUSES:
+        raise ValueError(
+            f"Invalid admin status: {status!r}. Must be one of {ADMIN_STATUSES}"
+        )
+    listing = storage.set_listing_status(listing_id, status)
+    resolved = storage.resolve_reports_for_listing(
+        listing_id, f"status={status} by admin_id={admin_id}"
+    )
+    return {**listing, "reports_resolved": resolved}
+
+
 # ── YouTube — channels ───────────────────────────────────────────────────────
 
 class DuplicateChannelError(Exception):

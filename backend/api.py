@@ -158,6 +158,45 @@ def clear_caption(video_id: str, _admin: dict = Depends(require_admin)):
     return {"ok": True}
 
 
+# ── Listings moderation ──────────────────────────────────────────────────────
+
+class ReportRequest(BaseModel):
+    reason: str
+
+
+class AdminStatusRequest(BaseModel):
+    status: str
+
+
+@app.post("/api/listings/{listing_id}/report", status_code=201)
+def report_listing(
+    listing_id: int,
+    req: ReportRequest,
+    user: dict = Depends(get_current_user),
+):
+    reason = (req.reason or "").strip()
+    if not reason:
+        raise HTTPException(status_code=400, detail="reason is required")
+    try:
+        return storage.create_report(listing_id, int(user["sub"]), reason)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Listing {listing_id} not found")
+
+
+@app.patch("/api/admin/listings/{listing_id}/status")
+def admin_set_listing_status(
+    listing_id: int,
+    req: AdminStatusRequest,
+    admin: dict = Depends(require_admin),
+):
+    try:
+        return services.moderate_listing(listing_id, int(admin["sub"]), req.status)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Listing {listing_id} not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
 # ── Ideas (login required) ──────────────────────────────────────────────────
 
 class IdeaRequest(BaseModel):

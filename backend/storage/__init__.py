@@ -35,4 +35,5 @@ from backend.storage.listings import (  # noqa: F401
     create_report,
     list_unresolved_reports,
     resolve_report,
+    resolve_reports_for_listing,
 )

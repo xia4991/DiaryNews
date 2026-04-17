@@ -347,6 +347,18 @@ def list_unresolved_reports(limit: int = 50, offset: int = 0) -> dict:
     return {"items": [dict(r) for r in rows], "total": total}
 
 
+def resolve_reports_for_listing(listing_id: int, resolution: str) -> int:
+    """Mark all unresolved reports for a listing as resolved. Returns count."""
+    _ensure_db()
+    with get_db() as conn:
+        cur = conn.execute(
+            "UPDATE listing_reports SET resolved_at = ?, resolution = ? "
+            "WHERE listing_id = ? AND resolved_at IS NULL",
+            (_now(), resolution, listing_id),
+        )
+        return cur.rowcount
+
+
 def resolve_report(report_id: int, resolution: str) -> dict:
     _ensure_db()
     with get_db() as conn:
