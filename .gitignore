@@ -1,6 +1,8 @@
 .env
 .venv/
-# data/
+data/diarynews.db
+data/diarynews.db-*
+data/uploads/
 __pycache__/
 *.pyc
 *.pyo

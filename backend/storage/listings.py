@@ -3,6 +3,7 @@ from typing import Callable, Optional
 
 from backend.database import get_db
 from backend.storage.base import _ensure_db
+from backend.storage_media import get_media_storage
 
 
 _BASE_FIELDS = {
@@ -28,7 +29,14 @@ def _fetch_images(conn, listing_id: int) -> list:
         "WHERE listing_id = ? ORDER BY position ASC",
         (listing_id,),
     ).fetchall()
-    return [dict(r) for r in rows]
+    media = get_media_storage()
+    result = []
+    for r in rows:
+        d = dict(r)
+        d["url"] = media.url(d["storage_key"])
+        d["thumb_url"] = media.url(d["thumb_key"])
+        result.append(d)
+    return result
 
 
 def _fetch_extension(conn, kind: str, listing_id: int) -> dict:

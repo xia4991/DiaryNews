@@ -103,11 +103,14 @@ export default function RealEstateTab({ activeDealType, activeRooms, onCountsCha
           <span className="material-symbols-outlined animate-spin text-accent" style={{ fontSize: 28 }}>progress_activity</span>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-3 text-text-muted">
+        <div className="flex flex-col items-center justify-center py-20 gap-4 text-text-muted">
           <span className="material-symbols-outlined text-text-subtle" style={{ fontSize: 40 }}>home_work</span>
           <p className="text-sm">
             {listings.length === 0 ? '还没有房产信息，来发布第一条吧！' : '该筛选条件下暂无房产'}
           </p>
+          <Button variant="primary" icon="add" onClick={handleCreateClick}>
+            发布房产
+          </Button>
         </div>
       ) : (
         <div className="grid gap-6">

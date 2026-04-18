@@ -11,7 +11,7 @@ export default function SecondHandFormModal({ listing, onSave, onClose }) {
   const handleSave = async (payload) => {
     await onSave({
       ...payload,
-      price_cents: parseInt(payload.price_cents, 10) || 0,
+      price_cents: Math.round((parseFloat(payload.price) || 0) * 100),
       image_keys: isEdit ? undefined : images,
     })
   }
@@ -23,7 +23,7 @@ export default function SecondHandFormModal({ listing, onSave, onClose }) {
         title:            listing?.title            ?? '',
         category:         listing?.category         ?? 'Other',
         condition:        listing?.condition         ?? 'good',
-        price_cents:      listing?.price_cents      ?? '',
+        price:            listing?.price_cents ? (listing.price_cents / 100) : '',
         location:         listing?.location         ?? '',
         description:      listing?.description      ?? '',
         contact_phone:    listing?.contact_phone    ?? '',
@@ -48,14 +48,15 @@ export default function SecondHandFormModal({ listing, onSave, onClose }) {
             </Field>
           </div>
 
-          <Field label="价格 (欧分)" required>
+          <Field label="价格 (€)" required>
             <input
               id="sh-price"
               type="number"
               min="0"
-              value={form.price_cents}
-              onChange={set('price_cents')}
-              placeholder="例如 5000 = €50"
+              step="0.01"
+              value={form.price}
+              onChange={set('price')}
+              placeholder="例如 50"
             />
           </Field>
 

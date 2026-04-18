@@ -21,6 +21,7 @@ export default defineConfig({
     ...(httpsConfig ? { https: httpsConfig } : {}),
     proxy: {
       '/api': 'http://localhost:8000',
+      '/uploads': 'http://localhost:8000',
     },
   },
 })

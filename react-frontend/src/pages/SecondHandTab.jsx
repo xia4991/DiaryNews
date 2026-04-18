@@ -103,11 +103,14 @@ export default function SecondHandTab({ activeCategory, activeCondition, onCount
           <span className="material-symbols-outlined animate-spin text-accent" style={{ fontSize: 28 }}>progress_activity</span>
         </div>
       ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-3 text-text-muted">
+        <div className="flex flex-col items-center justify-center py-20 gap-4 text-text-muted">
           <span className="material-symbols-outlined text-text-subtle" style={{ fontSize: 40 }}>shopping_bag</span>
           <p className="text-sm">
             {listings.length === 0 ? '还没有二手信息，来发布第一条吧！' : '该筛选条件下暂无商品'}
           </p>
+          <Button variant="primary" icon="add" onClick={handleCreateClick}>
+            发布二手
+          </Button>
         </div>
       ) : (
         <div className="grid gap-6">

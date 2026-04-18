@@ -11,7 +11,7 @@ export default function RealEstateFormModal({ listing, onSave, onClose }) {
   const handleSave = async (payload) => {
     await onSave({
       ...payload,
-      price_cents: parseInt(payload.price_cents, 10) || 0,
+      price_cents: Math.round((parseFloat(payload.price) || 0) * 100),
       rooms: payload.rooms ? parseInt(payload.rooms, 10) : null,
       bathrooms: payload.bathrooms ? parseInt(payload.bathrooms, 10) : null,
       area_m2: payload.area_m2 ? parseInt(payload.area_m2, 10) : null,
@@ -26,7 +26,7 @@ export default function RealEstateFormModal({ listing, onSave, onClose }) {
       initial={{
         title:            listing?.title            ?? '',
         deal_type:        listing?.deal_type        ?? 'rent',
-        price_cents:      listing?.price_cents      ?? '',
+        price:            listing?.price_cents ? (listing.price_cents / 100) : '',
         rooms:            listing?.rooms            ?? '',
         bathrooms:        listing?.bathrooms        ?? '',
         area_m2:          listing?.area_m2          ?? '',
@@ -48,14 +48,15 @@ export default function RealEstateFormModal({ listing, onSave, onClose }) {
                 {DEAL_TYPES.map(t => <option key={t} value={t}>{DEAL_TYPE_ZH[t]}</option>)}
               </select>
             </Field>
-            <Field label="价格 (欧分)" required>
+            <Field label="价格 (€)" required>
               <input
                 id="re-price"
                 type="number"
                 min="0"
-                value={form.price_cents}
-                onChange={set('price_cents')}
-                placeholder="例如 120000 = €1,200"
+                step="0.01"
+                value={form.price}
+                onChange={set('price')}
+                placeholder="例如 1200"
               />
             </Field>
           </div>
