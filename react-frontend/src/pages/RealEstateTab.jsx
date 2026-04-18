@@ -84,8 +84,10 @@ export default function RealEstateTab({ activeDealType, activeRooms, onCountsCha
         <RealEstateDetailModal
           listing={selected}
           canManage={canManage(selected)}
+          isAdmin={user?.is_admin}
           onEdit={() => { setFormMode({ listing: selected }); setSelected(null) }}
           onDelete={handleDelete}
+          onStatusChange={(updated) => { setListings(prev => prev.map(l => l.id === updated.id ? updated : l)); setSelected(updated) }}
           onClose={() => setSelected(null)}
         />
       )}

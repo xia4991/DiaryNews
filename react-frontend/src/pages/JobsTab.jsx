@@ -88,8 +88,10 @@ export default function JobsTab({ activeIndustry, onCountsChange, onLoginRequire
         <JobDetailModal
           job={selected}
           canManage={canManage(selected)}
+          isAdmin={user?.is_admin}
           onEdit={() => { setFormMode({ job: selected }); setSelected(null) }}
           onDelete={handleDelete}
+          onStatusChange={(updated) => { setJobs(prev => prev.map(j => j.id === updated.id ? updated : j)); setSelected(updated) }}
           onClose={() => setSelected(null)}
         />
       )}

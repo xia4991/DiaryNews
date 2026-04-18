@@ -68,6 +68,12 @@ export const api = {
   updateSecondHand: (id, data) => http.put(`/secondhand/${id}`, data).then(r => r.data),
   deleteSecondHand: (id) => http.delete(`/secondhand/${id}`).then(r => r.data),
 
+  // Admin / Moderation
+  listReports: (params) => http.get('/admin/reports', { params }).then(r => r.data),
+  listRecentListings: (params) => http.get('/admin/listings/recent', { params }).then(r => r.data),
+  setListingStatus: (id, status) => http.patch(`/admin/listings/${id}/status`, { status }).then(r => r.data),
+  reportListing: (id, reason) => http.post(`/listings/${id}/report`, { reason }).then(r => r.data),
+
   // Ideas
   getIdeas: () => http.get('/ideas').then(r => r.data),
   createIdea: (data) => http.post('/ideas', data).then(r => r.data),
