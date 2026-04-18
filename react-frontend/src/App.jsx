@@ -12,6 +12,8 @@ import LoginPage from './pages/LoginPage'
 import JobsSidebar from './components/listings/JobsSidebar'
 import RealEstateTab from './pages/RealEstateTab'
 import RealEstateSidebar from './components/listings/RealEstateSidebar'
+import SecondHandTab from './pages/SecondHandTab'
+import SecondHandSidebar from './components/listings/SecondHandSidebar'
 import { api } from './api'
 
 export default function App() {
@@ -32,6 +34,9 @@ export default function App() {
   const [reDealType, setReDealType] = useState('All')
   const [reRooms, setReRooms] = useState('All')
   const [reCounts, setReCounts] = useState({})
+  const [shCategory, setShCategory] = useState('All')
+  const [shCondition, setShCondition] = useState('All')
+  const [shCounts, setShCounts] = useState({})
   const [toast, setToast] = useState(null)
   const showToast = useCallback(msg => setToast(msg), [])
 
@@ -132,8 +137,8 @@ export default function App() {
 
   // Available tabs based on auth (招聘 is public)
   const tabs = user
-    ? ['首页', '华人关注', '葡萄牙新闻', '招聘', '房产', 'Ideas']
-    : ['首页', '华人关注', '葡萄牙新闻', '招聘', '房产']
+    ? ['首页', '华人关注', '葡萄牙新闻', '招聘', '房产', '二手', 'Ideas']
+    : ['首页', '华人关注', '葡萄牙新闻', '招聘', '房产', '二手']
 
   const mobileTabs = user
     ? [
@@ -142,6 +147,7 @@ export default function App() {
         { label: '新闻',    icon: 'newspaper',     tab: '葡萄牙新闻' },
         { label: '招聘',    icon: 'work',          tab: '招聘' },
         { label: '房产',    icon: 'home_work',     tab: '房产' },
+        { label: '二手',    icon: 'shopping_bag',  tab: '二手' },
         { label: 'Ideas',   icon: 'lightbulb',     tab: 'Ideas' },
       ]
     : [
@@ -150,6 +156,7 @@ export default function App() {
         { label: '新闻',    icon: 'newspaper',     tab: '葡萄牙新闻' },
         { label: '招聘',    icon: 'work',          tab: '招聘' },
         { label: '房产',    icon: 'home_work',     tab: '房产' },
+        { label: '二手',    icon: 'shopping_bag',  tab: '二手' },
       ]
 
   if (loading) {
@@ -167,6 +174,8 @@ export default function App() {
     setJobsIndustry('All')
     setReDealType('All')
     setReRooms('All')
+    setShCategory('All')
+    setShCondition('All')
   }
 
   let sidebar = null
@@ -207,6 +216,16 @@ export default function App() {
         onDealTypeChange={setReDealType}
         activeRooms={reRooms}
         onRoomsChange={setReRooms}
+      />
+    )
+  } else if (activeTab === '二手') {
+    sidebar = (
+      <SecondHandSidebar
+        counts={shCounts}
+        activeCategory={shCategory}
+        onCategoryChange={setShCategory}
+        activeCondition={shCondition}
+        onConditionChange={setShCondition}
       />
     )
   }
@@ -267,6 +286,14 @@ export default function App() {
             activeDealType={reDealType}
             activeRooms={reRooms}
             onCountsChange={setReCounts}
+            onLoginRequired={() => setShowLogin(true)}
+          />
+        )}
+        {activeTab === '二手' && (
+          <SecondHandTab
+            activeCategory={shCategory}
+            activeCondition={shCondition}
+            onCountsChange={setShCounts}
             onLoginRequired={() => setShowLogin(true)}
           />
         )}

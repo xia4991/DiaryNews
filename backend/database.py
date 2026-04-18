@@ -113,6 +113,16 @@ def init_db() -> None:
                 furnished    INTEGER DEFAULT 0
             );
 
+            CREATE TABLE IF NOT EXISTS listing_secondhand (
+                listing_id   INTEGER PRIMARY KEY REFERENCES listings(id) ON DELETE CASCADE,
+                category     TEXT    NOT NULL CHECK (category IN
+                               ('Electronics','Furniture','Clothing','Vehicle',
+                                'Baby','Sports','Books','Other')),
+                condition    TEXT    NOT NULL CHECK (condition IN
+                               ('new','like_new','good','fair')),
+                price_cents  INTEGER NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS listing_reports (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
                 listing_id   INTEGER NOT NULL REFERENCES listings(id) ON DELETE CASCADE,

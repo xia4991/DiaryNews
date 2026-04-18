@@ -61,6 +61,13 @@ export const api = {
   updateRealEstate: (id, data) => http.put(`/realestate/${id}`, data).then(r => r.data),
   deleteRealEstate: (id) => http.delete(`/realestate/${id}`).then(r => r.data),
 
+  // Second Hand
+  listSecondHand: (params) => http.get('/secondhand', { params }).then(r => r.data),
+  getSecondHand: (id) => http.get(`/secondhand/${id}`).then(r => r.data),
+  createSecondHand: (data) => http.post('/secondhand', data).then(r => r.data),
+  updateSecondHand: (id, data) => http.put(`/secondhand/${id}`, data).then(r => r.data),
+  deleteSecondHand: (id) => http.delete(`/secondhand/${id}`).then(r => r.data),
+
   // Ideas
   getIdeas: () => http.get('/ideas').then(r => r.data),
   createIdea: (data) => http.post('/ideas', data).then(r => r.data),

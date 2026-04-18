@@ -12,7 +12,7 @@ _BASE_FIELDS = {
 _VALID_STATUSES = ("active", "hidden", "removed", "expired")
 
 # Per-kind extension tables; keys are the `listings.kind` values.
-_EXTENSION_TABLES = {"job": "listing_jobs", "realestate": "listing_realestate"}
+_EXTENSION_TABLES = {"job": "listing_jobs", "realestate": "listing_realestate", "secondhand": "listing_secondhand"}
 
 JOB_INDUSTRIES = ("Restaurant", "ShoppingStore", "Driving", "Other")
 
@@ -523,6 +523,163 @@ def update_realestate(
             conn.execute(
                 f"UPDATE listing_realestate SET {set_clause} WHERE listing_id = ?",
                 list(re_patch.values()) + [listing_id],
+            )
+            if not base_patch:
+                conn.execute(
+                    "UPDATE listings SET updated_at = ? WHERE id = ?",
+                    (now, listing_id),
+                )
+
+        return _fetch_listing(conn, listing_id)
+
+
+# ── Second-Hand (per-kind wrapper) ──────────────────────────────────────────
+
+SH_CATEGORIES = ("Electronics", "Furniture", "Clothing", "Vehicle", "Baby", "Sports", "Books", "Other")
+SH_CONDITIONS = ("new", "like_new", "good", "fair")
+SH_DEFAULT_EXPIRY_DAYS = 60
+
+
+def _validate_sh_category(category: str) -> None:
+    if category not in SH_CATEGORIES:
+        raise ValueError(f"Invalid category: {category!r}. Must be one of {SH_CATEGORIES}")
+
+
+def _validate_sh_condition(condition: str) -> None:
+    if condition not in SH_CONDITIONS:
+        raise ValueError(f"Invalid condition: {condition!r}. Must be one of {SH_CONDITIONS}")
+
+
+def create_secondhand(
+    owner_id: int,
+    base_fields: dict,
+    category: str,
+    condition: str,
+    price_cents: int,
+    images: Optional[list] = None,
+) -> dict:
+    _validate_sh_category(category)
+    _validate_sh_condition(condition)
+
+    def _write_sh(conn, listing_id):
+        conn.execute(
+            "INSERT INTO listing_secondhand "
+            "(listing_id, category, condition, price_cents) "
+            "VALUES (?, ?, ?, ?)",
+            (listing_id, category, condition, price_cents),
+        )
+
+    return create_listing("secondhand", owner_id, base_fields, kind_writer=_write_sh, images=images)
+
+
+def list_secondhand(
+    filters: Optional[dict] = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    _ensure_db()
+    filters = filters or {}
+    clauses = ["l.kind = 'secondhand'"]
+    params: list = []
+
+    status = filters.get("status", "public")
+    if status == "public":
+        clauses.append("l.status IN ('active','expired')")
+    elif status == "all":
+        pass
+    else:
+        clauses.append("l.status = ?")
+        params.append(status)
+
+    if filters.get("owner_id") is not None:
+        clauses.append("l.owner_id = ?")
+        params.append(filters["owner_id"])
+
+    if filters.get("location"):
+        clauses.append("l.location LIKE ?")
+        params.append(f"%{filters['location']}%")
+
+    if filters.get("category"):
+        _validate_sh_category(filters["category"])
+        clauses.append("s.category = ?")
+        params.append(filters["category"])
+
+    if filters.get("condition"):
+        _validate_sh_condition(filters["condition"])
+        clauses.append("s.condition = ?")
+        params.append(filters["condition"])
+
+    if filters.get("min_price_cents") is not None:
+        clauses.append("s.price_cents >= ?")
+        params.append(filters["min_price_cents"])
+
+    if filters.get("max_price_cents") is not None:
+        clauses.append("s.price_cents <= ?")
+        params.append(filters["max_price_cents"])
+
+    where = " AND ".join(clauses)
+    with get_db() as conn:
+        total = conn.execute(
+            f"SELECT COUNT(*) FROM listings l "
+            f"JOIN listing_secondhand s ON s.listing_id = l.id WHERE {where}",
+            params,
+        ).fetchone()[0]
+        rows = conn.execute(
+            f"SELECT l.*, s.category, s.condition, s.price_cents FROM listings l "
+            f"JOIN listing_secondhand s ON s.listing_id = l.id WHERE {where} "
+            "ORDER BY l.created_at DESC LIMIT ? OFFSET ?",
+            params + [limit, offset],
+        ).fetchall()
+        items = []
+        for row in rows:
+            d = dict(row)
+            d["images"] = _fetch_images(conn, d["id"])
+            items.append(d)
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
+
+
+def update_secondhand(
+    listing_id: int,
+    owner_id: int,
+    patch: dict,
+    is_admin: bool = False,
+) -> dict:
+    _ensure_db()
+    sh_fields = ("category", "condition", "price_cents")
+    sh_patch = {k: patch[k] for k in sh_fields if k in patch}
+    if "category" in sh_patch:
+        _validate_sh_category(sh_patch["category"])
+    if "condition" in sh_patch:
+        _validate_sh_condition(sh_patch["condition"])
+    base_patch = {k: v for k, v in patch.items() if k in _BASE_FIELDS}
+
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT owner_id, kind FROM listings WHERE id = ?", (listing_id,)
+        ).fetchone()
+        if not row:
+            raise KeyError(listing_id)
+        if row["kind"] != "secondhand":
+            raise ValueError(f"Listing {listing_id} is not a secondhand listing")
+        if row["owner_id"] != owner_id and not is_admin:
+            raise PermissionError(
+                f"User {owner_id} does not own listing {listing_id}"
+            )
+
+        now = _now()
+        if base_patch:
+            base_patch["updated_at"] = now
+            set_clause = ", ".join(f"{k} = ?" for k in base_patch)
+            conn.execute(
+                f"UPDATE listings SET {set_clause} WHERE id = ?",
+                list(base_patch.values()) + [listing_id],
+            )
+
+        if sh_patch:
+            set_clause = ", ".join(f"{k} = ?" for k in sh_patch)
+            conn.execute(
+                f"UPDATE listing_secondhand SET {set_clause} WHERE listing_id = ?",
+                list(sh_patch.values()) + [listing_id],
             )
             if not base_patch:
                 conn.execute(

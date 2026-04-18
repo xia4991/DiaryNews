@@ -425,6 +425,141 @@ def delete_realestate(listing_id: int, user: dict = Depends(get_current_user)):
     return {"ok": True}
 
 
+# ── Second-Hand ─────────────────────────────────────────────────────────────
+
+SHCategory = Literal["Electronics", "Furniture", "Clothing", "Vehicle", "Baby", "Sports", "Books", "Other"]
+SHCondition = Literal["new", "like_new", "good", "fair"]
+SH_DEFAULT_EXPIRY_DAYS = 60
+_PUBLIC_SH_STATUSES = {"active", "expired"}
+
+
+class SHCreateRequest(BaseModel):
+    title: str
+    category: SHCategory
+    condition: SHCondition
+    price_cents: int
+    description: Optional[str] = None
+    location: Optional[str] = None
+    contact_phone: Optional[str] = None
+    contact_whatsapp: Optional[str] = None
+    contact_email: Optional[str] = None
+    source_url: Optional[str] = None
+    expires_at: Optional[str] = None
+    image_keys: Optional[list] = None
+
+
+class SHUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    category: Optional[SHCategory] = None
+    condition: Optional[SHCondition] = None
+    price_cents: Optional[int] = None
+    description: Optional[str] = None
+    location: Optional[str] = None
+    contact_phone: Optional[str] = None
+    contact_whatsapp: Optional[str] = None
+    contact_email: Optional[str] = None
+    source_url: Optional[str] = None
+    expires_at: Optional[str] = None
+
+
+@app.get("/api/secondhand")
+def list_secondhand(
+    category: Optional[SHCategory] = None,
+    condition: Optional[SHCondition] = None,
+    location: Optional[str] = None,
+    min_price_cents: Optional[int] = None,
+    max_price_cents: Optional[int] = None,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
+    filters = {}
+    if category:
+        filters["category"] = category
+    if condition:
+        filters["condition"] = condition
+    if location:
+        filters["location"] = location
+    if min_price_cents is not None:
+        filters["min_price_cents"] = min_price_cents
+    if max_price_cents is not None:
+        filters["max_price_cents"] = max_price_cents
+    return storage.list_secondhand(filters, limit=limit, offset=offset)
+
+
+@app.get("/api/secondhand/{listing_id}")
+def get_secondhand(listing_id: int):
+    listing = storage.get_listing(listing_id)
+    if not listing or listing["kind"] != "secondhand":
+        raise HTTPException(status_code=404, detail=f"Listing {listing_id} not found")
+    if listing["status"] not in _PUBLIC_SH_STATUSES:
+        raise HTTPException(status_code=404, detail=f"Listing {listing_id} not found")
+    return listing
+
+
+@app.post("/api/secondhand", status_code=201)
+def create_secondhand(req: SHCreateRequest, user: dict = Depends(get_current_user)):
+    expires_at = req.expires_at or (
+        datetime.now(timezone.utc) + timedelta(days=SH_DEFAULT_EXPIRY_DAYS)
+    ).isoformat()
+    base_fields = {
+        "title": req.title,
+        "description": req.description,
+        "location": req.location,
+        "contact_phone": req.contact_phone,
+        "contact_whatsapp": req.contact_whatsapp,
+        "contact_email": req.contact_email,
+        "source_url": req.source_url,
+        "expires_at": expires_at,
+    }
+    return storage.create_secondhand(
+        owner_id=int(user["sub"]),
+        base_fields=base_fields,
+        category=req.category,
+        condition=req.condition,
+        price_cents=req.price_cents,
+        images=req.image_keys,
+    )
+
+
+@app.put("/api/secondhand/{listing_id}")
+def update_secondhand(
+    listing_id: int,
+    req: SHUpdateRequest,
+    user: dict = Depends(get_current_user),
+):
+    existing = storage.get_listing(listing_id)
+    if not existing or existing["kind"] != "secondhand":
+        raise HTTPException(status_code=404, detail=f"Listing {listing_id} not found")
+    patch = {k: v for k, v in req.model_dump(exclude_unset=True).items() if v is not None}
+    try:
+        return storage.update_secondhand(
+            listing_id,
+            owner_id=int(user["sub"]),
+            patch=patch,
+            is_admin=bool(user.get("is_admin")),
+        )
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not the owner of this listing")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.delete("/api/secondhand/{listing_id}")
+def delete_secondhand(listing_id: int, user: dict = Depends(get_current_user)):
+    existing = storage.get_listing(listing_id)
+    if not existing or existing["kind"] != "secondhand":
+        raise HTTPException(status_code=404, detail=f"Listing {listing_id} not found")
+    try:
+        storage.delete_listing(
+            listing_id,
+            owner_id=int(user["sub"]),
+            is_admin=bool(user.get("is_admin")),
+        )
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not the owner of this listing")
+    return {"ok": True}
+
+
 # ── Listings moderation ──────────────────────────────────────────────────────
 
 class ReportRequest(BaseModel):
