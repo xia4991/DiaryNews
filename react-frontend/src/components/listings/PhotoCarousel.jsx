@@ -1,16 +1,7 @@
 import { useState } from 'react'
 
-export default function PhotoCarousel({ images = [] }) {
-  const [index, setIndex] = useState(0)
-  const [expanded, setExpanded] = useState(false)
-
-  if (!images.length) return null
-
-  const current = images[index]
-  const hasPrev = index > 0
-  const hasNext = index < images.length - 1
-
-  const ArrowButton = ({ direction, onClick }) => (
+function ArrowButton({ direction, onClick }) {
+  return (
     <button
       type="button"
       onClick={onClick}
@@ -22,6 +13,17 @@ export default function PhotoCarousel({ images = [] }) {
       </span>
     </button>
   )
+}
+
+export default function PhotoCarousel({ images = [] }) {
+  const [index, setIndex] = useState(0)
+  const [expanded, setExpanded] = useState(false)
+
+  if (!images.length) return null
+
+  const current = images[index]
+  const hasPrev = index > 0
+  const hasNext = index < images.length - 1
 
   return (
     <>

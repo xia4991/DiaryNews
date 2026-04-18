@@ -84,5 +84,20 @@ h1, h2, h3, h4, h5, h6 {
   line-height: 1;
 }
 
+.page-enter {
+  animation: page-enter 220ms ease both;
+}
+
+@keyframes page-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }

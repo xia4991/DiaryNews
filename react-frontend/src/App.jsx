@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, startTransition } from 'react'
 import { useAuth } from './auth'
 import AppShell from './components/AppShell'
 import Sidebar from './components/Sidebar'
@@ -6,6 +6,7 @@ import CnSidebar from './components/CnSidebar'
 import Toast from './components/Toast'
 import HomePage from './pages/HomePage'
 import NewsTab from './pages/NewsTab'
+import NewsTabSkeleton from './components/news/NewsTabSkeleton'
 import IdeasTab from './pages/IdeasTab'
 import JobsTab from './pages/JobsTab'
 import LoginPage from './pages/LoginPage'
@@ -38,7 +39,8 @@ export default function App() {
   const [shCondition, setShCondition] = useState('All')
   const [shCounts, setShCounts] = useState({})
   const [toast, setToast] = useState(null)
-  const showToast = useCallback(msg => setToast(msg), [])
+  const [newsTabLoading, setNewsTabLoading] = useState(null)
+  const newsTabTimerRef = useRef(null)
 
   // Load news (public)
   useEffect(() => {
@@ -95,45 +97,61 @@ export default function App() {
   }, [])
 
   // Build category list with counts
-  const categoryMap = {}
-  for (const a of articles) {
-    categoryMap[a.category] = (categoryMap[a.category] || 0) + 1
-  }
-  const categories = Object.entries(categoryMap)
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count)
+  const categories = useMemo(() => {
+    const categoryMap = {}
+    for (const a of articles) {
+      categoryMap[a.category] = (categoryMap[a.category] || 0) + 1
+    }
+    return Object.entries(categoryMap)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+  }, [articles])
 
-  const filteredArticles = activeCategory === 'All'
-    ? articles
-    : articles.filter(a => a.category === activeCategory)
+  const filteredArticles = useMemo(() => (
+    activeCategory === 'All'
+      ? articles
+      : articles.filter(a => a.category === activeCategory)
+  ), [articles, activeCategory])
 
   // Chinese-interest articles (have non-empty tags_zh)
-  const cnArticles = articles.filter(a => a.tags_zh && a.tags_zh.trim() !== '')
-  const cnTagMap = {}
-  for (const a of cnArticles) {
-    for (const tag of a.tags_zh.split(',').map(t => t.trim()).filter(Boolean)) {
-      cnTagMap[tag] = (cnTagMap[tag] || 0) + 1
+  const cnArticles = useMemo(
+    () => articles.filter(a => a.tags_zh && a.tags_zh.trim() !== ''),
+    [articles]
+  )
+
+  const cnTags = useMemo(() => {
+    const cnTagMap = {}
+    for (const a of cnArticles) {
+      for (const tag of a.tags_zh.split(',').map(t => t.trim()).filter(Boolean)) {
+        cnTagMap[tag] = (cnTagMap[tag] || 0) + 1
+      }
     }
-  }
-  const cnTags = Object.entries(cnTagMap)
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count)
+    return Object.entries(cnTagMap)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+  }, [cnArticles])
 
-  const cnTagFiltered = activeCnTag === 'All'
-    ? cnArticles
-    : cnArticles.filter(a => a.tags_zh.split(',').map(t => t.trim()).includes(activeCnTag))
+  const cnTagFiltered = useMemo(() => (
+    activeCnTag === 'All'
+      ? cnArticles
+      : cnArticles.filter(a => a.tags_zh.split(',').map(t => t.trim()).includes(activeCnTag))
+  ), [cnArticles, activeCnTag])
 
-  const cnCategoryMap = {}
-  for (const a of cnTagFiltered) {
-    cnCategoryMap[a.category] = (cnCategoryMap[a.category] || 0) + 1
-  }
-  const cnCategories = Object.entries(cnCategoryMap)
-    .map(([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count)
+  const cnCategories = useMemo(() => {
+    const cnCategoryMap = {}
+    for (const a of cnTagFiltered) {
+      cnCategoryMap[a.category] = (cnCategoryMap[a.category] || 0) + 1
+    }
+    return Object.entries(cnCategoryMap)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+  }, [cnTagFiltered])
 
-  const filteredCnArticles = activeCategory === 'All'
-    ? cnTagFiltered
-    : cnTagFiltered.filter(a => a.category === activeCategory)
+  const filteredCnArticles = useMemo(() => (
+    activeCategory === 'All'
+      ? cnTagFiltered
+      : cnTagFiltered.filter(a => a.category === activeCategory)
+  ), [cnTagFiltered, activeCategory])
 
   // Available tabs based on auth (招聘 is public)
   const tabs = user
@@ -167,15 +185,34 @@ export default function App() {
     )
   }
 
+  const isNewsTab = (tab) => tab === '华人关注' || tab === '葡萄牙新闻'
+
   const handleTabChange = (tab) => {
-    setActiveTab(tab)
-    setActiveCategory('All')
-    setActiveCnTag('All')
-    setJobsIndustry('All')
-    setReDealType('All')
-    setReRooms('All')
-    setShCategory('All')
-    setShCondition('All')
+    if (newsTabTimerRef.current) {
+      clearTimeout(newsTabTimerRef.current)
+      newsTabTimerRef.current = null
+    }
+
+    if (isNewsTab(tab) && tab !== activeTab) {
+      setNewsTabLoading(tab)
+      newsTabTimerRef.current = setTimeout(() => {
+        setNewsTabLoading(null)
+        newsTabTimerRef.current = null
+      }, 140)
+    } else {
+      setNewsTabLoading(null)
+    }
+
+    startTransition(() => {
+      setActiveTab(tab)
+      setActiveCategory('All')
+      setActiveCnTag('All')
+      setJobsIndustry('All')
+      setReDealType('All')
+      setReRooms('All')
+      setShCategory('All')
+      setShCondition('All')
+    })
   }
 
   let sidebar = null
@@ -230,6 +267,8 @@ export default function App() {
     )
   }
 
+  const showNewsSkeleton = newsTabLoading === activeTab && isNewsTab(activeTab)
+
   return (
     <>
       <Toast message={toast} onDismiss={() => setToast(null)} />
@@ -259,19 +298,29 @@ export default function App() {
           />
         )}
         {activeTab === '葡萄牙新闻' && (
-          <NewsTab
-            articles={filteredArticles}
-            layout="portugal"
-          />
+          showNewsSkeleton ? (
+            <NewsTabSkeleton variant="portugal" />
+          ) : (
+            <NewsTab
+              key={`portugal-${activeCategory}`}
+              articles={filteredArticles}
+              layout="portugal"
+            />
+          )
         )}
         {activeTab === '华人关注' && (
-          <NewsTab
-            articles={filteredCnArticles}
-            tabTitle="华人关注"
-            tabSubtitle="与在葡华人相关的新闻精选。"
-            emptyHint="获取葡萄牙新闻"
-            layout="china"
-          />
+          showNewsSkeleton ? (
+            <NewsTabSkeleton variant="china" />
+          ) : (
+            <NewsTab
+              key={`china-${activeCnTag}-${activeCategory}`}
+              articles={filteredCnArticles}
+              tabTitle="华人关注"
+              tabSubtitle="与在葡华人相关的新闻精选。"
+              emptyHint="获取葡萄牙新闻"
+              layout="china"
+            />
+          )
         )}
         {activeTab === '招聘' && (
           <JobsTab

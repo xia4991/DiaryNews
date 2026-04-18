@@ -1,12 +1,16 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import ArticleCardFeatured from '../components/news/ArticleCardFeatured'
 import ArticleCard from '../components/news/ArticleCard'
 import ArticleModal from '../components/news/ArticleModal'
 import SectionHeader from '../components/ui/SectionHeader'
 import Card from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
+import Button from '../components/ui/Button'
 import { CATEGORY_ZH } from '../constants/categories'
 import { categoryColor } from '../constants/colors'
+
+const INITIAL_FEED_COUNT = 24
+const FEED_STEP = 24
 
 function buildTopTags(articles) {
   return Object.entries(
@@ -41,6 +45,9 @@ export default function NewsTab({
   layout = 'default',
 }) {
   const [selected, setSelected] = useState(null)
+  const [visibleCount, setVisibleCount] = useState(INITIAL_FEED_COUNT)
+  const topTags = useMemo(() => buildTopTags(articles), [articles])
+  const topCategories = useMemo(() => buildTopCategories(articles), [articles])
 
   if (!articles.length) {
     return (
@@ -56,8 +63,8 @@ export default function NewsTab({
   const [featured, ...rest] = articles
   const leadSide = rest.slice(0, 3)
   const feed = rest.slice(3)
-  const topTags = buildTopTags(articles)
-  const topCategories = buildTopCategories(articles)
+  const visibleFeed = feed.slice(0, visibleCount)
+  const hasMoreFeed = feed.length > visibleFeed.length
 
   if (layout === 'china') {
     return (
@@ -167,10 +174,18 @@ export default function NewsTab({
               </div>
 
               <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {feed.map(article => (
+                {visibleFeed.map(article => (
                   <ArticleCard key={article.link} article={article} onClick={setSelected} />
                 ))}
               </section>
+
+              {hasMoreFeed && (
+                <div className="mt-6 flex justify-center">
+                  <Button variant="ghost" onClick={() => setVisibleCount(count => count + FEED_STEP)}>
+                    加载更多
+                  </Button>
+                </div>
+              )}
             </div>
 
             <div className="grid gap-5">
@@ -337,10 +352,18 @@ export default function NewsTab({
               </div>
 
               <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {feed.map(article => (
+                {visibleFeed.map(article => (
                   <ArticleCard key={article.link} article={article} onClick={setSelected} />
                 ))}
               </section>
+
+              {hasMoreFeed && (
+                <div className="mt-6 flex justify-center">
+                  <Button variant="ghost" onClick={() => setVisibleCount(count => count + FEED_STEP)}>
+                    加载更多
+                  </Button>
+                </div>
+              )}
             </div>
 
             <div className="grid gap-5">
