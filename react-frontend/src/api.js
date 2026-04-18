@@ -47,6 +47,22 @@ export const api = {
     }).then(r => r.data)
   },
 
+  // Community
+  listCommunityEvents: (params) => http.get('/community/events', { params }).then(r => r.data),
+  getCommunityEvent: (id) => http.get(`/community/events/${id}`).then(r => r.data),
+  createCommunityEvent: (data) => http.post('/community/events', data).then(r => r.data),
+  updateCommunityEvent: (id, data) => http.put(`/community/events/${id}`, data).then(r => r.data),
+  deleteCommunityEvent: (id) => http.delete(`/community/events/${id}`).then(r => r.data),
+
+  listCommunityPosts: (params) => http.get('/community/posts', { params }).then(r => r.data),
+  getCommunityPost: (id) => http.get(`/community/posts/${id}`).then(r => r.data),
+  createCommunityPost: (data) => http.post('/community/posts', data).then(r => r.data),
+  updateCommunityPost: (id, data) => http.put(`/community/posts/${id}`, data).then(r => r.data),
+  deleteCommunityPost: (id) => http.delete(`/community/posts/${id}`).then(r => r.data),
+  listCommunityReplies: (postId) => http.get(`/community/posts/${postId}/replies`).then(r => r.data),
+  createCommunityReply: (postId, data) => http.post(`/community/posts/${postId}/replies`, data).then(r => r.data),
+  deleteCommunityReply: (id) => http.delete(`/community/replies/${id}`).then(r => r.data),
+
   // Jobs
   listJobs: (params) => http.get('/jobs', { params }).then(r => r.data),
   getJob: (id) => http.get(`/jobs/${id}`).then(r => r.data),

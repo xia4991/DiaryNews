@@ -259,6 +259,22 @@ Recommended page/component structure:
 - `PostFormModal.jsx`
 - `ReplyComposer.jsx`
 
+## Delivery Progress
+
+Completed so far:
+
+1. `T-COM-01` Schema + storage
+2. `T-COM-02` Community API endpoints
+3. `T-COM-03` Frontend shell, navigation, and community entry
+4. `T-COM-04` Events MVP: publish, detail, edit, delete
+5. `T-COM-05` Discussion MVP: publish, detail, replies, edit, delete
+6. `T-COM-06` Community filters: category and city filters for events and posts
+
+Deferred to a later moderation/polish phase:
+
+- report actions for events, posts, and replies
+- pinned or featured community content
+
 The visual direction should be warmer and more social than `葡萄牙新闻`, but cleaner than a noisy forum.
 
 ## Delivery Plan
@@ -303,9 +319,10 @@ Replies:
 - `POST /api/community/posts/{id}/replies`
 - `DELETE /api/community/replies/{id}`
 
-Reports:
+Note:
 
-- `POST /api/community/{kind}/{id}/report`
+- community reporting is intentionally deferred to `Task 6 — moderation and polish`
+- this keeps the first API milestone focused on browse/create/update/delete flows
 
 ### Task 3 — T-COM-03: Frontend shell integration
 

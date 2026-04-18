@@ -123,6 +123,69 @@ def update_me(req: UpdateMeRequest, user: dict = Depends(get_current_user)):
     return _user_public(updated)
 
 
+# ── Community ────────────────────────────────────────────────────────────────
+
+EventCategory = Literal[
+    "Meetup", "Family", "Talk", "JobFair", "Business",
+    "Sports", "Hobby", "Dining", "Other"
+]
+
+PostCategory = Literal[
+    "Life", "Visa", "Housing", "Jobs",
+    "SecondHand", "Recommendations", "MutualHelp", "Chat"
+]
+
+
+class CommunityEventCreateRequest(BaseModel):
+    title: str
+    category: EventCategory
+    description: str = ""
+    city: Optional[str] = None
+    venue: Optional[str] = None
+    start_at: str
+    end_at: Optional[str] = None
+    is_free: bool = True
+    fee_text: Optional[str] = None
+    contact_phone: Optional[str] = None
+    contact_whatsapp: Optional[str] = None
+    contact_email: Optional[str] = None
+    signup_url: Optional[str] = None
+
+
+class CommunityEventUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    category: Optional[EventCategory] = None
+    description: Optional[str] = None
+    city: Optional[str] = None
+    venue: Optional[str] = None
+    start_at: Optional[str] = None
+    end_at: Optional[str] = None
+    is_free: Optional[bool] = None
+    fee_text: Optional[str] = None
+    contact_phone: Optional[str] = None
+    contact_whatsapp: Optional[str] = None
+    contact_email: Optional[str] = None
+    signup_url: Optional[str] = None
+
+
+class CommunityPostCreateRequest(BaseModel):
+    title: str
+    category: PostCategory
+    content: str = ""
+    city: Optional[str] = None
+
+
+class CommunityPostUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    category: Optional[PostCategory] = None
+    content: Optional[str] = None
+    city: Optional[str] = None
+
+
+class CommunityReplyCreateRequest(BaseModel):
+    content: str
+
+
 # ── Status ────────────────────────────────────────────────────────────────────
 
 @app.get("/api/status")
@@ -130,6 +193,214 @@ def get_status():
     return {
         "sources": list(RSS_SOURCES.keys()),
     }
+
+
+@app.get("/api/community/events")
+def list_community_events(
+    category: Optional[EventCategory] = None,
+    city: Optional[str] = None,
+    date_from: Optional[str] = None,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
+    filters = {}
+    if category:
+        filters["category"] = category
+    if city:
+        filters["city"] = city
+    if date_from:
+        filters["date_from"] = date_from
+    return storage.list_events(filters, limit=limit, offset=offset)
+
+
+@app.get("/api/community/events/{event_id}")
+def get_community_event(event_id: int):
+    event = storage.get_event(event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail=f"Event {event_id} not found")
+    return event
+
+
+@app.post("/api/community/events", status_code=201)
+def create_community_event(
+    req: CommunityEventCreateRequest,
+    user: dict = Depends(get_current_user),
+):
+    try:
+        return storage.create_event(
+            owner_id=int(user["sub"]),
+            title=req.title,
+            category=req.category,
+            description=req.description,
+            city=req.city,
+            venue=req.venue,
+            start_at=req.start_at,
+            end_at=req.end_at,
+            is_free=req.is_free,
+            fee_text=req.fee_text,
+            contact_phone=req.contact_phone,
+            contact_whatsapp=req.contact_whatsapp,
+            contact_email=req.contact_email,
+            signup_url=req.signup_url,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.put("/api/community/events/{event_id}")
+def update_community_event(
+    event_id: int,
+    req: CommunityEventUpdateRequest,
+    user: dict = Depends(get_current_user),
+):
+    patch = {k: v for k, v in req.model_dump(exclude_unset=True).items() if v is not None}
+    try:
+        return storage.update_event(
+            event_id,
+            owner_id=int(user["sub"]),
+            patch=patch,
+            is_admin=bool(user.get("is_admin")),
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Event {event_id} not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not the owner of this event")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.delete("/api/community/events/{event_id}")
+def delete_community_event(event_id: int, user: dict = Depends(get_current_user)):
+    try:
+        storage.delete_event(
+            event_id,
+            owner_id=int(user["sub"]),
+            is_admin=bool(user.get("is_admin")),
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Event {event_id} not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not the owner of this event")
+    return {"ok": True}
+
+
+@app.get("/api/community/posts")
+def list_community_posts(
+    category: Optional[PostCategory] = None,
+    city: Optional[str] = None,
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
+    filters = {}
+    if category:
+        filters["category"] = category
+    if city:
+        filters["city"] = city
+    return storage.list_posts(filters, limit=limit, offset=offset)
+
+
+@app.get("/api/community/posts/{post_id}")
+def get_community_post(post_id: int):
+    post = storage.get_post(post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail=f"Post {post_id} not found")
+    return post
+
+
+@app.post("/api/community/posts", status_code=201)
+def create_community_post(
+    req: CommunityPostCreateRequest,
+    user: dict = Depends(get_current_user),
+):
+    try:
+        return storage.create_post(
+            owner_id=int(user["sub"]),
+            title=req.title,
+            category=req.category,
+            content=req.content,
+            city=req.city,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.put("/api/community/posts/{post_id}")
+def update_community_post(
+    post_id: int,
+    req: CommunityPostUpdateRequest,
+    user: dict = Depends(get_current_user),
+):
+    patch = {k: v for k, v in req.model_dump(exclude_unset=True).items() if v is not None}
+    try:
+        return storage.update_post(
+            post_id,
+            owner_id=int(user["sub"]),
+            patch=patch,
+            is_admin=bool(user.get("is_admin")),
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Post {post_id} not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not the owner of this post")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.delete("/api/community/posts/{post_id}")
+def delete_community_post(post_id: int, user: dict = Depends(get_current_user)):
+    try:
+        storage.delete_post(
+            post_id,
+            owner_id=int(user["sub"]),
+            is_admin=bool(user.get("is_admin")),
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Post {post_id} not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not the owner of this post")
+    return {"ok": True}
+
+
+@app.get("/api/community/posts/{post_id}/replies")
+def list_community_post_replies(post_id: int):
+    post = storage.get_post(post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail=f"Post {post_id} not found")
+    return storage.list_post_replies(post_id)
+
+
+@app.post("/api/community/posts/{post_id}/replies", status_code=201)
+def create_community_post_reply(
+    post_id: int,
+    req: CommunityReplyCreateRequest,
+    user: dict = Depends(get_current_user),
+):
+    content = (req.content or "").strip()
+    if not content:
+        raise HTTPException(status_code=400, detail="content is required")
+    try:
+        return storage.create_post_reply(
+            post_id=post_id,
+            owner_id=int(user["sub"]),
+            content=content,
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Post {post_id} not found")
+
+
+@app.delete("/api/community/replies/{reply_id}")
+def delete_community_post_reply(reply_id: int, user: dict = Depends(get_current_user)):
+    try:
+        storage.delete_post_reply(
+            reply_id,
+            owner_id=int(user["sub"]),
+            is_admin=bool(user.get("is_admin")),
+        )
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Reply {reply_id} not found")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Not the owner of this reply")
+    return {"ok": True}
 
 
 # ── News (public) ────────────────────────────────────────────────────────────
