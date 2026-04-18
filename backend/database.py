@@ -52,6 +52,52 @@ def init_db() -> None:
                 updated_at TEXT    NOT NULL
             );
 
+            CREATE TABLE IF NOT EXISTS community_events (
+                id                INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id          INTEGER NOT NULL REFERENCES users(id),
+                title             TEXT    NOT NULL,
+                category          TEXT    NOT NULL,
+                description       TEXT    NOT NULL DEFAULT '',
+                city              TEXT,
+                venue             TEXT,
+                start_at          TEXT    NOT NULL,
+                end_at            TEXT,
+                is_free           INTEGER NOT NULL DEFAULT 1,
+                fee_text          TEXT,
+                contact_phone     TEXT,
+                contact_whatsapp  TEXT,
+                contact_email     TEXT,
+                signup_url        TEXT,
+                status            TEXT    NOT NULL DEFAULT 'active'
+                                  CHECK (status IN ('active','hidden','removed')),
+                created_at        TEXT    NOT NULL,
+                updated_at        TEXT    NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS community_posts (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id    INTEGER NOT NULL REFERENCES users(id),
+                title       TEXT    NOT NULL,
+                category    TEXT    NOT NULL,
+                content     TEXT    NOT NULL DEFAULT '',
+                city        TEXT,
+                status      TEXT    NOT NULL DEFAULT 'active'
+                            CHECK (status IN ('active','hidden','removed')),
+                created_at  TEXT    NOT NULL,
+                updated_at  TEXT    NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS community_post_replies (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                post_id      INTEGER NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+                owner_id     INTEGER NOT NULL REFERENCES users(id),
+                content      TEXT    NOT NULL,
+                status       TEXT    NOT NULL DEFAULT 'active'
+                             CHECK (status IN ('active','hidden','removed')),
+                created_at   TEXT    NOT NULL,
+                updated_at   TEXT    NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_articles_published ON articles (published DESC);
             CREATE TABLE IF NOT EXISTS users (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -134,6 +180,12 @@ def init_db() -> None:
             );
 
             CREATE INDEX IF NOT EXISTS idx_ideas_created                ON ideas (created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_community_events_start       ON community_events (status, start_at ASC);
+            CREATE INDEX IF NOT EXISTS idx_community_events_owner       ON community_events (owner_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_community_posts_created      ON community_posts (status, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_community_posts_owner        ON community_posts (owner_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_community_replies_post       ON community_post_replies (post_id, created_at ASC);
+            CREATE INDEX IF NOT EXISTS idx_community_replies_owner      ON community_post_replies (owner_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_listings_kind_status_created ON listings (kind, status, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_listings_owner               ON listings (owner_id);
             CREATE INDEX IF NOT EXISTS idx_listing_images_listing       ON listing_images (listing_id, position);
