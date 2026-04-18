@@ -2,10 +2,11 @@ import { useState } from 'react'
 import Modal from '../ui/Modal'
 import Badge from '../ui/Badge'
 import Button from '../ui/Button'
+import AdminActions from './AdminActions'
 import { INDUSTRY_ZH, INDUSTRY_ICONS } from '../../constants/industries'
 import { INDUSTRY_COLORS } from '../../constants/colors'
 
-export default function JobDetailModal({ job, canManage, onEdit, onDelete, onClose }) {
+export default function JobDetailModal({ job, canManage, isAdmin, onEdit, onDelete, onStatusChange, onClose }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const color = INDUSTRY_COLORS[job.industry] || INDUSTRY_COLORS.Other
 
@@ -117,6 +118,10 @@ export default function JobDetailModal({ job, canManage, onEdit, onDelete, onClo
               </div>
             )}
           </div>
+        )}
+
+        {isAdmin && (
+          <AdminActions listingId={job.id} currentStatus={job.status} onStatusChange={onStatusChange} />
         )}
       </div>
     </Modal>

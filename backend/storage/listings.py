@@ -175,6 +175,22 @@ def list_listings(
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
+def list_all_recent(limit: int = 20) -> dict:
+    _ensure_db()
+    with get_db() as conn:
+        total = conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0]
+        rows = conn.execute(
+            "SELECT * FROM listings ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        items = []
+        for r in rows:
+            d = dict(r)
+            d.update(_fetch_extension(conn, d["kind"], d["id"]))
+            items.append(d)
+    return {"items": items, "total": total}
+
+
 def update_listing(
     listing_id: int,
     owner_id: int,

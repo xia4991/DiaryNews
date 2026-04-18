@@ -3,9 +3,10 @@ import Modal from '../ui/Modal'
 import Badge from '../ui/Badge'
 import Button from '../ui/Button'
 import PhotoCarousel from './PhotoCarousel'
+import AdminActions from './AdminActions'
 import { DEAL_TYPE_ZH, DEAL_TYPE_COLORS, formatPrice } from '../../constants/realestate'
 
-export default function RealEstateDetailModal({ listing, canManage, onEdit, onDelete, onClose }) {
+export default function RealEstateDetailModal({ listing, canManage, isAdmin, onEdit, onDelete, onStatusChange, onClose }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const color = DEAL_TYPE_COLORS[listing.deal_type] || '#5E6478'
 
@@ -125,6 +126,10 @@ export default function RealEstateDetailModal({ listing, canManage, onEdit, onDe
               </div>
             )}
           </div>
+        )}
+
+        {isAdmin && (
+          <AdminActions listingId={listing.id} currentStatus={listing.status} onStatusChange={onStatusChange} />
         )}
       </div>
     </Modal>

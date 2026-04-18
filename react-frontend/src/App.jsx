@@ -15,6 +15,7 @@ import RealEstateTab from './pages/RealEstateTab'
 import RealEstateSidebar from './components/listings/RealEstateSidebar'
 import SecondHandTab from './pages/SecondHandTab'
 import SecondHandSidebar from './components/listings/SecondHandSidebar'
+import AdminModerationTab from './pages/AdminModerationTab'
 import { api } from './api'
 
 export default function App() {
@@ -59,8 +60,11 @@ export default function App() {
 
   // If user logs out while on a protected tab, switch to news
   useEffect(() => {
-    if (!user && activeTab === 'Ideas') {
+    if (!user && (activeTab === 'Ideas' || activeTab === '管理')) {
       setActiveTab('华人关注')
+    }
+    if (user && !user.is_admin && activeTab === '管理') {
+      setActiveTab('首页')
     }
   }, [user, activeTab])
 
@@ -154,9 +158,10 @@ export default function App() {
   ), [cnTagFiltered, activeCategory])
 
   // Available tabs based on auth (招聘 is public)
+  const baseTabs = ['首页', '华人关注', '葡萄牙新闻', '招聘', '房产', '二手']
   const tabs = user
-    ? ['首页', '华人关注', '葡萄牙新闻', '招聘', '房产', '二手', 'Ideas']
-    : ['首页', '华人关注', '葡萄牙新闻', '招聘', '房产', '二手']
+    ? [...baseTabs, 'Ideas', ...(user.is_admin ? ['管理'] : [])]
+    : baseTabs
 
   const mobileTabs = user
     ? [
@@ -167,6 +172,7 @@ export default function App() {
         { label: '房产',    icon: 'home_work',     tab: '房产' },
         { label: '二手',    icon: 'shopping_bag',  tab: '二手' },
         { label: 'Ideas',   icon: 'lightbulb',     tab: 'Ideas' },
+        ...(user.is_admin ? [{ label: '管理', icon: 'admin_panel_settings', tab: '管理' }] : []),
       ]
     : [
         { label: '首页',    icon: 'home',          tab: '首页' },
@@ -283,7 +289,7 @@ export default function App() {
         user={user}
         onLoginClick={() => setShowLogin(true)}
         sidebar={sidebar}
-        fullWidth={activeTab === 'Ideas' || activeTab === '首页'}
+        fullWidth={activeTab === 'Ideas' || activeTab === '首页' || activeTab === '管理'}
       >
         {activeTab === '首页' && (
           <HomePage
@@ -345,6 +351,9 @@ export default function App() {
             onCountsChange={setShCounts}
             onLoginRequired={() => setShowLogin(true)}
           />
+        )}
+        {activeTab === '管理' && user?.is_admin && (
+          <AdminModerationTab />
         )}
         {activeTab === 'Ideas' && (
           <IdeasTab

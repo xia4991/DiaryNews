@@ -585,6 +585,23 @@ def report_listing(
         raise HTTPException(status_code=404, detail=f"Listing {listing_id} not found")
 
 
+@app.get("/api/admin/reports")
+def admin_list_reports(
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    _admin: dict = Depends(require_admin),
+):
+    return storage.list_unresolved_reports(limit=limit, offset=offset)
+
+
+@app.get("/api/admin/listings/recent")
+def admin_recent_listings(
+    limit: int = Query(20, ge=1, le=100),
+    _admin: dict = Depends(require_admin),
+):
+    return storage.list_all_recent(limit=limit)
+
+
 @app.patch("/api/admin/listings/{listing_id}/status")
 def admin_set_listing_status(
     listing_id: int,

@@ -3,9 +3,10 @@ import Modal from '../ui/Modal'
 import Badge from '../ui/Badge'
 import Button from '../ui/Button'
 import PhotoCarousel from './PhotoCarousel'
+import AdminActions from './AdminActions'
 import { CATEGORY_ZH, CATEGORY_COLORS, CONDITION_ZH, CONDITION_COLORS, formatPrice } from '../../constants/secondhand'
 
-export default function SecondHandDetailModal({ listing, canManage, onEdit, onDelete, onClose }) {
+export default function SecondHandDetailModal({ listing, canManage, isAdmin, onEdit, onDelete, onStatusChange, onClose }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const catColor = CATEGORY_COLORS[listing.category] || '#6B7280'
   const condColor = CONDITION_COLORS[listing.condition] || '#6B7280'
@@ -114,6 +115,10 @@ export default function SecondHandDetailModal({ listing, canManage, onEdit, onDe
               </div>
             )}
           </div>
+        )}
+
+        {isAdmin && (
+          <AdminActions listingId={listing.id} currentStatus={listing.status} onStatusChange={onStatusChange} />
         )}
       </div>
     </Modal>
