@@ -23,20 +23,20 @@ export default function Header({ activeTab, tabs, onTabChange, onFetchNews, fetc
 
   return (
     <header
-      className="fixed top-0 w-full z-40 h-14 flex items-center justify-between px-4 lg:px-6 bg-surface/90 backdrop-blur border-b border-border"
+      className="fixed top-0 w-full z-40 h-14 flex items-center justify-between px-3 sm:px-4 lg:px-6 bg-surface/90 backdrop-blur border-b border-border"
     >
-      <div className="flex items-center gap-8 min-w-0">
+      <div className="flex min-w-0 items-center gap-3 sm:gap-8">
         <button
           onClick={() => onTabChange('首页')}
-          className="min-w-0 shrink-0 text-left"
+          className="min-w-0 shrink-0 text-left py-1"
         >
           <span
-            className="block max-w-[220px] truncate text-base font-black tracking-tight text-text lg:max-w-none lg:text-lg"
+            className="block max-w-[170px] truncate text-[15px] font-black leading-none tracking-tight text-text sm:max-w-[240px] sm:text-lg lg:max-w-none lg:text-[1.55rem]"
             style={{ fontFamily: 'var(--font-headline)' }}
           >
             葡萄牙华人信息中心
           </span>
-          <span className="hidden text-[10px] uppercase tracking-[0.18em] text-text-subtle lg:block">
+          <span className="mt-1 hidden text-[11px] font-semibold uppercase leading-none tracking-[0.2em] text-text-subtle lg:block">
             Portugal Chinese Hub
           </span>
         </button>
@@ -64,7 +64,7 @@ export default function Header({ activeTab, tabs, onTabChange, onFetchNews, fetc
         </nav>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
         <div className="hidden sm:flex items-center gap-1.5 rounded-full px-3 py-1.5 bg-bg-subtle">
           <span className="material-symbols-outlined text-text-subtle" style={{ fontSize: 16 }}>search</span>
           <input
@@ -121,8 +121,8 @@ export default function Header({ activeTab, tabs, onTabChange, onFetchNews, fetc
             )}
           </div>
         ) : (
-          <Button variant="ghost" size="sm" icon="login" onClick={onLoginClick}>
-            登录
+          <Button variant="ghost" size="sm" icon="login" onClick={onLoginClick} className="px-2.5 sm:px-3.5">
+            <span className="hidden sm:inline">登录</span>
           </Button>
         )}
       </div>

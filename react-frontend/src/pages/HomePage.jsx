@@ -17,7 +17,7 @@ function StatCard({ label, value, hint }) {
   return (
     <Card className="rounded-[24px] border-white/70 bg-white/90 shadow-[0_18px_50px_rgba(58,44,31,0.08)] backdrop-blur">
       <p className="text-[11px] uppercase tracking-[0.18em] text-text-subtle">{label}</p>
-      <p className="mt-3 text-3xl font-black tracking-tight text-text" style={{ fontFamily: 'var(--font-headline)' }}>
+      <p className="mt-3 text-[1.7rem] font-black tracking-tight text-text sm:text-3xl" style={{ fontFamily: 'var(--font-headline)' }}>
         {value}
       </p>
       <p className="mt-2 text-sm text-text-muted">{hint}</p>
@@ -77,24 +77,24 @@ export default function HomePage({
         }}
       />
 
-      <section className="grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_360px] lg:items-start">
-        <div className="grid gap-6 pt-4 sm:pt-8">
+      <section className="grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_360px] lg:items-start">
+        <div className="grid gap-5 pt-2 sm:pt-8">
           <div>
             <Badge color="#9D3D33">Portugal Chinese Hub</Badge>
-            <div className="mt-4 flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
+            <div className="mt-4 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
               <div className="max-w-4xl">
                 <h1
-                  className="text-4xl font-black tracking-[-0.04em] text-text sm:text-5xl lg:text-6xl"
+                  className="text-[2.2rem] font-black tracking-[-0.04em] text-text sm:text-5xl lg:text-6xl"
                   style={{ fontFamily: 'var(--font-headline)' }}
                 >
                   葡萄牙华人信息中心
                 </h1>
-                <p className="mt-5 max-w-2xl text-base leading-8 text-text-muted sm:text-lg">
+                <p className="mt-4 max-w-2xl text-[15px] leading-7 text-text-muted sm:mt-5 sm:text-lg sm:leading-8">
                   一个为在葡华人整理新闻、招聘、视频与灵感的日常信息中心。先看重点，再进入你今天最需要的页面。
                 </p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 sm:max-w-[420px]">
+              <div className="grid grid-cols-1 gap-2 sm:max-w-[420px] sm:grid-cols-2 sm:gap-3">
                 {QUICK_ACTIONS.map((action) => (
                   <button
                     key={action.tab}
@@ -116,32 +116,32 @@ export default function HomePage({
             </div>
           </div>
 
-          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)] xl:gap-5">
             <Card className="relative overflow-hidden rounded-[32px] border-[#E2D2BF] bg-[linear-gradient(135deg,#fffaf2_0%,#f4e7d6_100%)] p-0 shadow-[0_26px_56px_rgba(86,60,33,0.16)]">
               <div
                 aria-hidden
                 className="absolute right-0 top-0 h-40 w-40 rounded-full blur-3xl"
                 style={{ background: 'rgba(157,61,51,0.16)' }}
               />
-              <div className="relative px-6 py-6 sm:px-7 sm:py-7">
-                <div className="flex items-center justify-between gap-4">
+              <div className="relative px-5 py-5 sm:px-7 sm:py-7">
+                <div className="flex items-center justify-between gap-3">
                   <Badge color="#9D3D33">今日焦点</Badge>
                   <button
                     onClick={() => onTabChange('华人关注')}
-                    className="text-sm font-semibold text-accent transition-colors hover:text-accent-hover"
+                    className="text-xs font-semibold text-accent transition-colors hover:text-accent-hover sm:text-sm"
                   >
                     查看更多
                   </button>
                 </div>
 
                 <h2
-                  className="mt-5 max-w-2xl text-2xl font-black leading-tight tracking-tight text-text sm:text-[2rem]"
+                  className="mt-4 max-w-2xl text-[1.65rem] font-black leading-tight tracking-tight text-text sm:mt-5 sm:text-[2rem]"
                   style={{ fontFamily: 'var(--font-headline)' }}
                 >
                   {leadArticle?.title_zh || leadArticle?.title || '今天的重点内容会出现在这里'}
                 </h2>
 
-                <p className="mt-4 max-w-2xl text-sm leading-8 text-text-muted sm:text-[15px]">
+                <p className="mt-3 max-w-2xl text-sm leading-7 text-text-muted sm:mt-4 sm:text-[15px] sm:leading-8">
                   {leadArticle?.content_zh || leadArticle?.ai_summary || leadArticle?.summary || '获取新闻后，首页会自动把最相关的华人内容放到这里，方便你不用先点进栏目也能看到重点。'}
                 </p>
 
@@ -162,7 +162,7 @@ export default function HomePage({
                   )}
                 </div>
 
-                <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
                   <div className="rounded-2xl border border-white/75 bg-white/70 px-4 py-4">
                     <p className="text-[11px] uppercase tracking-[0.14em] text-text-subtle">最新更新</p>
                     <p className="mt-2 text-sm font-semibold text-text">{formatDate(newsLastUpdated)}</p>
@@ -179,14 +179,14 @@ export default function HomePage({
 
             <div className="grid gap-5">
               <Card className="rounded-[28px] border-white/80 bg-white/92 shadow-[0_20px_50px_rgba(58,44,31,0.08)]">
-                <div className="flex items-end justify-between gap-3">
+                <div className="flex items-start justify-between gap-3">
                   <div>
                     <Badge color="#2B6CB0">快读</Badge>
                     <h2 className="mt-3 text-xl font-black tracking-tight text-text" style={{ fontFamily: 'var(--font-headline)' }}>
                       今日简报
                     </h2>
                   </div>
-                  <button onClick={() => onTabChange('葡萄牙新闻')} className="text-sm font-semibold text-accent hover:text-accent-hover">
+                  <button onClick={() => onTabChange('葡萄牙新闻')} className="text-xs font-semibold text-accent hover:text-accent-hover sm:text-sm">
                     全部新闻
                   </button>
                 </div>
@@ -224,7 +224,7 @@ export default function HomePage({
                       onClick={() => (tab === '首页' ? onLoginClick() : onTabChange(tab))}
                       className="flex items-center justify-between rounded-2xl border border-border bg-surface-muted px-4 py-3 text-left transition-colors hover:bg-white"
                     >
-                      <span className="text-sm font-semibold text-text">{text}</span>
+                      <span className="pr-3 text-sm font-semibold leading-6 text-text">{text}</span>
                       <span className="material-symbols-outlined text-accent" style={{ fontSize: 18 }}>
                         arrow_outward
                       </span>
@@ -239,9 +239,9 @@ export default function HomePage({
         <Card
           className="relative overflow-hidden rounded-[30px] border-[#E6DCCB] bg-[linear-gradient(160deg,#fffdf7_0%,#f7efe4_100%)] p-0 shadow-[0_24px_60px_rgba(86,60,33,0.14)]"
         >
-          <div className="border-b border-[#E6DCCB] px-6 py-5">
+          <div className="border-b border-[#E6DCCB] px-5 py-5 sm:px-6">
             <Badge color="#2E7D5A">今日概览</Badge>
-            <p className="mt-4 text-2xl font-black tracking-tight text-text" style={{ fontFamily: 'var(--font-headline)' }}>
+            <p className="mt-4 text-[1.7rem] font-black tracking-tight text-text sm:text-2xl" style={{ fontFamily: 'var(--font-headline)' }}>
               {user ? `欢迎回来，${user.name || '朋友'}` : '从这里开始今天的信息浏览'}
             </p>
             <p className="mt-2 text-sm leading-7 text-text-muted">
@@ -249,15 +249,15 @@ export default function HomePage({
             </p>
           </div>
 
-          <div className="grid gap-4 px-6 py-5">
-            <div className="flex items-center justify-between rounded-2xl bg-white/85 px-4 py-3">
-              <div>
+          <div className="grid gap-4 px-5 py-5 sm:px-6">
+            <div className="flex items-center justify-between gap-3 rounded-2xl bg-white/85 px-4 py-3">
+              <div className="min-w-0">
                 <p className="text-xs uppercase tracking-[0.16em] text-text-subtle">华人精选</p>
-                <p className="mt-1 text-base font-bold text-text">{featuredCn[0]?.title_zh || featuredCn[0]?.title || '等待最新内容'}</p>
+                <p className="mt-1 line-clamp-2 text-base font-bold text-text">{featuredCn[0]?.title_zh || featuredCn[0]?.title || '等待最新内容'}</p>
               </div>
               <button
                 onClick={() => onTabChange('华人关注')}
-                className="text-sm font-semibold text-accent transition-colors hover:text-accent-hover"
+                className="shrink-0 text-sm font-semibold text-accent transition-colors hover:text-accent-hover"
               >
                 查看
               </button>
@@ -285,7 +285,7 @@ export default function HomePage({
         </Card>
       </section>
 
-      <section className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <section className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
         <StatCard label="全部新闻" value={articles.length} hint="汇总葡萄牙重点媒体与分类内容" />
         <StatCard label="葡语来源" value={new Set(articles.map((article) => article.source)).size} hint="持续抓取的媒体来源数量" />
         <StatCard label="最新职位" value={jobs.filter((job) => job.status === 'active').length} hint="仍在开放中的招聘信息" />
@@ -293,7 +293,7 @@ export default function HomePage({
 
       <section className="mt-10 grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
         <Card className="rounded-[30px] border-white/80 bg-white/92 shadow-[0_20px_50px_rgba(58,44,31,0.08)]">
-          <div className="flex items-end justify-between gap-4">
+          <div className="flex items-start justify-between gap-4">
             <div>
               <Badge color="#9D3D33">精选</Badge>
               <h2 className="mt-3 text-2xl font-black tracking-tight text-text" style={{ fontFamily: 'var(--font-headline)' }}>
@@ -328,7 +328,7 @@ export default function HomePage({
 
         <div className="grid gap-6">
           <Card className="rounded-[30px] border-white/80 bg-white/92 shadow-[0_20px_50px_rgba(58,44,31,0.08)]">
-            <div className="flex items-end justify-between gap-4">
+          <div className="flex items-start justify-between gap-4">
               <div>
                 <Badge color="#2B6CB0">新闻</Badge>
                 <h2 className="mt-3 text-xl font-black tracking-tight text-text" style={{ fontFamily: 'var(--font-headline)' }}>
@@ -353,7 +353,7 @@ export default function HomePage({
           </Card>
 
           <Card className="rounded-[30px] border-white/80 bg-white/92 shadow-[0_20px_50px_rgba(58,44,31,0.08)]">
-            <div className="flex items-end justify-between gap-4">
+            <div className="flex items-start justify-between gap-4">
               <div>
                 <Badge color="#2E7D5A">社区</Badge>
                 <h2 className="mt-3 text-xl font-black tracking-tight text-text" style={{ fontFamily: 'var(--font-headline)' }}>
@@ -418,6 +418,39 @@ export default function HomePage({
             ))}
           </div>
         </Card>
+      </section>
+
+      <section className="mt-10 pb-4">
+        <div className="relative overflow-hidden rounded-[32px] border border-[#E4D9C9] bg-[linear-gradient(180deg,rgba(255,251,244,0.92)_0%,rgba(244,234,222,0.86)_100%)] px-5 py-6 shadow-[0_18px_48px_rgba(86,60,33,0.08)] sm:px-7 sm:py-8">
+          <div
+            aria-hidden
+            className="absolute inset-x-0 top-0 h-16 bg-[linear-gradient(180deg,rgba(255,255,255,0.45)_0%,rgba(255,255,255,0)_100%)]"
+          />
+
+          <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+            <div className="max-w-3xl">
+              <Badge color="#9D3D33">Daily Flow</Badge>
+              <h2
+                className="mt-4 text-2xl font-black tracking-tight text-text sm:text-[2rem]"
+                style={{ fontFamily: 'var(--font-headline)' }}
+              >
+                今天先从重点开始，剩下的内容交给平台慢慢补全
+              </h2>
+              <p className="mt-3 text-sm leading-8 text-text-muted sm:text-[15px]">
+                你可以先看华人关注和葡萄牙新闻，再按需要进入招聘、房产、二手或社区。页面底部也会继续保留主要频道、服务信息和版权说明，让整个平台更完整。
+              </p>
+            </div>
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+              <Button variant="primary" icon="diversity_3" onClick={() => onTabChange('华人关注')} className="w-full sm:w-auto">
+                进入华人关注
+              </Button>
+              <Button variant="ghost" icon="newspaper" onClick={() => onTabChange('葡萄牙新闻')} className="w-full sm:w-auto">
+                看葡萄牙新闻
+              </Button>
+            </div>
+          </div>
+        </div>
       </section>
     </div>
   )

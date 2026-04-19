@@ -30,7 +30,7 @@ export default function Modal({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[60] flex items-center justify-center p-2 sm:p-4"
       style={{ background: 'rgba(26,32,54,0.45)', backdropFilter: 'blur(6px)' }}
       onClick={onClose}
     >
@@ -38,10 +38,10 @@ export default function Modal({
         role="dialog"
         aria-modal="true"
         onClick={(e) => e.stopPropagation()}
-        className={`w-full ${SIZES[size]} max-h-[calc(100vh-2rem)] flex flex-col bg-surface rounded-xl shadow-modal ${className}`.trim()}
+        className={`w-full ${SIZES[size]} max-h-[calc(100vh-1rem)] sm:max-h-[calc(100vh-2rem)] flex flex-col bg-surface rounded-[20px] sm:rounded-xl shadow-modal ${className}`.trim()}
       >
         {(title || !hideClose) && (
-          <div className="flex items-start justify-between px-5 pt-5 pb-3 shrink-0">
+          <div className="flex items-start justify-between px-4 pt-4 pb-3 sm:px-5 sm:pt-5 shrink-0">
             <div className="min-w-0">
               {title && <h2 className="text-lg font-bold text-text truncate">{title}</h2>}
               {subtitle && <p className="text-xs text-text-muted mt-0.5">{subtitle}</p>}
@@ -58,9 +58,9 @@ export default function Modal({
             )}
           </div>
         )}
-        <div className="px-5 pb-5 overflow-y-auto">{children}</div>
+        <div className="px-4 pb-4 overflow-y-auto sm:px-5 sm:pb-5">{children}</div>
         {footer && (
-          <div className="px-5 py-3 border-t border-border bg-surface-muted rounded-b-xl flex justify-end gap-2 shrink-0">
+          <div className="px-4 py-3 border-t border-border bg-surface-muted rounded-b-[20px] sm:rounded-b-xl flex justify-end gap-2 shrink-0 sm:px-5">
             {footer}
           </div>
         )}

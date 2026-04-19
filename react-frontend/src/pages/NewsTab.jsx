@@ -69,13 +69,13 @@ export default function NewsTab({
   if (layout === 'china') {
     return (
       <>
-        <div className="grid gap-6">
+        <div className="grid gap-5 sm:gap-6">
           <Card className="overflow-hidden rounded-[30px] border-[#E2D2BF] bg-[linear-gradient(135deg,#fff8ef_0%,#f5ead9_100%)] p-0 shadow-[0_24px_56px_rgba(86,60,33,0.12)]">
-            <div className="grid gap-6 px-6 py-6 sm:px-7 sm:py-7 xl:grid-cols-[minmax(0,1.15fr)_320px]">
+            <div className="grid gap-5 px-5 py-5 sm:px-7 sm:py-7 xl:grid-cols-[minmax(0,1.15fr)_320px]">
               <div className="min-w-0">
                 <Badge color="#9D3D33">Chinese Focus</Badge>
                 <h1
-                  className="mt-4 text-3xl font-black tracking-tight text-text sm:text-4xl"
+                  className="mt-4 text-[1.9rem] font-black tracking-tight text-text sm:text-4xl"
                   style={{ fontFamily: 'var(--font-headline)' }}
                 >
                   {tabTitle}
@@ -87,7 +87,7 @@ export default function NewsTab({
                 {featured && (
                   <button
                     onClick={() => setSelected(featured)}
-                    className="mt-6 block w-full rounded-[24px] border border-white/75 bg-white/76 px-5 py-5 text-left transition-all hover:-translate-y-0.5 hover:bg-white"
+                    className="mt-6 block w-full rounded-[24px] border border-white/75 bg-white/76 px-4 py-4 text-left transition-all hover:-translate-y-0.5 hover:bg-white sm:px-5 sm:py-5"
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge color="#9D3D33">{featured.tags_zh?.split(',')[0]?.trim() || '重点关注'}</Badge>
@@ -96,7 +96,7 @@ export default function NewsTab({
                       </span>
                     </div>
                     <h2
-                      className="mt-4 text-2xl font-black leading-tight tracking-tight text-text sm:text-[2rem]"
+                      className="mt-4 text-[1.55rem] font-black leading-tight tracking-tight text-text sm:text-[2rem]"
                       style={{ fontFamily: 'var(--font-headline)' }}
                     >
                       {featured.title_zh || featured.title}
@@ -161,7 +161,7 @@ export default function NewsTab({
 
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)]">
             <div>
-              <div className="mb-5 flex items-end justify-between gap-4">
+              <div className="mb-5 flex items-start justify-between gap-4">
                 <div>
                   <Badge color="#9D3D33">精选内容</Badge>
                   <h2
@@ -241,13 +241,13 @@ export default function NewsTab({
   if (layout === 'portugal') {
     return (
       <>
-        <div className="grid gap-6">
+        <div className="grid gap-5 sm:gap-6">
           <Card className="overflow-hidden rounded-[30px] border-[#D8E2EF] bg-[linear-gradient(135deg,#f7fbff_0%,#eef4fb_100%)] p-0 shadow-[0_24px_56px_rgba(43,108,176,0.10)]">
-            <div className="grid gap-6 px-6 py-6 sm:px-7 sm:py-7 xl:grid-cols-[minmax(0,1.2fr)_320px]">
+            <div className="grid gap-5 px-5 py-5 sm:px-7 sm:py-7 xl:grid-cols-[minmax(0,1.2fr)_320px]">
               <div className="min-w-0">
                 <Badge color="#2B6CB0">Portugal Desk</Badge>
                 <h1
-                  className="mt-4 text-3xl font-black tracking-tight text-text sm:text-4xl"
+                  className="mt-4 text-[1.9rem] font-black tracking-tight text-text sm:text-4xl"
                   style={{ fontFamily: 'var(--font-headline)' }}
                 >
                   {tabTitle}
@@ -259,7 +259,7 @@ export default function NewsTab({
                 {featured && (
                   <button
                     onClick={() => setSelected(featured)}
-                    className="mt-6 block w-full rounded-[24px] border border-white/80 bg-white/82 px-5 py-5 text-left transition-all hover:-translate-y-0.5 hover:bg-white"
+                    className="mt-6 block w-full rounded-[24px] border border-white/80 bg-white/82 px-4 py-4 text-left transition-all hover:-translate-y-0.5 hover:bg-white sm:px-5 sm:py-5"
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge color={categoryColor(featured.category)}>
@@ -270,7 +270,7 @@ export default function NewsTab({
                       </span>
                     </div>
                     <h2
-                      className="mt-4 text-2xl font-black leading-tight tracking-tight text-text sm:text-[2rem]"
+                      className="mt-4 text-[1.55rem] font-black leading-tight tracking-tight text-text sm:text-[2rem]"
                       style={{ fontFamily: 'var(--font-headline)' }}
                     >
                       {featured.title_zh || featured.title}
@@ -339,7 +339,7 @@ export default function NewsTab({
 
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)]">
             <div>
-              <div className="mb-5 flex items-end justify-between gap-4">
+              <div className="mb-5 flex items-start justify-between gap-4">
                 <div>
                   <Badge color="#2B6CB0">最新报道</Badge>
                   <h2
