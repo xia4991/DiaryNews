@@ -332,7 +332,7 @@ export default function CommunityTab({ onLoginRequired }) {
       )}
 
       <Card className="overflow-hidden rounded-[30px] border-[#DDD7EE] bg-[linear-gradient(135deg,#fbf9ff_0%,#f1eefb_100%)] p-0 shadow-[0_24px_56px_rgba(110,93,170,0.10)]">
-        <div className="grid gap-6 px-6 py-6 sm:px-7 sm:py-7 xl:grid-cols-[minmax(0,1.15fr)_340px]">
+        <div className="grid gap-5 px-5 py-5 sm:px-7 sm:py-7 xl:grid-cols-[minmax(0,1.15fr)_340px]">
           <div className="min-w-0">
             <Badge color="#7C63C9">Community</Badge>
             <SectionHeader
@@ -351,7 +351,7 @@ export default function CommunityTab({ onLoginRequired }) {
               }
             />
 
-            <div className="mt-5 flex sm:hidden items-center gap-2">
+            <div className="mt-5 flex flex-wrap sm:hidden items-center gap-2">
               <SegmentButton active={segment === 'events'} onClick={() => setSegment('events')}>
                 活动
               </SegmentButton>
@@ -360,11 +360,11 @@ export default function CommunityTab({ onLoginRequired }) {
               </SegmentButton>
             </div>
 
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Button icon="event" onClick={handleCreateEventClick} variant={user ? 'subtle' : 'primary'}>
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+              <Button icon="event" onClick={handleCreateEventClick} variant={user ? 'subtle' : 'primary'} className="w-full sm:w-auto">
                 {user ? '发布活动' : '登录后发布活动'}
               </Button>
-              <Button icon="forum" onClick={handleCreatePostClick} variant="ghost">
+              <Button icon="forum" onClick={handleCreatePostClick} variant="ghost" className="w-full sm:w-auto">
                 {user ? '发交流帖' : '登录后交流'}
               </Button>
             </div>
@@ -376,7 +376,7 @@ export default function CommunityTab({ onLoginRequired }) {
                   <span className="text-xs font-semibold text-text-subtle">{events.length} 场</span>
                 </div>
                 <h2
-                  className="mt-4 text-2xl font-black leading-tight tracking-tight text-text"
+                  className="mt-4 text-[1.55rem] font-black leading-tight tracking-tight text-text sm:text-2xl"
                   style={{ fontFamily: 'var(--font-headline)' }}
                 >
                   {upcomingEvent?.title || '活动模块已接入，等你发布第一场活动'}
@@ -399,7 +399,7 @@ export default function CommunityTab({ onLoginRequired }) {
                   <span className="text-xs font-semibold text-text-subtle">{posts.length} 帖</span>
                 </div>
                 <h2
-                  className="mt-4 text-2xl font-black leading-tight tracking-tight text-text"
+                  className="mt-4 text-[1.55rem] font-black leading-tight tracking-tight text-text sm:text-2xl"
                   style={{ fontFamily: 'var(--font-headline)' }}
                 >
                   {hotPost?.title || '交流模块已接入，等第一批社区帖子出现'}

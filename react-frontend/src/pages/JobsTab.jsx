@@ -121,13 +121,13 @@ export default function JobsTab({ activeIndustry, onCountsChange, onLoginRequire
           </p>
         </div>
       ) : (
-        <div className="grid gap-6">
+        <div className="grid gap-5 sm:gap-6">
           <Card className="overflow-hidden rounded-[30px] border-[#D7E0D7] bg-[linear-gradient(135deg,#f5fbf6_0%,#edf5ef_100%)] p-0 shadow-[0_24px_56px_rgba(46,125,90,0.10)]">
-            <div className="grid gap-6 px-6 py-6 sm:px-7 sm:py-7 xl:grid-cols-[minmax(0,1.15fr)_340px]">
+            <div className="grid gap-5 px-5 py-5 sm:px-7 sm:py-7 xl:grid-cols-[minmax(0,1.15fr)_340px]">
               <div className="min-w-0">
                 <Badge color="#2E7D5A">Community Jobs</Badge>
                 <h1
-                  className="mt-4 text-3xl font-black tracking-tight text-text sm:text-4xl"
+                  className="mt-4 text-[1.9rem] font-black tracking-tight text-text sm:text-4xl"
                   style={{ fontFamily: 'var(--font-headline)' }}
                 >
                   招聘信息
@@ -136,12 +136,12 @@ export default function JobsTab({ activeIndustry, onCountsChange, onLoginRequire
                   在葡华人社区招聘与求职。先看最新职位和热门行业，再进入完整列表筛选你要找的机会。
                 </p>
 
-                <div className="mt-6 flex flex-wrap gap-3">
-                  <Button variant="primary" icon="add" onClick={handleCreateClick}>
+                <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                  <Button variant="primary" icon="add" onClick={handleCreateClick} className="w-full sm:w-auto">
                     发布招聘
                   </Button>
                   {!user && (
-                    <Button variant="ghost" icon="login" onClick={handleCreateClick}>
+                    <Button variant="ghost" icon="login" onClick={handleCreateClick} className="w-full sm:w-auto">
                       登录后发布
                     </Button>
                   )}
@@ -211,7 +211,7 @@ export default function JobsTab({ activeIndustry, onCountsChange, onLoginRequire
 
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)]">
             <div>
-              <div className="mb-5 flex items-end justify-between gap-4">
+              <div className="mb-5 flex items-start justify-between gap-4">
                 <div>
                   <Badge color="#2E7D5A">精选职位</Badge>
                   <h2
@@ -231,7 +231,7 @@ export default function JobsTab({ activeIndustry, onCountsChange, onLoginRequire
 
               {browse.length > 0 && (
                 <>
-                  <div className="mb-5 mt-8 flex items-end justify-between gap-4">
+                  <div className="mb-5 mt-8 flex items-start justify-between gap-4">
                     <div>
                       <Badge color="#2B6CB0">全部浏览</Badge>
                       <h2

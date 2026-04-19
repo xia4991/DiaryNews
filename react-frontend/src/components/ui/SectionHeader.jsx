@@ -1,6 +1,6 @@
 export default function SectionHeader({ title, subtitle, action, className = '' }) {
   return (
-    <div className={`flex items-end justify-between gap-4 mb-6 ${className}`.trim()}>
+    <div className={`mb-6 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-end sm:gap-4 ${className}`.trim()}>
       <div className="min-w-0">
         <h1
           className="font-extrabold text-text tracking-tight text-2xl sm:text-3xl"
@@ -12,7 +12,7 @@ export default function SectionHeader({ title, subtitle, action, className = '' 
           <p className="text-sm text-text-muted mt-1">{subtitle}</p>
         )}
       </div>
-      {action && <div className="shrink-0">{action}</div>}
+      {action && <div className="w-full shrink-0 sm:w-auto">{action}</div>}
     </div>
   )
 }
