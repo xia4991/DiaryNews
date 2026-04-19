@@ -1,267 +1,371 @@
-# Chat/RAG Module — Specification & Plan
+# AI Assistant Module — Markdown-Only V1 Plan
 
 ## Purpose
 
-Add a **Chat** tab to DiaryNews — a RAG-powered personal knowledge base. Users upload their own documents (PDF, markdown, text files), the system indexes them, and a chat interface answers questions using retrieved document context via the MiniMax LLM.
+Build an **AI assistant** for DiaryNews that answers questions for the Portuguese Chinese community using a curated markdown knowledge base.
 
-This is **not** about querying DiaryNews content (news/YouTube). It's an independent document Q&A system that lives inside DiaryNews as a new tab.
+Version `1.0` is intentionally narrow:
 
-## User Requirements
+- source of truth is markdown only
+- assistant answers only from markdown wiki content
+- no arbitrary file uploads
+- no document ingestion
+- no recent news retrieval
 
-1. **RAG data source**: External documents uploaded by the user (PDFs, markdown, text files)
-2. **LLM**: MiniMax (same API already used by DiaryNews, same `MINIMAX_API_KEY`)
-3. **Vector store**: ChromaDB (embedded, on-disk, no external server needed)
-4. **Embeddings**: ChromaDB default (`all-MiniLM-L6-v2` via sentence-transformers) — free, local, no API cost per document
-5. **Frontend**: Standalone minimal HTML test page for isolated dev + React ChatTab for DiaryNews integration
-6. **Isolation**: The module must be fully self-contained inside `backend/chat/` with its own CLAUDE.md, entry point, and requirements. Developing with Claude Code inside this subdirectory should work without needing the parent project context — saving tokens.
+This is not a generic personal knowledge base in v1.
 
----
+It is a **Portugal-focused assistant** grounded in your own markdown wiki.
 
-## Architecture Decisions
+## Product Scope
 
-### Why a separate `chat.db` instead of adding tables to `diarynews.db`?
-Full isolation. The chat module manages its own schema and lifecycle. If removed, just delete `data/chat.db` and `data/chroma/` — no orphaned tables in the main DB.
+The assistant should help answer questions about:
 
-### Why duplicate `llm.py` (~30 lines) instead of importing from parent?
-When Claude Code runs inside `backend/chat/`, `from backend.llm import ...` would fail because the parent package isn't on sys.path. The duplication cost is trivial for true isolation.
+- Portugal law basics
+- immigration / visa / residency workflows
+- local practical life processes
+- work / rental / service basics
 
-### Why local embeddings instead of MiniMax embeddings API?
-Embedding 1000 chunks of a large PDF would require 1000 API calls (or batched, still costly and rate-limited). Local `all-MiniLM-L6-v2` is free, fast, and well-tested. ~80MB model, downloads once.
+The assistant should:
 
-### Why 800-char chunks?
-Pragmatic middle ground. Too small (200) creates noisy retrieval fragments. Too large (2000) wastes context window on irrelevant text. 800 chars is roughly a paragraph — a semantically coherent unit.
+- retrieve relevant markdown chunks
+- answer in Chinese
+- cite the markdown pages / sections used
+- clearly say when the wiki does not contain enough support
 
-### Why no streaming responses in v1?
-First pass uses synchronous request/response for simplicity. Streaming (SSE) can be added later by changing the `/messages` endpoint to return a `StreamingResponse`. The architecture does not preclude this.
+## V1 Boundaries
 
----
+### Included
+
+- markdown wiki ingestion
+- vector retrieval over markdown chunks
+- conversations
+- grounded answers with citations
+- topic-based query routing
+- standalone backend module
+- later React assistant tab integration
+
+### Explicitly excluded
+
+- PDF ingestion
+- TXT / arbitrary uploads
+- recent news retrieval
+- mixed-source retrieval
+- personal user document workspace
+- streaming output
+- tool use / browsing
+
+## Why Markdown-Only First
+
+- easiest to control answer quality
+- easiest to maintain in git
+- easiest to review and update manually
+- lowest implementation complexity
+- best match for legal / immigration guidance where trust matters
 
 ## Module Structure
 
-```
+```text
 backend/chat/
-  CLAUDE.md              # Standalone dev instructions for Claude Code
-  CHAT_PLAN.md           # This file — specification and plan
-  requirements.txt       # chromadb, pypdf2, python-multipart, requests, python-dotenv, fastapi, uvicorn
+  CLAUDE.md
+  CHAT_PLAN.md
+  requirements.txt
   __init__.py
-  main.py                # Standalone server (port 8001, serves API + test UI)
-  config.py              # Paths (DB, ChromaDB, uploads), MiniMax env vars, chunk settings
-  llm.py                 # Duplicated MiniMax wrapper (multi-turn messages support)
-  database.py            # chat.db schema + get_db() context manager
-  storage.py             # CRUD: documents, conversations, messages
-  chunking.py            # Parse PDF/MD/TXT + sliding-window chunking
-  vectorstore.py         # ChromaDB init, add/query/delete
-  rag.py                 # Orchestration: retrieve chunks -> build prompt -> call LLM
-  prompts.py             # RAG system prompt + context template
-  router.py              # FastAPI APIRouter (all /chat/* endpoints)
+  main.py
+  config.py
+  database.py
+  storage.py
+  chunking.py
+  vectorstore.py
+  rag.py
+  prompts.py
+  query_router.py
+  router.py
+  ingestion/
+    __init__.py
+    wiki.py
   static/
-    index.html           # Standalone test UI (vanilla HTML/JS/CSS)
+    index.html
 ```
 
-**Already created** (Task 1 complete): `__init__.py`, `config.py`, `database.py`, `requirements.txt`, `CLAUDE.md`, `static/`
+Repo-level content:
 
----
+```text
+wiki/
+  immigration/
+  law/
+  living/
+  work/
+  services/
+```
 
 ## Standalone vs Integrated Mode
 
-The `router.py` exposes a pure `APIRouter` — identical behavior in both modes.
+The module should still work in two modes:
 
-**Standalone** (`cd backend/chat && python main.py`):
-- Creates own `FastAPI()` app, mounts router at `/api/chat`
-- Adds CORS (`allow_origins=["*"]`)
-- Serves `static/index.html` at `/`
-- Port 8001
-- Paths resolve from cwd: `./data/chat.db`, `./data/chroma/`, `./data/uploads/`
+### Standalone
 
-**Integrated** (DiaryNews mounts it):
-- `backend/api.py` adds 2 lines:
-  ```python
-  from backend.chat.router import router as chat_router
-  app.include_router(chat_router, prefix="/api/chat")
-  ```
-- Paths resolve from DiaryNews root: `data/chat.db`, `data/chroma/`, `data/uploads/`
-- No duplicate CORS (parent already handles it)
+`cd backend/chat && python main.py`
 
-Path override via env var:
-```python
-DATA_DIR = os.environ.get("CHAT_DATA_DIR", "data")
-```
+- standalone FastAPI app
+- router mounted at `/api/chat`
+- local test UI at `/`
+- uses `CHAT_DATA_DIR` or `data/`
 
----
+### Integrated
 
-## Database Schema (chat.db)
-
-```sql
-CREATE TABLE documents (
-    id          TEXT PRIMARY KEY,        -- uuid4
-    filename    TEXT NOT NULL,
-    file_type   TEXT NOT NULL,           -- pdf, md, txt
-    file_size   INTEGER NOT NULL,
-    chunk_count INTEGER NOT NULL DEFAULT 0,
-    uploaded_at TEXT NOT NULL,
-    status      TEXT NOT NULL DEFAULT 'processing'  -- processing, ready, error
-);
-
-CREATE TABLE conversations (
-    id          TEXT PRIMARY KEY,        -- uuid4
-    title       TEXT NOT NULL,
-    created_at  TEXT NOT NULL,
-    updated_at  TEXT NOT NULL
-);
-
-CREATE TABLE messages (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-    role            TEXT NOT NULL,        -- user, assistant
-    content         TEXT NOT NULL,
-    sources         TEXT,                 -- JSON: [{document_id, filename, chunk_text}]
-    created_at      TEXT NOT NULL
-);
-```
-
----
-
-## Chunking Strategy
-
-- `CHUNK_SIZE = 800` characters (~200 tokens)
-- `CHUNK_OVERLAP = 200` characters
-- Split at sentence boundaries (`. `, `! `, `? `) when possible
-- PDF: `pypdf2` page-by-page text extraction
-- MD/TXT: read as plain text
-- Each chunk carries metadata: `{document_id, chunk_index, filename, page_number}`
-
----
-
-## RAG Flow
-
-```
-User sends message
-    |
-    v
-1. Save user message to messages table
-2. Query ChromaDB with user message text (top 5 chunks)
-3. Build context string from retrieved chunks
-4. Load last 10 messages (5 turns) for conversation history
-5. Construct: [system_prompt_with_context, ...history, user_message]
-6. Call MiniMax (multi-turn messages API)
-7. Save assistant response + source references to messages table
-8. Return {role, content, sources}
-```
-
----
-
-## API Endpoints
-
-All under the router. When mounted in DiaryNews: `/api/chat/...`
-
-| Method | Path | Purpose |
-|--------|------|---------|
-| POST | `/documents/upload` | Upload file -> parse, chunk, embed |
-| GET | `/documents` | List documents with status |
-| DELETE | `/documents/{id}` | Remove document + ChromaDB chunks |
-| POST | `/conversations` | Create new conversation |
-| GET | `/conversations` | List all conversations |
-| GET | `/conversations/{id}` | Get conversation with messages |
-| DELETE | `/conversations/{id}` | Delete conversation + messages |
-| POST | `/conversations/{id}/messages` | Send message, get RAG response |
-
----
-
-## DiaryNews Integration (3 touchpoints)
-
-### 1. Backend — `backend/api.py` (2 lines)
+Mounted by parent DiaryNews app:
 
 ```python
 from backend.chat.router import router as chat_router
 app.include_router(chat_router, prefix="/api/chat")
 ```
 
-### 2. API client — `react-frontend/src/api.js`
+## Database Schema
 
-```javascript
-// Chat - Documents
-uploadDocument: (file) => { const fd = new FormData(); fd.append('file', file); return http.post('/chat/documents/upload', fd).then(r => r.data) },
-getDocuments: () => http.get('/chat/documents').then(r => r.data),
-deleteDocument: (id) => http.delete(`/chat/documents/${id}`).then(r => r.data),
+Use a separate `chat.db`.
 
-// Chat - Conversations
-getConversations: () => http.get('/chat/conversations').then(r => r.data),
-createConversation: () => http.post('/chat/conversations').then(r => r.data),
-getConversation: (id) => http.get(`/chat/conversations/${id}`).then(r => r.data),
-deleteConversation: (id) => http.delete(`/chat/conversations/${id}`).then(r => r.data),
-sendMessage: (convId, content) => http.post(`/chat/conversations/${convId}/messages`, { content }).then(r => r.data),
+### `kb_sources`
+
+```sql
+CREATE TABLE kb_sources (
+    id           TEXT PRIMARY KEY,
+    source_type  TEXT NOT NULL,      -- wiki
+    title        TEXT NOT NULL,
+    path_or_ref  TEXT NOT NULL,
+    topic        TEXT,
+    language     TEXT,
+    status       TEXT NOT NULL DEFAULT 'ready',
+    updated_at   TEXT,
+    ingested_at  TEXT NOT NULL,
+    metadata_json TEXT
+);
 ```
 
-### 3. React frontend
+### `kb_chunks`
 
-- `Header.jsx`: Add `'Chat'` to tab array
-- `App.jsx`: Import ChatTab, add render block + mobile nav entry (Chat manages its own state — no new useState in App)
-- New files:
-  - `react-frontend/src/pages/ChatTab.jsx` — split layout: conversation list left, chat area right
-  - `react-frontend/src/components/chat/ChatSidebar.jsx` — conversation list + document management
-  - `react-frontend/src/components/chat/MessageBubble.jsx` — message display with source citations
-  - `react-frontend/src/components/chat/DocumentUploader.jsx` — drag-and-drop file upload
+```sql
+CREATE TABLE kb_chunks (
+    id          TEXT PRIMARY KEY,
+    source_id   TEXT NOT NULL REFERENCES kb_sources(id) ON DELETE CASCADE,
+    chunk_index INTEGER NOT NULL,
+    section     TEXT,
+    content     TEXT NOT NULL,
+    vector_id   TEXT,
+    created_at  TEXT NOT NULL
+);
+```
 
----
+### `conversations`
+
+```sql
+CREATE TABLE conversations (
+    id          TEXT PRIMARY KEY,
+    title       TEXT NOT NULL,
+    topic_hint  TEXT,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+```
+
+### `messages`
+
+```sql
+CREATE TABLE messages (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    role            TEXT NOT NULL,
+    content         TEXT NOT NULL,
+    sources         TEXT,   -- JSON [{source_id, title, section, snippet}]
+    created_at      TEXT NOT NULL
+);
+```
+
+### `ingestion_runs`
+
+```sql
+CREATE TABLE ingestion_runs (
+    id           TEXT PRIMARY KEY,
+    source_group TEXT NOT NULL,      -- wiki
+    status       TEXT NOT NULL,
+    started_at   TEXT NOT NULL,
+    finished_at  TEXT,
+    notes        TEXT
+);
+```
+
+## Chunking Strategy
+
+Markdown-aware chunking should be used.
+
+Recommended rules:
+
+- chunk by headings / sections first
+- then split oversized sections with overlap
+- preserve page title + heading title in metadata
+
+Defaults:
+
+- `CHUNK_SIZE = 800`
+- `CHUNK_OVERLAP = 200`
+
+Each chunk should carry metadata:
+
+- `source_id`
+- `title`
+- `section`
+- `topic`
+- `language`
+
+## Query Routing
+
+Use rule-first routing in `query_router.py`.
+
+Suggested buckets:
+
+- `law`
+- `immigration`
+- `living`
+- `work`
+- `general`
+
+Example routing hints:
+
+- `签证`, `居留`, `AIMA`, `移民`
+  - `immigration`
+- `法律`, `合同`, `租房`, `劳动法`
+  - `law`
+- `NIF`, `NISS`, `SNS`, `报税`
+  - `living`
+
+Fallback:
+
+- `general`
+
+## Retrieval Flow
+
+```
+User sends message
+    |
+    v
+1. Save user message
+2. Route query to a wiki topic bucket
+3. Query vectorstore for top wiki chunks
+4. Build prompt from retrieved markdown context + recent conversation history
+5. Call MiniMax
+6. Save assistant response + citations
+7. Return response
+```
+
+## Prompt Rules
+
+The prompt should enforce:
+
+- answer only from provided markdown context
+- if insufficient support exists, say so
+- do not invent facts
+- cite relevant markdown pages / sections
+- for law / immigration topics, add light caution language
+
+## API Endpoints
+
+All under `/api/chat/...`
+
+### Conversations
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/conversations` | Create conversation |
+| GET | `/conversations` | List conversations |
+| GET | `/conversations/{id}` | Get conversation with messages |
+| DELETE | `/conversations/{id}` | Delete conversation |
+| POST | `/conversations/{id}/messages` | Send message, get grounded response |
+
+### Admin / ingestion
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| POST | `/admin/reindex/wiki` | Reindex markdown wiki |
+| GET | `/admin/sources` | List indexed wiki sources |
+
+No file-upload endpoint in v1.
+
+## DiaryNews Integration
+
+### Backend
+
+Mount the router from `backend/api.py`.
+
+### Frontend
+
+Later add:
+
+- `AI 助手` tab
+- conversation list
+- chat area
+- source citation display
 
 ## Implementation Tasks
 
-### Phase 1: Core Backend (standalone, all inside `backend/chat/`)
+### Phase 1 — Markdown Assistant Foundations
 
-**Task 1 — Scaffold + config + DB** [DONE]
-- Created: `__init__.py`, `config.py`, `database.py`, `CLAUDE.md`, `requirements.txt`, `static/`
-- Verified: `init_db()` creates schema, `get_db()` works with WAL + foreign keys
+**Task 1 — Refactor schema**
+- extend `database.py` with `kb_sources`, `kb_chunks`, `ingestion_runs`
 
-**Task 2 — LLM + storage + prompts**
-- Implement `llm.py`: multi-turn `call_minimax(messages, max_tokens, fallback)`
-- Implement `storage.py`: CRUD for documents, conversations, messages
-- Implement `prompts.py`: RAG system prompt, context template
-- **Verify**: Create conversation, add messages, query them back via Python shell
+**Task 2 — Storage + prompts**
+- implement `storage.py`
+- implement `prompts.py`
 
-**Task 3 — Document ingestion pipeline**
-- Implement `chunking.py`: parse PDF/MD/TXT, sliding-window chunking
-- Implement `vectorstore.py`: ChromaDB init, `add_chunks()`, `query()`, `delete_document()`
-- Upload orchestration (save file -> chunk -> embed -> update status)
-- **Verify**: Upload a test PDF, confirm chunks appear in ChromaDB
+**Task 3 — Wiki ingestion**
+- implement `ingestion/wiki.py`
+- scan `wiki/`
+- chunk markdown
+- store embeddings + metadata
 
-**Task 4 — RAG + API endpoints + standalone server**
-- Implement `rag.py`: retrieve context, build prompt, call LLM, save response
-- Implement `router.py`: all endpoints (documents CRUD, conversations CRUD, send message)
-- Implement `main.py`: standalone FastAPI app on port 8001
-- **Verify**: `python main.py` starts. Full flow via curl: upload doc, create conversation, send message, get RAG response
+**Task 4 — Query router + RAG**
+- implement `query_router.py`
+- implement `rag.py`
+- implement markdown-only answer pipeline
 
-### Phase 2: Standalone Test UI
+**Task 5 — API + standalone app**
+- implement `router.py`
+- implement `main.py`
+- support conversation flow + admin wiki reindex
 
-**Task 5 — Test HTML page**
-- Create `static/index.html`: document upload area, conversation list, chat interface
-- Vanilla HTML/JS/CSS, no build tools
-- `main.py` serves it at `/`
-- **Verify**: Open `http://localhost:8001/`, upload doc, chat, see source citations
+### Phase 2 — Test UI
 
-### Phase 3: DiaryNews Integration
+**Task 6 — Standalone test page**
+- minimal HTML test UI
+- conversation list
+- chat box
+- source citations
 
-**Task 6 — Backend integration**
-- Mount chat router in `backend/api.py` (2 lines)
-- Add chat dependencies to root `requirements.txt`
-- **Verify**: `python main.py` (DiaryNews), all `/api/chat/*` endpoints respond at port 8000
+### Phase 3 — DiaryNews Integration
 
-**Task 7 — React ChatTab**
-- Create ChatTab.jsx, ChatSidebar.jsx, MessageBubble.jsx, DocumentUploader.jsx
-- Add chat methods to api.js
-- Update Header.jsx tab array + App.jsx routing + mobile nav
-- **Verify**: Chat tab appears, upload works, conversation flows end-to-end in browser
+**Task 7 — Backend integration**
+- mount router in main app
 
-**Task 8 — Documentation**
-- Update root `CLAUDE.md`, `README.md` with chat module info
-- Finalize `backend/chat/CLAUDE.md`
-- **Verify**: All docs accurate
+**Task 8 — React assistant tab**
+- create assistant page/components
+- add tab and mobile nav entry
 
----
+## Success Criteria for V1
 
-## Future Considerations
+V1 is successful if:
 
-- **Streaming responses (SSE)**: Change `/messages` endpoint to `StreamingResponse`, frontend uses `EventSource`
-- **Index DiaryNews content**: Optionally embed news articles and YouTube captions into the same ChromaDB collection
-- **Multiple collections**: Separate ChromaDB collections per topic/project
-- **Better chunking**: Markdown-aware splitting (respect headers), semantic chunking
-- **Embedding model upgrade**: Swap to multilingual model if querying Portuguese/Chinese documents
+- you can write markdown pages into `wiki/`
+- the assistant indexes them
+- the assistant answers only from those markdown pages
+- the assistant cites the pages / sections used
+- the assistant says clearly when the wiki does not contain enough support
+
+## Future Versions
+
+Possible later additions:
+
+- curated document ingestion
+- recent news retrieval
+- official-source snapshots
+- mixed-source assistant
+- personal uploads
+
+But none of these should be in `v1.0`.

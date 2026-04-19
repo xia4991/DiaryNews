@@ -2,6 +2,8 @@
 .venv/
 data/diarynews.db
 data/diarynews.db-*
+data/chat.db
+data/chat.db-*
 data/uploads/
 __pycache__/
 *.pyc

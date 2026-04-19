@@ -33,6 +33,14 @@ export const api = {
   // Status
   getStatus: () => http.get('/status').then(r => r.data),
 
+  // AI Assistant
+  reindexAssistantWiki: () => http.post('/chat/admin/reindex-wiki').then(r => r.data),
+  listChatConversations: () => http.get('/chat/conversations').then(r => r.data),
+  getChatConversation: (id) => http.get(`/chat/conversations/${id}`).then(r => r.data),
+  createChatConversation: (data) => http.post('/chat/conversations', data).then(r => r.data),
+  deleteChatConversation: (id) => http.delete(`/chat/conversations/${id}`).then(r => r.data),
+  sendChatMessage: (id, data) => http.post(`/chat/conversations/${id}/messages`, data).then(r => r.data),
+
   // News
   getNews: () => http.get('/news').then(r => r.data),
   fetchNews: () => http.post('/news/fetch').then(r => r.data),

@@ -1,4 +1,4 @@
-const CHANNELS = ['首页', '华人关注', '葡萄牙新闻', '招聘', '房产', '二手', '社区']
+const CHANNELS = ['首页', '华人关注', '葡萄牙新闻', '招聘', '房产', '二手', '社区', 'AI 助手']
 
 const SUPPORT_ITEMS = [
   '联系与反馈',
@@ -39,7 +39,7 @@ export default function Footer({ onTabChange }) {
           </div>
 
           <p className="mt-5 max-w-sm text-sm leading-7 text-[#6E6255]">
-            为在葡华人提供新闻、招聘、房产、二手与社区交流的信息平台。
+            为在葡华人提供新闻、招聘、房产、二手、社区与 AI 助手的信息平台。
           </p>
 
           <div className="mt-5 inline-flex items-center gap-2 rounded-full border border-[#E3D8C9] bg-white/55 px-3 py-2 text-xs text-[#7E6F61]">

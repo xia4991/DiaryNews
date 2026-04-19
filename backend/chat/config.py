@@ -1,10 +1,12 @@
 import os
 
 # ── Paths ────────────────────────────────────────────────────────────────────
+MODULE_DIR = os.path.dirname(__file__)
+PROJECT_ROOT = os.path.abspath(os.path.join(MODULE_DIR, "..", ".."))
 DATA_DIR = os.environ.get("CHAT_DATA_DIR", "data")
 CHAT_DB_PATH = os.path.join(DATA_DIR, "chat.db")
 CHROMA_PATH = os.path.join(DATA_DIR, "chroma")
-UPLOAD_DIR = os.path.join(DATA_DIR, "chat_uploads")
+WIKI_ROOT = os.environ.get("CHAT_WIKI_ROOT", os.path.join(PROJECT_ROOT, "wiki"))
 
 # ── MiniMax LLM ──────────────────────────────────────────────────────────────
 MINIMAX_API_URL = os.environ.get(

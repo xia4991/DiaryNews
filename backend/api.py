@@ -22,6 +22,7 @@ from backend.config import (
     MEDIA_BACKEND, MEDIA_LOCAL_ROOT, MEDIA_PUBLIC_URL,
 )
 from backend.sources import RSS_SOURCES
+from backend.chat.router import router as chat_router
 
 JOB_EXPIRY_SWEEP_INTERVAL_SECONDS = 24 * 60 * 60
 
@@ -39,6 +40,7 @@ async def _job_expiry_loop():
 
 
 app = FastAPI(title="葡萄牙华人信息中心 API", version="2.0.0")
+app.include_router(chat_router, prefix="/api/chat")
 
 
 @app.on_event("startup")

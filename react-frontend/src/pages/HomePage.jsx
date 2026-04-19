@@ -6,6 +6,7 @@ const QUICK_ACTIONS = [
   { tab: '华人关注', label: '华人关注', icon: 'diversity_3', tone: '#9D3D33' },
   { tab: '葡萄牙新闻', label: '葡萄牙新闻', icon: 'newspaper', tone: '#2B6CB0' },
   { tab: '招聘', label: '招聘信息', icon: 'work', tone: '#2E7D5A' },
+  { tab: 'AI 助手', label: 'AI 助手', icon: 'smart_toy', tone: '#8B5CF6' },
 ]
 
 function formatDate(value) {
@@ -90,7 +91,7 @@ export default function HomePage({
                   葡萄牙华人信息中心
                 </h1>
                 <p className="mt-4 max-w-2xl text-[15px] leading-7 text-text-muted sm:mt-5 sm:text-lg sm:leading-8">
-                  一个为在葡华人整理新闻、招聘、视频与灵感的日常信息中心。先看重点，再进入你今天最需要的页面。
+                  一个为在葡华人整理新闻、招聘、房产、社区与知识问答的日常信息中心。先看重点，再进入你今天最需要的页面。
                 </p>
               </div>
 

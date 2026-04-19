@@ -8,6 +8,7 @@ import HomePage from './pages/HomePage'
 import NewsTab from './pages/NewsTab'
 import NewsTabSkeleton from './components/news/NewsTabSkeleton'
 import CommunityTab from './pages/CommunityTab'
+import AIAssistantTab from './pages/AIAssistantTab'
 import IdeasTab from './pages/IdeasTab'
 import JobsTab from './pages/JobsTab'
 import LoginPage from './pages/LoginPage'
@@ -159,7 +160,7 @@ export default function App() {
   ), [cnTagFiltered, activeCategory])
 
   // Available tabs based on auth (招聘 is public)
-  const baseTabs = ['首页', '华人关注', '葡萄牙新闻', '招聘', '房产', '二手', '社区']
+  const baseTabs = ['首页', '华人关注', '葡萄牙新闻', '招聘', '房产', '二手', '社区', 'AI 助手']
   const tabs = user
     ? [...baseTabs, 'Ideas', ...(user.is_admin ? ['管理'] : [])]
     : baseTabs
@@ -173,6 +174,7 @@ export default function App() {
         { label: '房产',    icon: 'home_work',     tab: '房产' },
         { label: '二手',    icon: 'shopping_bag',  tab: '二手' },
         { label: '社区',    icon: 'groups',        tab: '社区' },
+        { label: 'AI',      icon: 'smart_toy',     tab: 'AI 助手' },
         { label: 'Ideas',   icon: 'lightbulb',     tab: 'Ideas' },
         ...(user.is_admin ? [{ label: '管理', icon: 'admin_panel_settings', tab: '管理' }] : []),
       ]
@@ -184,6 +186,7 @@ export default function App() {
         { label: '房产',    icon: 'home_work',     tab: '房产' },
         { label: '二手',    icon: 'shopping_bag',  tab: '二手' },
         { label: '社区',    icon: 'groups',        tab: '社区' },
+        { label: 'AI',      icon: 'smart_toy',     tab: 'AI 助手' },
       ]
 
   if (loading) {
@@ -292,7 +295,7 @@ export default function App() {
         user={user}
         onLoginClick={() => setShowLogin(true)}
         sidebar={sidebar}
-        fullWidth={activeTab === 'Ideas' || activeTab === '首页' || activeTab === '管理'}
+        fullWidth={activeTab === 'Ideas' || activeTab === '首页' || activeTab === '管理' || activeTab === 'AI 助手'}
       >
         {activeTab === '首页' && (
           <HomePage
@@ -359,6 +362,9 @@ export default function App() {
           <CommunityTab
             onLoginRequired={() => setShowLogin(true)}
           />
+        )}
+        {activeTab === 'AI 助手' && (
+          <AIAssistantTab user={user} />
         )}
         {activeTab === '管理' && user?.is_admin && (
           <AdminModerationTab />
