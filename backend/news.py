@@ -1,6 +1,7 @@
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import feedparser
 import requests as _requests
@@ -9,7 +10,7 @@ from rapidfuzz import fuzz
 
 from backend.sources import CATEGORIES, CN_TAG_KEYWORDS, RSS_SOURCES, SOURCE_PRIORITY
 from backend.llm import call_minimax
-from backend.prompts import article_summary_prompt, article_chinese_prompt
+from backend.prompts import article_chinese_prompt
 from backend.utils import strip_html
 
 log = logging.getLogger("diarynews.news")
@@ -97,11 +98,6 @@ def _enrich_article(article: dict) -> dict:
     content = scrape_article(article["link"])
     text_for_llm = content[:3000] if content else article["summary"]
 
-    # Call 1: Portuguese summary
-    pt_prompt = article_summary_prompt(article["title"], text_for_llm)
-    ai_summary = call_minimax(pt_prompt, max_tokens=512, fallback=article["summary"])
-
-    # Call 2: Chinese title + tags + refined content
     zh_prompt = article_chinese_prompt(article["title"], text_for_llm)
     zh_raw = call_minimax(zh_prompt, max_tokens=1024, fallback="")
     zh_fields = _parse_chinese_response(zh_raw)
@@ -111,7 +107,7 @@ def _enrich_article(article: dict) -> dict:
     return {
         **article,
         "scraped_content": content,
-        "ai_summary": ai_summary,
+        "ai_summary": article["summary"],
         "category": llm_category if llm_category in VALID_CATEGORIES else article["category"],
         "title_zh": zh_fields["title_zh"],
         "tags_zh": tags_zh,
@@ -123,12 +119,6 @@ def re_enrich_article(article: dict) -> dict:
     """Retry LLM calls for an article that already has scraped_content stored."""
     text_for_llm = (article.get("scraped_content") or "")[:3000] or article.get("summary", "")
 
-    if not article.get("ai_summary") or article["ai_summary"] == article.get("summary"):
-        pt_prompt = article_summary_prompt(article["title"], text_for_llm)
-        ai_summary = call_minimax(pt_prompt, max_tokens=512, fallback=article.get("ai_summary", ""))
-    else:
-        ai_summary = article["ai_summary"]
-
     zh_prompt = article_chinese_prompt(article["title"], text_for_llm)
     zh_raw = call_minimax(zh_prompt, max_tokens=1024, fallback="")
     zh_fields = _parse_chinese_response(zh_raw)
@@ -138,7 +128,6 @@ def re_enrich_article(article: dict) -> dict:
                or _classify_cn_tags(article["title"], article.get("summary", "")))
     return {
         **article,
-        "ai_summary": ai_summary,
         "category": llm_category if llm_category in VALID_CATEGORIES else article.get("category", "Geral"),
         "title_zh": zh_fields["title_zh"] or article.get("title_zh", ""),
         "tags_zh": tags_zh,
@@ -150,7 +139,8 @@ def _parse_feed(source_name: str, url: str) -> list:
     """Parse a single RSS feed and return raw article dicts."""
     articles = []
     try:
-        feed = feedparser.parse(url)
+        resp = _requests.get(url, timeout=15)
+        feed = feedparser.parse(resp.content)
         for entry in feed.entries:
             title = strip_html(entry.get("title", ""))
             summary = strip_html(entry.get("summary", entry.get("description", "")))
@@ -170,7 +160,7 @@ def _parse_feed(source_name: str, url: str) -> list:
     return articles
 
 
-def fetch_all_feeds(existing_urls: set = None) -> list:
+def fetch_all_feeds(existing_urls: set = None, max_articles: int = 0, max_age_hours: int = 24) -> list:
     existing_urls = existing_urls or set()
 
     # Parse all RSS feeds in parallel
@@ -183,11 +173,25 @@ def fetch_all_feeds(existing_urls: set = None) -> list:
 
     new_articles = [a for a in raw_articles if a["link"] not in existing_urls]
     new_articles = _deduplicate(new_articles)
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=max_age_hours)).isoformat()
+    before_age = len(new_articles)
+    new_articles = [a for a in new_articles if a["published"] >= cutoff]
+    if before_age != len(new_articles):
+        log.info("Age filter: %d → %d (skipped %d older than %dh)",
+                 before_age, len(new_articles), before_age - len(new_articles), max_age_hours)
+
+    if max_articles and len(new_articles) > max_articles:
+        log.info("Capping %d new articles to %d for this cycle",
+                 len(new_articles), max_articles)
+        new_articles = new_articles[:max_articles]
+
     if not new_articles:
         return []
 
-    # Enrich new articles (scrape + LLM) with limited concurrency
+    # Enrich new articles (scrape + LLM) sequentially
     enriched = []
+    start = time.monotonic()
     with ThreadPoolExecutor(max_workers=1) as executor:
         futures = {executor.submit(_enrich_article, a): a for a in new_articles}
         for future in as_completed(futures):
@@ -197,6 +201,9 @@ def fetch_all_feeds(existing_urls: set = None) -> list:
                 original = futures[future]
                 log.warning("_enrich_article failed for '%s': %s", original["link"], exc)
                 enriched.append({**original, "scraped_content": "", "ai_summary": original["summary"]})
+    elapsed = time.monotonic() - start
+    log.info("Enriched %d articles in %.1fs (%.1fs/article)",
+             len(enriched), elapsed, elapsed / len(enriched) if enriched else 0)
     return enriched
 
 

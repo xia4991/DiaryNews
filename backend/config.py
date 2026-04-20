@@ -28,6 +28,10 @@ ADMIN_EMAILS = [e.strip() for e in os.environ.get("ADMIN_EMAILS", "").split(",")
 CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
 
 # ── Media storage ────────────────────────────────────────────────────────────
+# ── News fetch ───────────────────────────────────────────────────────────────
+NEWS_FETCH_INTERVAL = int(os.environ.get("NEWS_FETCH_INTERVAL", "3600"))  # 0 to disable
+
+# ── Media storage ────────────────────────────────────────────────────────────
 MEDIA_BACKEND    = os.environ.get("MEDIA_BACKEND", "local")      # local | s3
 MEDIA_LOCAL_ROOT = os.environ.get("MEDIA_LOCAL_ROOT", "data/uploads")
 MEDIA_PUBLIC_URL = os.environ.get("MEDIA_PUBLIC_URL", "/uploads")
