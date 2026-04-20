@@ -16,21 +16,25 @@ log = logging.getLogger("diarynews.services")
 
 # ── News ─────────────────────────────────────────────────────────────────────
 
-def fetch_and_save_news() -> dict:
-    """Fetch new feeds first (fast), then retry incomplete articles."""
+def fetch_and_save_news(max_new: int = 0, max_retry: int = 20, max_age_hours: int = 24) -> dict:
+    """Fetch new feeds first (fast), then retry incomplete articles.
+
+    max_new: cap on new articles to enrich (0 = unlimited, used by manual fetch).
+    max_retry: cap on incomplete articles to retry per cycle.
+    """
     data = storage.load_news()
     existing = data.get("articles", [])
     existing_urls = {a["link"] for a in existing}
 
     # Step 1: Fetch & save new articles (fast when most already exist)
-    new_articles = fetch_all_feeds(existing_urls=existing_urls)
+    new_articles = fetch_all_feeds(existing_urls=existing_urls, max_articles=max_new, max_age_hours=max_age_hours)
     now = datetime.now(timezone.utc).isoformat()
     if new_articles:
         storage.save_news({"last_updated": now, "articles": new_articles})
 
     # Step 2: Retry incomplete articles (missing translation or tags)
     incomplete = [a for a in existing
-                  if not a.get("title_zh") or not a.get("content_zh") or not a.get("tags_zh")][:20]
+                  if not a.get("title_zh") or not a.get("content_zh") or not a.get("tags_zh")][:max_retry]
     retried = []
     for article in incomplete:
         try:
@@ -45,6 +49,10 @@ def fetch_and_save_news() -> dict:
 
     if not new_articles and not retried:
         storage.save_news({"last_updated": now, "articles": []})
+
+    storage.add_log("news_fetch",
+        f"抓取完成: {len(new_articles)}条新文章, {len(retried)}条重试",
+        {"new_count": len(new_articles), "retried_count": len(retried)})
 
     return {
         "new_count": len(new_articles),
@@ -119,6 +127,9 @@ def moderate_listing(listing_id: int, admin_id: int, status: str) -> dict:
     resolved = storage.resolve_reports_for_listing(
         listing_id, f"status={status} by admin_id={admin_id}"
     )
+    storage.add_log("listing_moderate",
+        f"信息#{listing_id} 状态变更为 {status}",
+        {"listing_id": listing_id, "admin_id": admin_id, "status": status})
     return {**listing, "reports_resolved": resolved}
 
 

@@ -1,12 +1,14 @@
 import asyncio
 import logging
 from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
 from typing import Literal, Optional
 
 log = logging.getLogger("diarynews.api")
 
 from fastapi import FastAPI, HTTPException, Depends, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -20,6 +22,7 @@ from backend.auth import (
 from backend.config import (
     ADMIN_EMAILS, CORS_ORIGINS,
     MEDIA_BACKEND, MEDIA_LOCAL_ROOT, MEDIA_PUBLIC_URL,
+    NEWS_FETCH_INTERVAL,
 )
 from backend.sources import RSS_SOURCES
 from backend.chat.router import router as chat_router
@@ -40,6 +43,20 @@ async def _job_expiry_loop():
         await asyncio.sleep(JOB_EXPIRY_SWEEP_INTERVAL_SECONDS)
 
 
+async def _news_fetch_loop():
+    """Background task: auto-fetch news on a configurable interval."""
+    await asyncio.sleep(30)
+    while True:
+        try:
+            result = await asyncio.to_thread(
+                services.fetch_and_save_news, max_new=15, max_retry=5, max_age_hours=3
+            )
+            log.info("Auto-fetch: %d new, %d retried", result["new_count"], result["retried_count"])
+        except Exception:
+            log.exception("Auto news fetch failed")
+        await asyncio.sleep(NEWS_FETCH_INTERVAL)
+
+
 app = FastAPI(title="葡萄牙华人信息中心 API", version="2.0.0")
 app.include_router(chat_router, prefix="/api/chat")
 
@@ -47,6 +64,9 @@ app.include_router(chat_router, prefix="/api/chat")
 @app.on_event("startup")
 async def _start_background_tasks():
     asyncio.create_task(_job_expiry_loop())
+    if NEWS_FETCH_INTERVAL > 0:
+        asyncio.create_task(_news_fetch_loop())
+        log.info("Auto-fetch enabled: every %ds", NEWS_FETCH_INTERVAL)
 
 
 if MEDIA_BACKEND == "local":
@@ -88,6 +108,10 @@ def google_login(req: GoogleLoginRequest):
         avatar=info["picture"],
         is_admin=is_admin,
     )
+    is_new = user["created_at"] == user.get("updated_at")
+    storage.add_log("user_login",
+        f"{'新用户注册' if is_new else '用户登录'}: {user['name']} ({user['email']})",
+        {"user_id": user["id"], "is_new": is_new})
     token = create_jwt(user["id"], user["email"], bool(user["is_admin"]))
     return {"token": token, "user": _user_public(user)}
 
@@ -453,6 +477,9 @@ def generate_news_brief(
     brief = generate_and_store_daily_news_brief(type, date_str)
     if brief is None:
         raise HTTPException(status_code=400, detail="Not enough articles to generate a brief for this date")
+    storage.add_log("brief_generate",
+        f"生成简报: {type} {date_str}",
+        {"brief_type": type, "brief_date": date_str, "article_count": brief.get("article_count", 0)})
     return {
         "brief": brief,
         "replaced": existing is not None,
@@ -922,6 +949,14 @@ def admin_recent_listings(
     return storage.list_all_recent(limit=limit)
 
 
+@app.get("/api/admin/listings/{listing_id}")
+def admin_get_listing(listing_id: int, _admin: dict = Depends(require_admin)):
+    listing = storage.get_listing(listing_id)
+    if not listing:
+        raise HTTPException(status_code=404, detail=f"Listing {listing_id} not found")
+    return listing
+
+
 @app.patch("/api/admin/listings/{listing_id}/status")
 def admin_set_listing_status(
     listing_id: int,
@@ -934,4 +969,28 @@ def admin_set_listing_status(
         raise HTTPException(status_code=404, detail=f"Listing {listing_id} not found")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/admin/logs")
+def admin_list_logs(
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    event_type: str = Query(None),
+    _admin: dict = Depends(require_admin),
+):
+    return storage.list_logs(limit=limit, offset=offset, event_type=event_type)
+
+
+# ── SPA static serving (must be AFTER all /api routes) ──────────────────────
+
+_SPA_DIR = Path(__file__).resolve().parent.parent / "react-frontend" / "dist"
+if _SPA_DIR.is_dir():
+    app.mount("/assets", StaticFiles(directory=_SPA_DIR / "assets"), name="spa-assets")
+
+    @app.get("/{path:path}")
+    async def _spa_fallback(path: str):
+        file = _SPA_DIR / path
+        if file.is_file() and ".." not in path:
+            return FileResponse(file)
+        return FileResponse(_SPA_DIR / "index.html")
 

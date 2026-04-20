@@ -1,14 +1,6 @@
 """LLM prompt templates — single source of truth for all prompts."""
 
 
-def article_summary_prompt(title: str, content: str) -> str:
-    return (
-        f"Título: {title}\n\nConteúdo:\n{content}\n\n"
-        "Escreve um resumo claro e objetivo em português com 2 a 3 frases. "
-        "Vai direto aos factos, sem introduções como 'Este artigo fala de'."
-    )
-
-
 def article_chinese_prompt(title: str, content: str) -> str:
     return (
         f"Título: {title}\n\nConteúdo:\n{content}\n\n"

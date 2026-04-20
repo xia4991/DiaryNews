@@ -31,6 +31,7 @@ from backend.storage.users import (  # noqa: F401
     get_user_by_id,
     update_user_profile,
 )
+from backend.storage.admin_logs import add_log, list_logs  # noqa: F401
 from backend.storage.listings import (  # noqa: F401
     create_listing,
     get_listing,

@@ -98,6 +98,8 @@ export const api = {
   // Admin / Moderation
   listReports: (params) => http.get('/admin/reports', { params }).then(r => r.data),
   listRecentListings: (params) => http.get('/admin/listings/recent', { params }).then(r => r.data),
+  getAdminListing: (id) => http.get(`/admin/listings/${id}`).then(r => r.data),
   setListingStatus: (id, status) => http.patch(`/admin/listings/${id}/status`, { status }).then(r => r.data),
   reportListing: (id, reason) => http.post(`/listings/${id}/report`, { reason }).then(r => r.data),
+  listAdminLogs: (params) => http.get('/admin/logs', { params }).then(r => r.data),
 }

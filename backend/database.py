@@ -198,6 +198,17 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_reports_listing              ON listing_reports (listing_id);
             CREATE INDEX IF NOT EXISTS idx_reports_unresolved           ON listing_reports (created_at DESC)
                 WHERE resolved_at IS NULL;
+
+            CREATE TABLE IF NOT EXISTS admin_logs (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type  TEXT    NOT NULL,
+                message     TEXT    NOT NULL,
+                details     TEXT,
+                created_at  TEXT    NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_admin_logs_created ON admin_logs (created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_admin_logs_type    ON admin_logs (event_type, created_at DESC);
         """)
         _migrate(conn)
 
