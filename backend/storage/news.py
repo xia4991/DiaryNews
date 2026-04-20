@@ -1,3 +1,5 @@
+from typing import Optional
+
 from backend.config import MAX_ARTICLES
 from backend.database import get_db
 from backend.storage.base import _ensure_db, _get_meta, _set_meta
@@ -27,11 +29,22 @@ def save_news(data: dict) -> None:
 def _bulk_upsert_articles(articles: list) -> None:
     with get_db() as conn:
         conn.executemany(
-            """INSERT OR REPLACE INTO articles
+            """INSERT INTO articles
                (link, title, summary, source, category, published, scraped_content, ai_summary,
                 title_zh, content_zh, tags_zh)
                VALUES (:link,:title,:summary,:source,:category,:published,:scraped_content,:ai_summary,
-                :title_zh,:content_zh,:tags_zh)""",
+                :title_zh,:content_zh,:tags_zh)
+               ON CONFLICT(link) DO UPDATE SET
+                 title = excluded.title,
+                 summary = excluded.summary,
+                 source = excluded.source,
+                 category = excluded.category,
+                 published = excluded.published,
+                 scraped_content = excluded.scraped_content,
+                 ai_summary = excluded.ai_summary,
+                 title_zh = excluded.title_zh,
+                 content_zh = excluded.content_zh,
+                 tags_zh = excluded.tags_zh""",
             [
                 {
                     "link":            a.get("link", ""),
@@ -49,6 +62,22 @@ def _bulk_upsert_articles(articles: list) -> None:
                 for a in articles
             ],
         )
+
+
+def increment_article_view(link: str) -> Optional[dict]:
+    _ensure_db()
+    with get_db() as conn:
+        conn.execute(
+            """UPDATE articles
+               SET view_count = COALESCE(view_count, 0) + 1
+               WHERE link = ?""",
+            (link,),
+        )
+        row = conn.execute(
+            "SELECT link, view_count FROM articles WHERE link = ?",
+            (link,),
+        ).fetchone()
+    return dict(row) if row else None
 
 
 def _trim_articles() -> None:

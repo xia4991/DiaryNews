@@ -43,6 +43,9 @@ export const api = {
 
   // News
   getNews: () => http.get('/news').then(r => r.data),
+  recordNewsView: (link) => http.post('/news/view', { link }).then(r => r.data),
+  listNewsBriefs: (params) => http.get('/news/briefs', { params }).then(r => r.data),
+  generateNewsBrief: (params) => http.post('/news/briefs/generate', null, { params }).then(r => r.data),
   fetchNews: () => http.post('/news/fetch').then(r => r.data),
 
   // Media
@@ -97,10 +100,4 @@ export const api = {
   listRecentListings: (params) => http.get('/admin/listings/recent', { params }).then(r => r.data),
   setListingStatus: (id, status) => http.patch(`/admin/listings/${id}/status`, { status }).then(r => r.data),
   reportListing: (id, reason) => http.post(`/listings/${id}/report`, { reason }).then(r => r.data),
-
-  // Ideas
-  getIdeas: () => http.get('/ideas').then(r => r.data),
-  createIdea: (data) => http.post('/ideas', data).then(r => r.data),
-  updateIdea: (id, data) => http.put(`/ideas/${id}`, data).then(r => r.data),
-  deleteIdea: (id) => http.delete(`/ideas/${id}`).then(r => r.data),
 }

@@ -3,6 +3,10 @@ import Badge from '../ui/Badge'
 import { CATEGORY_ZH } from '../../constants/categories'
 import { categoryColor, TAG_COLOR } from '../../constants/colors'
 
+function formatViews(value) {
+  return `${Number(value || 0)} 次阅读`
+}
+
 export default function ArticleCardFeatured({ article, onClick }) {
   if (!article) return null
   const pub = article.published?.slice(0, 10)
@@ -42,11 +46,17 @@ export default function ArticleCardFeatured({ article, onClick }) {
         {article.content_zh || article.ai_summary || article.summary}
       </p>
 
-      <div className="mt-4 flex items-center gap-2">
-        <div className="h-6 w-6 rounded-full flex items-center justify-center text-[11px] font-bold bg-accent-subtle text-accent">
-          {article.source?.[0]}
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className="h-6 w-6 rounded-full flex items-center justify-center text-[11px] font-bold bg-accent-subtle text-accent">
+            {article.source?.[0]}
+          </div>
+          <span className="text-xs font-semibold text-text-muted">{article.source}</span>
         </div>
-        <span className="text-xs font-semibold text-text-muted">{article.source}</span>
+        <span className="inline-flex items-center gap-1 text-[11px] text-text-subtle">
+          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>visibility</span>
+          {formatViews(article.view_count)}
+        </span>
       </div>
     </Card>
   )

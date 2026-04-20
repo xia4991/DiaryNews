@@ -5,7 +5,9 @@ from datetime import datetime, timezone
 import feedparser
 import requests as _requests
 
-from backend.sources import CATEGORIES, RSS_SOURCES
+from rapidfuzz import fuzz
+
+from backend.sources import CATEGORIES, CN_TAG_KEYWORDS, RSS_SOURCES, SOURCE_PRIORITY
 from backend.llm import call_minimax
 from backend.prompts import article_summary_prompt, article_chinese_prompt
 from backend.utils import strip_html
@@ -20,6 +22,33 @@ def classify(title: str, summary: str) -> str:
             if kw in text:
                 return category
     return "Geral"
+
+
+def _classify_cn_tags(title: str, summary: str) -> str:
+    """Keyword fallback for Chinese-interest tags when LLM returns empty."""
+    text = (title + " " + summary).lower()
+    matched = [tag for tag, keywords in CN_TAG_KEYWORDS.items()
+               if any(kw in text for kw in keywords)]
+    return ", ".join(matched)
+
+
+def _deduplicate(articles: list) -> list:
+    """Remove near-duplicate articles, keeping the highest-priority source."""
+    articles.sort(key=lambda a: SOURCE_PRIORITY.get(a["source"], 99))
+    accepted = []
+    for article in articles:
+        pub_date = article["published"][:10]
+        is_dup = any(
+            kept["published"][:10] == pub_date
+            and fuzz.token_sort_ratio(article["title"].lower(), kept["title"].lower()) > 70
+            for kept in accepted
+        )
+        if not is_dup:
+            accepted.append(article)
+    if len(articles) != len(accepted):
+        log.info("Dedup: %d articles → %d (dropped %d duplicates)",
+                 len(articles), len(accepted), len(articles) - len(accepted))
+    return accepted
 
 
 def _parse_date(entry) -> str:
@@ -41,22 +70,27 @@ def scrape_article(url: str) -> str:
         return ""
 
 
+VALID_CATEGORIES = {c for c, _ in CATEGORIES} | {"Geral"}
+
+
 def _parse_chinese_response(text: str) -> dict:
     title_zh = ""
     tags_zh = ""
     content_zh = ""
+    category = ""
     for line in text.split("\n"):
         if line.startswith("TITLE_ZH:"):
             title_zh = line[len("TITLE_ZH:"):].strip()
         elif line.startswith("TAGS_ZH:"):
             raw = line[len("TAGS_ZH:"):].strip()
             tags_zh = "" if raw == "无" else raw
+        elif line.startswith("CATEGORY:"):
+            category = line[len("CATEGORY:"):].strip()
         elif line.startswith("CONTENT_ZH:"):
-            # Everything after CONTENT_ZH: tag (may be multiline)
             idx = text.index("CONTENT_ZH:")
             content_zh = text[idx + len("CONTENT_ZH:"):].strip()
             break
-    return {"title_zh": title_zh, "tags_zh": tags_zh, "content_zh": content_zh}
+    return {"title_zh": title_zh, "tags_zh": tags_zh, "content_zh": content_zh, "category": category}
 
 
 def _enrich_article(article: dict) -> dict:
@@ -72,12 +106,15 @@ def _enrich_article(article: dict) -> dict:
     zh_raw = call_minimax(zh_prompt, max_tokens=1024, fallback="")
     zh_fields = _parse_chinese_response(zh_raw)
 
+    llm_category = zh_fields.get("category", "")
+    tags_zh = zh_fields["tags_zh"] or _classify_cn_tags(article["title"], article["summary"])
     return {
         **article,
         "scraped_content": content,
         "ai_summary": ai_summary,
+        "category": llm_category if llm_category in VALID_CATEGORIES else article["category"],
         "title_zh": zh_fields["title_zh"],
-        "tags_zh": zh_fields["tags_zh"],
+        "tags_zh": tags_zh,
         "content_zh": zh_fields["content_zh"],
     }
 
@@ -96,11 +133,15 @@ def re_enrich_article(article: dict) -> dict:
     zh_raw = call_minimax(zh_prompt, max_tokens=1024, fallback="")
     zh_fields = _parse_chinese_response(zh_raw)
 
+    llm_category = zh_fields.get("category", "")
+    tags_zh = (zh_fields["tags_zh"] or article.get("tags_zh", "")
+               or _classify_cn_tags(article["title"], article.get("summary", "")))
     return {
         **article,
         "ai_summary": ai_summary,
+        "category": llm_category if llm_category in VALID_CATEGORIES else article.get("category", "Geral"),
         "title_zh": zh_fields["title_zh"] or article.get("title_zh", ""),
-        "tags_zh": zh_fields["tags_zh"] or article.get("tags_zh", ""),
+        "tags_zh": tags_zh,
         "content_zh": zh_fields["content_zh"] or article.get("content_zh", ""),
     }
 
@@ -134,13 +175,14 @@ def fetch_all_feeds(existing_urls: set = None) -> list:
 
     # Parse all RSS feeds in parallel
     raw_articles = []
-    with ThreadPoolExecutor(max_workers=6) as executor:
+    with ThreadPoolExecutor(max_workers=9) as executor:
         futures = {executor.submit(_parse_feed, name, url): name
                    for name, url in RSS_SOURCES.items()}
         for future in as_completed(futures):
             raw_articles.extend(future.result())
 
     new_articles = [a for a in raw_articles if a["link"] not in existing_urls]
+    new_articles = _deduplicate(new_articles)
     if not new_articles:
         return []
 

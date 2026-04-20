@@ -9,7 +9,6 @@ import NewsTab from './pages/NewsTab'
 import NewsTabSkeleton from './components/news/NewsTabSkeleton'
 import CommunityTab from './pages/CommunityTab'
 import AIAssistantTab from './pages/AIAssistantTab'
-import IdeasTab from './pages/IdeasTab'
 import JobsTab from './pages/JobsTab'
 import LoginPage from './pages/LoginPage'
 import JobsSidebar from './components/listings/JobsSidebar'
@@ -32,7 +31,6 @@ export default function App() {
   const [activeCnTag, setActiveCnTag] = useState('All')
 
   const [jobs, setJobs] = useState([])
-  const [ideas, setIdeas] = useState([])
   const [jobsIndustry, setJobsIndustry] = useState('All')
   const [jobsCounts, setJobsCounts] = useState({})
   const [reDealType, setReDealType] = useState('All')
@@ -45,6 +43,28 @@ export default function App() {
   const [newsTabLoading, setNewsTabLoading] = useState(null)
   const newsTabTimerRef = useRef(null)
 
+  const applyArticleViewCount = useCallback((link, viewCount) => {
+    setArticles(prev => prev.map(article => (
+      article.link === link
+        ? { ...article, view_count: viewCount }
+        : article
+    )))
+  }, [])
+
+  const handleArticleOpen = useCallback((article) => {
+    if (!article?.link) return article?.view_count || 0
+    const optimisticCount = Number(article.view_count || 0) + 1
+    applyArticleViewCount(article.link, optimisticCount)
+    api.recordNewsView(article.link)
+      .then((data) => {
+        if (typeof data.view_count === 'number') {
+          applyArticleViewCount(article.link, data.view_count)
+        }
+      })
+      .catch(() => {})
+    return optimisticCount
+  }, [applyArticleViewCount])
+
   // Load news (public)
   useEffect(() => {
     api.getNews().then(d => {
@@ -54,15 +74,9 @@ export default function App() {
     api.listJobs({ limit: 12 }).then(d => setJobs(d.items || [])).catch(() => {})
   }, [])
 
-  // Load Ideas only when logged in
-  useEffect(() => {
-    if (!user) return
-    api.getIdeas().then(d => setIdeas(d)).catch(() => {})
-  }, [user])
-
   // If user logs out while on a protected tab, switch to news
   useEffect(() => {
-    if (!user && (activeTab === 'Ideas' || activeTab === '管理')) {
+    if (!user && activeTab === '管理') {
       setActiveTab('华人关注')
     }
     if (user && !user.is_admin && activeTab === '管理') {
@@ -81,21 +95,6 @@ export default function App() {
       setFetching(false)
     }
   }
-
-  const handleCreateIdea = useCallback(async (data) => {
-    const idea = await api.createIdea(data)
-    setIdeas(prev => [idea, ...prev])
-  }, [])
-
-  const handleUpdateIdea = useCallback(async (id, data) => {
-    const idea = await api.updateIdea(id, data)
-    setIdeas(prev => prev.map(i => i.id === id ? idea : i))
-  }, [])
-
-  const handleDeleteIdea = useCallback(async (id) => {
-    await api.deleteIdea(id)
-    setIdeas(prev => prev.filter(i => i.id !== id))
-  }, [])
 
   const loadJobs = useCallback(async () => {
     const d = await api.listJobs({ limit: 12 })
@@ -119,16 +118,24 @@ export default function App() {
       : articles.filter(a => a.category === activeCategory)
   ), [articles, activeCategory])
 
-  // Chinese-interest articles (have non-empty tags_zh)
-  const cnArticles = useMemo(
-    () => articles.filter(a => a.tags_zh && a.tags_zh.trim() !== ''),
-    [articles]
-  )
+  // Chinese-interest articles: tagged by LLM/keywords, or from relevant categories
+  const CN_RELEVANT_CATEGORIES = useMemo(() => new Set(['Sociedade', 'Economia', 'Internacional']), [])
+  const cnArticles = useMemo(() => {
+    const relevant = articles.filter(a =>
+      (a.tags_zh && a.tags_zh.trim() !== '') || CN_RELEVANT_CATEGORIES.has(a.category)
+    )
+    return relevant.sort((a, b) => {
+      const aScore = (a.tags_zh || '').split(',').filter(t => t.trim()).length
+      const bScore = (b.tags_zh || '').split(',').filter(t => t.trim()).length
+      if (aScore !== bScore) return bScore - aScore
+      return (b.published || '').localeCompare(a.published || '')
+    })
+  }, [articles, CN_RELEVANT_CATEGORIES])
 
   const cnTags = useMemo(() => {
     const cnTagMap = {}
     for (const a of cnArticles) {
-      for (const tag of a.tags_zh.split(',').map(t => t.trim()).filter(Boolean)) {
+      for (const tag of (a.tags_zh || '').split(',').map(t => t.trim()).filter(Boolean)) {
         cnTagMap[tag] = (cnTagMap[tag] || 0) + 1
       }
     }
@@ -140,7 +147,7 @@ export default function App() {
   const cnTagFiltered = useMemo(() => (
     activeCnTag === 'All'
       ? cnArticles
-      : cnArticles.filter(a => a.tags_zh.split(',').map(t => t.trim()).includes(activeCnTag))
+      : cnArticles.filter(a => (a.tags_zh || '').split(',').map(t => t.trim()).includes(activeCnTag))
   ), [cnArticles, activeCnTag])
 
   const cnCategories = useMemo(() => {
@@ -162,7 +169,7 @@ export default function App() {
   // Available tabs based on auth (招聘 is public)
   const baseTabs = ['首页', '华人关注', '葡萄牙新闻', '招聘', '房产', '二手', '社区', 'AI 助手']
   const tabs = user
-    ? [...baseTabs, 'Ideas', ...(user.is_admin ? ['管理'] : [])]
+    ? [...baseTabs, ...(user.is_admin ? ['管理'] : [])]
     : baseTabs
 
   const mobileTabs = user
@@ -175,7 +182,6 @@ export default function App() {
         { label: '二手',    icon: 'shopping_bag',  tab: '二手' },
         { label: '社区',    icon: 'groups',        tab: '社区' },
         { label: 'AI',      icon: 'smart_toy',     tab: 'AI 助手' },
-        { label: 'Ideas',   icon: 'lightbulb',     tab: 'Ideas' },
         ...(user.is_admin ? [{ label: '管理', icon: 'admin_panel_settings', tab: '管理' }] : []),
       ]
     : [
@@ -295,7 +301,7 @@ export default function App() {
         user={user}
         onLoginClick={() => setShowLogin(true)}
         sidebar={sidebar}
-        fullWidth={activeTab === 'Ideas' || activeTab === '首页' || activeTab === '管理' || activeTab === 'AI 助手'}
+        fullWidth={activeTab === '首页' || activeTab === '管理' || activeTab === 'AI 助手'}
       >
         {activeTab === '首页' && (
           <HomePage
@@ -303,10 +309,10 @@ export default function App() {
             articles={articles}
             cnArticles={cnArticles}
             jobs={jobs}
-            ideas={ideas}
             newsLastUpdated={newsLastUpdated}
             onTabChange={handleTabChange}
             onLoginClick={() => setShowLogin(true)}
+            onArticleOpen={handleArticleOpen}
           />
         )}
         {activeTab === '葡萄牙新闻' && (
@@ -317,6 +323,8 @@ export default function App() {
               key={`portugal-${activeCategory}`}
               articles={filteredArticles}
               layout="portugal"
+              isAdmin={user?.is_admin}
+              onArticleOpen={handleArticleOpen}
             />
           )
         )}
@@ -331,6 +339,8 @@ export default function App() {
               tabSubtitle="与在葡华人相关的新闻精选。"
               emptyHint="获取葡萄牙新闻"
               layout="china"
+              isAdmin={user?.is_admin}
+              onArticleOpen={handleArticleOpen}
             />
           )
         )}
@@ -368,14 +378,6 @@ export default function App() {
         )}
         {activeTab === '管理' && user?.is_admin && (
           <AdminModerationTab />
-        )}
-        {activeTab === 'Ideas' && (
-          <IdeasTab
-            ideas={ideas}
-            onCreate={handleCreateIdea}
-            onUpdate={handleUpdateIdea}
-            onDelete={handleDeleteIdea}
-          />
         )}
       </AppShell>
     </>

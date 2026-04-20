@@ -1,6 +1,10 @@
+import { useMemo, useState } from 'react'
+import ArticleModal from '../components/news/ArticleModal'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
+import HotWindowToggle from '../components/news/HotWindowToggle'
+import { describeHotness, sortArticlesByHotness } from '../utils/newsHotness'
 
 const QUICK_ACTIONS = [
   { tab: '华人关注', label: '华人关注', icon: 'diversity_3', tone: '#9D3D33' },
@@ -12,6 +16,16 @@ const QUICK_ACTIONS = [
 function formatDate(value) {
   if (!value) return '暂无更新'
   return value.slice(0, 16).replace('T', ' ')
+}
+
+function formatViews(value) {
+  return `${Number(value || 0)} 次阅读`
+}
+
+function hotWindowEmptyLabel(window) {
+  if (window === 'today') return '今天还没有形成明显热度'
+  if (window === 'week') return '本周还没有形成明显热度'
+  return '当前还没有热门新闻'
 }
 
 function StatCard({ label, value, hint }) {
@@ -46,16 +60,33 @@ export default function HomePage({
   articles,
   cnArticles,
   jobs,
-  ideas,
   newsLastUpdated,
   onTabChange,
   onLoginClick,
+  onArticleOpen,
 }) {
+  const [selectedArticleState, setSelectedArticleState] = useState(null)
+  const [hotWindow, setHotWindow] = useState('week')
   const featuredCn = cnArticles.slice(0, 3)
   const latestNews = articles.slice(0, 4)
   const latestJobs = jobs.slice(0, 3)
   const leadArticle = featuredCn[0] || latestNews[0] || null
-  const signalArticles = (featuredCn.slice(1, 3).length ? featuredCn.slice(1, 3) : latestNews.slice(1, 3))
+  const hotNews = useMemo(
+    () => sortArticlesByHotness(articles, { limit: 3, window: hotWindow }),
+    [articles, hotWindow]
+  )
+  const hotCnArticles = useMemo(
+    () => sortArticlesByHotness(cnArticles, { limit: 3, window: hotWindow }),
+    [cnArticles, hotWindow]
+  )
+  const articlesByLink = useMemo(
+    () => new Map(articles.map((article) => [article.link, article])),
+    [articles]
+  )
+  const selectedArticle = useMemo(() => {
+    if (!selectedArticleState?.link) return null
+    return articlesByLink.get(selectedArticleState.link) || selectedArticleState.fallbackArticle
+  }, [articlesByLink, selectedArticleState])
   const topTags = Object.entries(
     cnArticles.reduce((acc, article) => {
       for (const tag of (article.tags_zh || '').split(',').map((item) => item.trim()).filter(Boolean)) {
@@ -66,6 +97,15 @@ export default function HomePage({
   )
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
+
+  const handleOpenArticle = (article) => {
+    const nextViewCount = onArticleOpen?.(article)
+    const optimisticArticle = typeof nextViewCount === 'number' ? { ...article, view_count: nextViewCount } : article
+    setSelectedArticleState({
+      link: article.link,
+      fallbackArticle: optimisticArticle,
+    })
+  }
 
   return (
     <div className="relative overflow-hidden">
@@ -182,31 +222,47 @@ export default function HomePage({
               <Card className="rounded-[28px] border-white/80 bg-white/92 shadow-[0_20px_50px_rgba(58,44,31,0.08)]">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <Badge color="#2B6CB0">快读</Badge>
+                    <Badge color="#B8843C">热门</Badge>
                     <h2 className="mt-3 text-xl font-black tracking-tight text-text" style={{ fontFamily: 'var(--font-headline)' }}>
-                      今日简报
+                      热门新闻
                     </h2>
                   </div>
-                  <button onClick={() => onTabChange('葡萄牙新闻')} className="text-xs font-semibold text-accent hover:text-accent-hover sm:text-sm">
-                    全部新闻
-                  </button>
+                  <div className="flex flex-col items-end gap-2">
+                    <button onClick={() => onTabChange('葡萄牙新闻')} className="text-xs font-semibold text-accent hover:text-accent-hover sm:text-sm">
+                      全部新闻
+                    </button>
+                    <HotWindowToggle value={hotWindow} onChange={setHotWindow} />
+                  </div>
                 </div>
 
                 <div className="mt-5 grid gap-4">
-                  {signalArticles.length > 0 ? signalArticles.map((article, index) => (
-                    <div key={article.link} className="flex gap-3 border-b border-border pb-4 last:border-b-0 last:pb-0">
+                  {hotNews.length > 0 ? hotNews.map((article, index) => (
+                    <button
+                      key={article.link}
+                      type="button"
+                      onClick={() => handleOpenArticle(article)}
+                      className="flex w-full gap-3 border-b border-border pb-4 text-left transition-colors last:border-b-0 last:pb-0 hover:bg-bg-subtle/50"
+                    >
                       <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-sm font-black text-accent">
                         {index + 1}
                       </span>
                       <div className="min-w-0">
-                        <p className="text-xs uppercase tracking-[0.14em] text-text-subtle">{article.source || 'Portugal'}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-xs uppercase tracking-[0.14em] text-text-subtle">
+                            {article.source || 'Portugal'} · {formatViews(article.view_count)}
+                          </p>
+                          <span className="text-[11px] font-semibold text-[#B8843C]">{describeHotness(article)}</span>
+                        </div>
                         <h3 className="mt-1 text-sm font-bold leading-6 text-text">{article.title_zh || article.title}</h3>
                       </div>
-                    </div>
+                    </button>
                   )) : (
-                    <p className="text-sm text-text-muted">当前还没有简报内容。</p>
+                    <p className="text-sm text-text-muted">{hotWindowEmptyLabel(hotWindow)}</p>
                   )}
                 </div>
+                <p className="mt-5 text-xs leading-6 text-text-subtle">
+                  你可以切换查看今日、本周或全部热门内容；排序会优先参考阅读量，并对近期新闻加权。
+                </p>
               </Card>
 
               <Card className="rounded-[28px] border-white/80 bg-white/92 shadow-[0_20px_50px_rgba(58,44,31,0.08)]">
@@ -218,7 +274,6 @@ export default function HomePage({
                   {[
                     ['看在葡华人最关心的信息', '华人关注'],
                     ['快速浏览公开招聘机会', '招聘'],
-                    [user ? '打开私人 Ideas 记录灵感' : '登录后使用私人 Ideas', user ? 'Ideas' : '首页'],
                   ].map(([text, tab]) => (
                     <button
                       key={`${tab}-${text}`}
@@ -251,37 +306,23 @@ export default function HomePage({
           </div>
 
           <div className="grid gap-4 px-5 py-5 sm:px-6">
-            <div className="flex items-center justify-between gap-3 rounded-2xl bg-white/85 px-4 py-3">
+            <button
+              type="button"
+              onClick={() => featuredCn[0] ? handleOpenArticle(featuredCn[0]) : onTabChange('华人关注')}
+              className="flex items-center justify-between gap-3 rounded-2xl bg-white/85 px-4 py-3 text-left transition-colors hover:bg-white"
+            >
               <div className="min-w-0">
                 <p className="text-xs uppercase tracking-[0.16em] text-text-subtle">华人精选</p>
                 <p className="mt-1 line-clamp-2 text-base font-bold text-text">{featuredCn[0]?.title_zh || featuredCn[0]?.title || '等待最新内容'}</p>
               </div>
-              <button
-                onClick={() => onTabChange('华人关注')}
-                className="shrink-0 text-sm font-semibold text-accent transition-colors hover:text-accent-hover"
-              >
-                查看
-              </button>
-            </div>
+              <span className="shrink-0 text-sm font-semibold text-accent">查看</span>
+            </button>
 
             <div className="grid gap-3 sm:grid-cols-2">
               <StatCard label="华人相关" value={cnArticles.length} hint="已筛出与在葡华人更相关的新闻条目" />
               <StatCard label="招聘发布" value={jobs.length} hint="公开可见的工作机会，适合快速浏览" />
               <StatCard label="新闻来源" value={new Set(articles.map((article) => article.source)).size} hint="持续抓取的葡语媒体来源数量" />
-              <StatCard label="灵感记录" value={user ? ideas.length : '...'} hint={user ? '你的 Ideas 会在这里继续积累' : '登录后管理私人灵感与草稿'} />
             </div>
-
-            {!user && (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-[#1f2f4c] px-4 py-4 text-white">
-                <div>
-                  <p className="text-sm font-semibold">登录后解锁 Ideas</p>
-                  <p className="mt-1 text-xs text-white/72">继续保存灵感与草稿。</p>
-                </div>
-                <Button variant="primary" size="sm" icon="login" onClick={onLoginClick} className="shrink-0 bg-white text-[#1f2f4c] hover:bg-[#f4ecdf]">
-                  登录
-                </Button>
-              </div>
-            )}
           </div>
         </Card>
       </section>
@@ -300,7 +341,7 @@ export default function HomePage({
               <h2 className="mt-3 text-2xl font-black tracking-tight text-text" style={{ fontFamily: 'var(--font-headline)' }}>
                 华人关注
               </h2>
-              <p className="mt-1 text-sm text-text-muted">最值得优先查看的在葡华人相关内容。</p>
+              <p className="mt-1 text-sm text-text-muted">按当前热门时间范围筛出的在葡华人相关内容。</p>
             </div>
             <button onClick={() => onTabChange('华人关注')} className="text-sm font-semibold text-accent hover:text-accent-hover">
               进入页面
@@ -308,13 +349,18 @@ export default function HomePage({
           </div>
 
           <PreviewList
-            items={featuredCn}
+            items={hotCnArticles}
             empty="暂时还没有华人精选内容，获取新闻后会出现在这里。"
             renderItem={(article) => (
-              <div key={article.link} className="mt-4 rounded-2xl border border-border bg-surface-muted px-4 py-4">
+              <button
+                key={article.link}
+                type="button"
+                onClick={() => handleOpenArticle(article)}
+                className="mt-4 w-full rounded-2xl border border-border bg-surface-muted px-4 py-4 text-left transition-colors hover:bg-white"
+              >
                 <div className="flex items-center justify-between gap-3">
                   <Badge color="#9D3D33">{article.tags_zh?.split(',')[0]?.trim() || '精选新闻'}</Badge>
-                  <span className="text-xs text-text-subtle">{article.published?.slice(0, 10)}</span>
+                  <span className="text-xs font-semibold text-[#9D3D33]">{describeHotness(article)}</span>
                 </div>
                 <h3 className="mt-3 text-lg font-bold leading-7 text-text">
                   {article.title_zh || article.title}
@@ -322,7 +368,11 @@ export default function HomePage({
                 <p className="mt-2 text-sm leading-7 text-text-muted line-clamp-3">
                   {article.content_zh || article.ai_summary || article.summary}
                 </p>
-              </div>
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <span className="text-xs text-text-subtle">{formatViews(article.view_count)}</span>
+                  <span className="text-xs font-semibold text-accent">点击阅读</span>
+                </div>
+              </button>
             )}
           />
         </Card>
@@ -401,7 +451,6 @@ export default function HomePage({
               ['先看与华人相关的重要信息', '华人关注', 'arrow_outward'],
               ['浏览更完整的葡语新闻与分类', '葡萄牙新闻', 'newsstand'],
               ['查看或发布招聘机会', '招聘', 'work_history'],
-              [user ? '打开个人灵感与想法记录' : '登录后使用私人 Ideas', user ? 'Ideas' : '首页', 'lightbulb'],
             ].map(([copy, tab, icon]) => (
               <button
                 key={`${tab}-${copy}`}
@@ -453,6 +502,13 @@ export default function HomePage({
           </div>
         </div>
       </section>
+
+      {selectedArticle && (
+        <ArticleModal
+          article={selectedArticle}
+          onClose={() => setSelectedArticleState(null)}
+        />
+      )}
     </div>
   )
 }
