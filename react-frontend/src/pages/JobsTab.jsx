@@ -7,6 +7,7 @@ import JobFormModal from '../components/listings/JobFormModal'
 import Card from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
+import AdminBadge from '../components/ui/AdminBadge'
 import { INDUSTRY_ZH, INDUSTRY_ICONS } from '../constants/industries'
 import { INDUSTRY_COLORS } from '../constants/colors'
 
@@ -164,8 +165,12 @@ export default function JobsTab({ activeIndustry, onCountsChange, onLoginRequire
                   </Card>
                   <Card className="rounded-[22px] border-white/80 bg-white/80 shadow-none">
                     <p className="text-[11px] uppercase tracking-[0.14em] text-text-subtle">最新发布</p>
+                    {newestJob?.owner_is_admin ? <div className="mt-2"><AdminBadge compact /></div> : null}
                     <p className="mt-2 line-clamp-2 text-sm font-bold leading-6 text-text">
                       {newestJob?.title || '等待第一条职位'}
+                    </p>
+                    <p className="mt-2 text-xs leading-6 text-text-muted">
+                      发布者：{newestJob?.owner_name || '社区用户'}
                     </p>
                     <p className="mt-2 text-xs leading-6 text-text-muted">{newestJob?.created_at?.slice(0, 10) || '暂无日期'}</p>
                   </Card>

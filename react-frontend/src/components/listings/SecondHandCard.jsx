@@ -1,5 +1,6 @@
 import Badge from '../ui/Badge'
 import Card from '../ui/Card'
+import AdminBadge from '../ui/AdminBadge'
 import { CATEGORY_ZH, CATEGORY_COLORS, CONDITION_ZH, CONDITION_COLORS, formatPrice } from '../../constants/secondhand'
 
 export default function SecondHandCard({ listing, onClick }) {
@@ -31,6 +32,7 @@ export default function SecondHandCard({ listing, onClick }) {
       <div className="px-4 py-3.5">
         <div className="flex items-center gap-2">
           <Badge color={catColor}>{CATEGORY_ZH[listing.category]}</Badge>
+          {listing.owner_is_admin ? <AdminBadge compact /> : null}
           <span
             className="rounded px-1.5 py-0.5 text-[10px] font-bold"
             style={{ background: `${condColor}18`, color: condColor }}
@@ -47,6 +49,11 @@ export default function SecondHandCard({ listing, onClick }) {
             {listing.location}
           </p>
         )}
+        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-text-muted">
+          <span className="material-symbols-outlined" style={{ fontSize: 13 }}>person</span>
+          <span>{listing.owner_name || '社区用户'}</span>
+          {listing.owner_is_admin ? <AdminBadge compact /> : null}
+        </div>
       </div>
     </Card>
   )

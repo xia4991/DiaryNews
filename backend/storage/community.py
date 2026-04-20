@@ -111,7 +111,7 @@ def create_event(
             ),
         )
         row = conn.execute(
-            """SELECT e.*, u.name AS owner_name, u.avatar AS owner_avatar
+            """SELECT e.*, u.name AS owner_name, u.avatar AS owner_avatar, u.is_admin AS owner_is_admin
                FROM community_events e
                JOIN users u ON u.id = e.owner_id
                WHERE e.id = ?""",
@@ -163,7 +163,7 @@ def list_events(filters: Optional[dict] = None, limit: int = 50, offset: int = 0
             params,
         ).fetchone()[0]
         rows = conn.execute(
-            f"""SELECT e.*, u.name AS owner_name, u.avatar AS owner_avatar
+            f"""SELECT e.*, u.name AS owner_name, u.avatar AS owner_avatar, u.is_admin AS owner_is_admin
                 FROM community_events e
                 JOIN users u ON u.id = e.owner_id
                 {where}
@@ -183,7 +183,7 @@ def get_event(event_id: int, include_nonpublic: bool = False) -> Optional[dict]:
     _ensure_db()
     with get_db() as conn:
         row = conn.execute(
-            """SELECT e.*, u.name AS owner_name, u.avatar AS owner_avatar
+            """SELECT e.*, u.name AS owner_name, u.avatar AS owner_avatar, u.is_admin AS owner_is_admin
                FROM community_events e
                JOIN users u ON u.id = e.owner_id
                WHERE e.id = ?""",
@@ -233,7 +233,7 @@ def update_event(
                 list(clean.values()) + [event_id],
             )
         row = conn.execute(
-            """SELECT e.*, u.name AS owner_name, u.avatar AS owner_avatar
+            """SELECT e.*, u.name AS owner_name, u.avatar AS owner_avatar, u.is_admin AS owner_is_admin
                FROM community_events e
                JOIN users u ON u.id = e.owner_id
                WHERE e.id = ?""",
@@ -279,7 +279,7 @@ def create_post(
             (owner_id, title, category, content, city, now, now),
         )
         row = conn.execute(
-            """SELECT p.*, u.name AS owner_name, u.avatar AS owner_avatar, 0 AS reply_count
+            """SELECT p.*, u.name AS owner_name, u.avatar AS owner_avatar, u.is_admin AS owner_is_admin, 0 AS reply_count
                FROM community_posts p
                JOIN users u ON u.id = p.owner_id
                WHERE p.id = ?""",
@@ -324,7 +324,7 @@ def list_posts(filters: Optional[dict] = None, limit: int = 50, offset: int = 0)
             params,
         ).fetchone()[0]
         rows = conn.execute(
-            f"""SELECT p.*, u.name AS owner_name, u.avatar AS owner_avatar,
+            f"""SELECT p.*, u.name AS owner_name, u.avatar AS owner_avatar, u.is_admin AS owner_is_admin,
                        (SELECT COUNT(*) FROM community_post_replies r
                         WHERE r.post_id = p.id AND r.status = 'active') AS reply_count
                 FROM community_posts p
@@ -346,7 +346,7 @@ def get_post(post_id: int, include_nonpublic: bool = False) -> Optional[dict]:
     _ensure_db()
     with get_db() as conn:
         row = conn.execute(
-            """SELECT p.*, u.name AS owner_name, u.avatar AS owner_avatar,
+            """SELECT p.*, u.name AS owner_name, u.avatar AS owner_avatar, u.is_admin AS owner_is_admin,
                       (SELECT COUNT(*) FROM community_post_replies r
                        WHERE r.post_id = p.id AND r.status = 'active') AS reply_count
                FROM community_posts p
@@ -391,7 +391,7 @@ def update_post(
                 list(clean.values()) + [post_id],
             )
         row = conn.execute(
-            """SELECT p.*, u.name AS owner_name, u.avatar AS owner_avatar,
+            """SELECT p.*, u.name AS owner_name, u.avatar AS owner_avatar, u.is_admin AS owner_is_admin,
                       (SELECT COUNT(*) FROM community_post_replies r
                        WHERE r.post_id = p.id AND r.status = 'active') AS reply_count
                FROM community_posts p
@@ -433,7 +433,7 @@ def list_post_replies(post_id: int, include_nonpublic: bool = False) -> list:
     where = " AND ".join(clauses)
     with get_db() as conn:
         rows = conn.execute(
-            f"""SELECT r.*, u.name AS owner_name, u.avatar AS owner_avatar
+            f"""SELECT r.*, u.name AS owner_name, u.avatar AS owner_avatar, u.is_admin AS owner_is_admin
                 FROM community_post_replies r
                 JOIN users u ON u.id = r.owner_id
                 WHERE {where}
@@ -460,7 +460,7 @@ def create_post_reply(post_id: int, owner_id: int, content: str) -> dict:
             (post_id, owner_id, content, now, now),
         )
         row = conn.execute(
-            """SELECT r.*, u.name AS owner_name, u.avatar AS owner_avatar
+            """SELECT r.*, u.name AS owner_name, u.avatar AS owner_avatar, u.is_admin AS owner_is_admin
                FROM community_post_replies r
                JOIN users u ON u.id = r.owner_id
                WHERE r.id = ?""",

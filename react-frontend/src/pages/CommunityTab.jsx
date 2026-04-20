@@ -5,6 +5,7 @@ import SectionHeader from '../components/ui/SectionHeader'
 import Card from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
+import AdminBadge from '../components/ui/AdminBadge'
 import EventFormModal from '../components/community/EventFormModal'
 import EventDetailModal from '../components/community/EventDetailModal'
 import PostFormModal from '../components/community/PostFormModal'
@@ -373,7 +374,10 @@ export default function CommunityTab({ onLoginRequired }) {
               <div className="mt-6 rounded-[24px] border border-white/75 bg-white/78 px-5 py-5">
                 <div className="flex items-center justify-between gap-3">
                   <Badge color="#2E7D5A">近期活动</Badge>
-                  <span className="text-xs font-semibold text-text-subtle">{events.length} 场</span>
+                  <div className="flex items-center gap-2">
+                    {upcomingEvent?.owner_is_admin ? <AdminBadge compact /> : null}
+                    <span className="text-xs font-semibold text-text-subtle">{events.length} 场</span>
+                  </div>
                 </div>
                 <h2
                   className="mt-4 text-[1.55rem] font-black leading-tight tracking-tight text-text sm:text-2xl"
@@ -381,6 +385,12 @@ export default function CommunityTab({ onLoginRequired }) {
                 >
                   {upcomingEvent?.title || '活动模块已接入，等你发布第一场活动'}
                 </h2>
+                {upcomingEvent ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-text-muted">
+                    <span>发布者：{upcomingEvent.owner_name || '社区用户'}</span>
+                    {upcomingEvent.owner_is_admin ? <AdminBadge compact /> : null}
+                  </div>
+                ) : null}
                 <p className="mt-3 text-sm leading-7 text-text-muted">
                   {upcomingEvent?.description || '这里会优先展示近期最值得关注的社区活动，比如聚会、讲座、招聘会、亲子活动和兴趣小组。'}
                 </p>
@@ -396,7 +406,10 @@ export default function CommunityTab({ onLoginRequired }) {
               <div className="mt-6 rounded-[24px] border border-white/75 bg-white/78 px-5 py-5">
                 <div className="flex items-center justify-between gap-3">
                   <Badge color="#B8843C">今日交流</Badge>
-                  <span className="text-xs font-semibold text-text-subtle">{posts.length} 帖</span>
+                  <div className="flex items-center gap-2">
+                    {hotPost?.owner_is_admin ? <AdminBadge compact /> : null}
+                    <span className="text-xs font-semibold text-text-subtle">{posts.length} 帖</span>
+                  </div>
                 </div>
                 <h2
                   className="mt-4 text-[1.55rem] font-black leading-tight tracking-tight text-text sm:text-2xl"
@@ -404,6 +417,12 @@ export default function CommunityTab({ onLoginRequired }) {
                 >
                   {hotPost?.title || '交流模块已接入，等第一批社区帖子出现'}
                 </h2>
+                {hotPost ? (
+                  <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-text-muted">
+                    <span>发布者：{hotPost.owner_name || '社区用户'}</span>
+                    {hotPost.owner_is_admin ? <AdminBadge compact /> : null}
+                  </div>
+                ) : null}
                 <p className="mt-3 text-sm leading-7 text-text-muted">
                   {hotPost?.content || '这里会展示生活问答、签证居留、同城互助、本地推荐等内容，帮助平台从信息中心进一步走向社区。'}
                 </p>
@@ -513,11 +532,18 @@ export default function CommunityTab({ onLoginRequired }) {
                   <Card key={event.id} className="rounded-[24px] cursor-pointer" interactive onClick={() => setSelectedEvent(event)}>
                     <div className="flex items-center justify-between gap-3">
                       <Badge color="#2E7D5A">{EVENT_CATEGORY_ZH[event.category] || event.category}</Badge>
-                      <span className="text-[11px] text-text-subtle">{event.city || '城市待定'}</span>
+                      <div className="flex items-center gap-2">
+                        {event.owner_is_admin ? <AdminBadge compact /> : null}
+                        <span className="text-[11px] text-text-subtle">{event.city || '城市待定'}</span>
+                      </div>
                     </div>
                     <h3 className="mt-4 text-lg font-black leading-7 text-text" style={{ fontFamily: 'var(--font-headline)' }}>
                       {event.title}
                     </h3>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-text-subtle">
+                      <span>发布者：{event.owner_name || '社区用户'}</span>
+                      {event.owner_is_admin ? <AdminBadge compact /> : null}
+                    </div>
                     <p className="mt-3 line-clamp-3 text-sm leading-7 text-text-muted">
                       {event.description || '活动详情待补充。'}
                     </p>
@@ -606,7 +632,10 @@ export default function CommunityTab({ onLoginRequired }) {
                     {post.content || '帖子内容待补充。'}
                   </p>
                   <div className="mt-4 flex items-center justify-between text-xs text-text-subtle">
-                    <span>{post.owner_name || '社区用户'}</span>
+                    <span className="flex items-center gap-2">
+                      <span>{post.owner_name || '社区用户'}</span>
+                      {post.owner_is_admin ? <AdminBadge compact /> : null}
+                    </span>
                     <span>{formatDateTime(post.created_at)}</span>
                   </div>
                 </Card>

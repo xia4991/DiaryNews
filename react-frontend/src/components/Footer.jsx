@@ -6,9 +6,8 @@ const SUPPORT_ITEMS = [
 ]
 
 const LEGAL_ITEMS = [
-  '隐私说明',
-  '使用说明',
-  '免责声明',
+  { label: '隐私政策', page: 'privacy' },
+  { label: '使用条款', page: 'terms' },
 ]
 
 export default function Footer({ onTabChange }) {
@@ -83,9 +82,15 @@ export default function Footer({ onTabChange }) {
           <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#8D7B69]">法律</p>
           <div className="mt-4 grid gap-2.5 sm:mt-5 sm:gap-3">
             {LEGAL_ITEMS.map((item) => (
-              <p key={item} className="text-[13px] text-[#6E6255] sm:text-sm">
-                {item}
-              </p>
+              <button
+                key={item.page}
+                type="button"
+                onClick={() => window.dispatchEvent(new CustomEvent('open-legal', { detail: item.page }))}
+                className="group flex items-center gap-2 text-left text-[13px] text-[#6E6255] transition-colors hover:text-[#2E2721] sm:text-sm"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-[#D4C2AE] transition-colors group-hover:bg-[#D57B4E]" />
+                {item.label}
+              </button>
             ))}
           </div>
         </div>

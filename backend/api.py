@@ -121,6 +121,7 @@ def _user_public(u: dict) -> dict:
         "id": u["id"],
         "email": u["email"],
         "name": u["name"],
+        "google_name": u["google_name"] if "google_name" in u.keys() else None,
         "avatar": u["avatar"],
         "phone": u["phone"] if "phone" in u.keys() else None,
         "is_admin": bool(u["is_admin"]),
@@ -152,6 +153,143 @@ def update_me(req: UpdateMeRequest, user: dict = Depends(get_current_user)):
     if not updated:
         raise HTTPException(status_code=404, detail="User not found")
     return _user_public(updated)
+
+
+@app.get("/api/auth/me/export")
+def export_my_data(user: dict = Depends(get_current_user)):
+    data = storage.export_user_data(int(user["sub"]))
+    if not data:
+        raise HTTPException(status_code=404, detail="User not found")
+    return data
+
+
+@app.delete("/api/auth/me")
+def delete_my_account(user: dict = Depends(get_current_user)):
+    user_id = int(user["sub"])
+    storage.add_log("user_delete",
+        f"用户注销账号: {user['email']}",
+        {"user_id": user_id})
+    deleted = storage.delete_user(user_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {"detail": "Account and all associated data deleted"}
+
+
+# ── Announcements ───────────────────────────────────────────────────────────
+
+AnnouncementStatus = Literal["active", "hidden", "removed"]
+
+
+class AnnouncementCreateRequest(BaseModel):
+    title: str
+    content: str
+    is_pinned: bool = False
+    status: AnnouncementStatus = "active"
+
+
+class AnnouncementUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    is_pinned: Optional[bool] = None
+    status: Optional[AnnouncementStatus] = None
+
+
+@app.get("/api/announcements")
+def list_public_announcements(
+    limit: int = Query(5, ge=1, le=20),
+    offset: int = Query(0, ge=0),
+):
+    return storage.list_announcements(status="public", limit=limit, offset=offset)
+
+
+@app.get("/api/admin/announcements")
+def admin_list_announcements(
+    status: Optional[AnnouncementStatus] = Query(None),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    _admin: dict = Depends(require_admin),
+):
+    return storage.list_announcements(status=status or "all", limit=limit, offset=offset)
+
+
+@app.post("/api/admin/announcements", status_code=201)
+def admin_create_announcement(
+    req: AnnouncementCreateRequest,
+    admin: dict = Depends(require_admin),
+):
+    title = req.title.strip()
+    content = req.content.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="Title cannot be empty")
+    if not content:
+        raise HTTPException(status_code=400, detail="Content cannot be empty")
+
+    try:
+        announcement = storage.create_announcement(
+            created_by=int(admin["sub"]),
+            title=title,
+            content=content,
+            is_pinned=req.is_pinned,
+            status=req.status,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    storage.add_log(
+        "announcement_manage",
+        f"管理员创建公告：{title}",
+        {"announcement_id": announcement["id"], "status": announcement["status"]},
+    )
+    return announcement
+
+
+@app.put("/api/admin/announcements/{announcement_id}")
+def admin_update_announcement(
+    announcement_id: int,
+    req: AnnouncementUpdateRequest,
+    admin: dict = Depends(require_admin),
+):
+    patch = req.model_dump(exclude_unset=True)
+    if "title" in patch:
+        patch["title"] = patch["title"].strip()
+        if not patch["title"]:
+            raise HTTPException(status_code=400, detail="Title cannot be empty")
+    if "content" in patch:
+        patch["content"] = patch["content"].strip()
+        if not patch["content"]:
+            raise HTTPException(status_code=400, detail="Content cannot be empty")
+
+    try:
+        announcement = storage.update_announcement(announcement_id, patch)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Announcement {announcement_id} not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    storage.add_log(
+        "announcement_manage",
+        f"管理员更新公告：{announcement['title']}",
+        {"announcement_id": announcement_id, "status": announcement["status"], "admin_id": int(admin["sub"])},
+    )
+    return announcement
+
+
+@app.delete("/api/admin/announcements/{announcement_id}")
+def admin_delete_announcement(
+    announcement_id: int,
+    admin: dict = Depends(require_admin),
+):
+    try:
+        storage.delete_announcement(announcement_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Announcement {announcement_id} not found")
+
+    storage.add_log(
+        "announcement_manage",
+        "管理员删除公告",
+        {"announcement_id": announcement_id, "admin_id": int(admin["sub"])},
+    )
+    return {"ok": True}
 
 
 # ── Community ────────────────────────────────────────────────────────────────
@@ -981,6 +1119,54 @@ def admin_list_logs(
     return storage.list_logs(limit=limit, offset=offset, event_type=event_type)
 
 
+# ── SEO ──────────────────────────────────────────────────────────────────────
+
+@app.get("/robots.txt")
+def robots_txt():
+    from backend.config import SITE_URL
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse(
+        f"User-agent: *\nAllow: /\nSitemap: {SITE_URL}/sitemap.xml\n"
+    )
+
+@app.get("/sitemap.xml")
+def sitemap():
+    from backend.config import SITE_URL
+    from fastapi.responses import Response
+
+    today = date.today().isoformat()
+    base = SITE_URL.rstrip("/")
+
+    pages = [
+        {"loc": f"{base}/",         "priority": "1.0", "changefreq": "hourly"},
+        {"loc": f"{base}/#news",    "priority": "0.8", "changefreq": "hourly"},
+        {"loc": f"{base}/#chinese", "priority": "0.8", "changefreq": "hourly"},
+        {"loc": f"{base}/#jobs",    "priority": "0.7", "changefreq": "daily"},
+        {"loc": f"{base}/#realestate", "priority": "0.7", "changefreq": "daily"},
+        {"loc": f"{base}/#secondhand", "priority": "0.7", "changefreq": "daily"},
+        {"loc": f"{base}/#community",  "priority": "0.6", "changefreq": "daily"},
+    ]
+
+    urls = []
+    for p in pages:
+        urls.append(
+            f'  <url>\n'
+            f'    <loc>{p["loc"]}</loc>\n'
+            f'    <lastmod>{today}</lastmod>\n'
+            f'    <changefreq>{p["changefreq"]}</changefreq>\n'
+            f'    <priority>{p["priority"]}</priority>\n'
+            f'  </url>'
+        )
+
+    xml = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        + "\n".join(urls) + "\n"
+        '</urlset>\n'
+    )
+    return Response(content=xml, media_type="application/xml")
+
+
 # ── SPA static serving (must be AFTER all /api routes) ──────────────────────
 
 _SPA_DIR = Path(__file__).resolve().parent.parent / "react-frontend" / "dist"
@@ -993,4 +1179,3 @@ if _SPA_DIR.is_dir():
         if file.is_file() and ".." not in path:
             return FileResponse(file)
         return FileResponse(_SPA_DIR / "index.html")
-

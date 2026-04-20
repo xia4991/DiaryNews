@@ -54,7 +54,13 @@ def _fetch_extension(conn, kind: str, listing_id: int) -> dict:
 
 
 def _fetch_listing(conn, listing_id: int) -> Optional[dict]:
-    row = conn.execute("SELECT * FROM listings WHERE id = ?", (listing_id,)).fetchone()
+    row = conn.execute(
+        """SELECT l.*, u.name AS owner_name, u.is_admin AS owner_is_admin
+           FROM listings l
+           JOIN users u ON u.id = l.owner_id
+           WHERE l.id = ?""",
+        (listing_id,),
+    ).fetchone()
     if not row:
         return None
     d = dict(row)
@@ -162,8 +168,11 @@ def list_listings(
             f"SELECT COUNT(*) FROM listings WHERE {where}", params
         ).fetchone()[0]
         rows = conn.execute(
-            f"SELECT * FROM listings WHERE {where} "
-            "ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            f"""SELECT l.*, u.name AS owner_name, u.is_admin AS owner_is_admin
+                FROM listings l
+                JOIN users u ON u.id = l.owner_id
+                WHERE {where} """
+            "ORDER BY l.created_at DESC LIMIT ? OFFSET ?",
             params + [limit, offset],
         ).fetchall()
         items = []
@@ -180,7 +189,10 @@ def list_all_recent(limit: int = 20) -> dict:
     with get_db() as conn:
         total = conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0]
         rows = conn.execute(
-            "SELECT * FROM listings ORDER BY created_at DESC LIMIT ?",
+            """SELECT l.*, u.name AS owner_name, u.is_admin AS owner_is_admin
+               FROM listings l
+               JOIN users u ON u.id = l.owner_id
+               ORDER BY l.created_at DESC LIMIT ?""",
             (limit,),
         ).fetchall()
         items = []
@@ -338,8 +350,11 @@ def list_jobs(
             params,
         ).fetchone()[0]
         rows = conn.execute(
-            f"SELECT l.*, j.industry, j.salary_range FROM listings l "
-            f"JOIN listing_jobs j ON j.listing_id = l.id WHERE {where} "
+            f"""SELECT l.*, u.name AS owner_name, u.is_admin AS owner_is_admin,
+                       j.industry, j.salary_range
+                FROM listings l
+                JOIN users u ON u.id = l.owner_id
+                JOIN listing_jobs j ON j.listing_id = l.id WHERE {where} """
             "ORDER BY l.created_at DESC LIMIT ? OFFSET ?",
             params + [limit, offset],
         ).fetchall()
@@ -491,9 +506,12 @@ def list_realestate(
             params,
         ).fetchone()[0]
         rows = conn.execute(
-            f"SELECT l.*, r.deal_type, r.price_cents, r.rooms, r.bathrooms, "
-            f"r.area_m2, r.furnished FROM listings l "
-            f"JOIN listing_realestate r ON r.listing_id = l.id WHERE {where} "
+            f"""SELECT l.*, u.name AS owner_name, u.is_admin AS owner_is_admin,
+                       r.deal_type, r.price_cents, r.rooms, r.bathrooms,
+                       r.area_m2, r.furnished
+                FROM listings l
+                JOIN users u ON u.id = l.owner_id
+                JOIN listing_realestate r ON r.listing_id = l.id WHERE {where} """
             "ORDER BY l.created_at DESC LIMIT ? OFFSET ?",
             params + [limit, offset],
         ).fetchall()
@@ -649,8 +667,11 @@ def list_secondhand(
             params,
         ).fetchone()[0]
         rows = conn.execute(
-            f"SELECT l.*, s.category, s.condition, s.price_cents FROM listings l "
-            f"JOIN listing_secondhand s ON s.listing_id = l.id WHERE {where} "
+            f"""SELECT l.*, u.name AS owner_name, u.is_admin AS owner_is_admin,
+                       s.category, s.condition, s.price_cents
+                FROM listings l
+                JOIN users u ON u.id = l.owner_id
+                JOIN listing_secondhand s ON s.listing_id = l.id WHERE {where} """
             "ORDER BY l.created_at DESC LIMIT ? OFFSET ?",
             params + [limit, offset],
         ).fetchall()

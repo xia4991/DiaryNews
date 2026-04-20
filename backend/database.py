@@ -10,7 +10,7 @@ def _migrate(conn) -> None:
             conn.execute(f"ALTER TABLE articles ADD COLUMN {col}")
         except sqlite3.OperationalError:
             pass
-    for col in ["phone TEXT", "updated_at TEXT"]:
+    for col in ["phone TEXT", "updated_at TEXT", "google_name TEXT"]:
         try:
             conn.execute(f"ALTER TABLE users ADD COLUMN {col}")
         except sqlite3.OperationalError:
@@ -111,12 +111,27 @@ def init_db() -> None:
                 google_id  TEXT    UNIQUE NOT NULL,
                 email      TEXT    UNIQUE NOT NULL,
                 name       TEXT,
+                google_name TEXT,
                 avatar     TEXT,
                 phone      TEXT,
                 is_admin   BOOLEAN NOT NULL DEFAULT 0,
                 created_at TEXT    NOT NULL,
                 updated_at TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS platform_announcements (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                title       TEXT    NOT NULL,
+                content     TEXT    NOT NULL,
+                status      TEXT    NOT NULL DEFAULT 'active'
+                            CHECK (status IN ('active','hidden','removed')),
+                is_pinned   INTEGER NOT NULL DEFAULT 0,
+                created_by  INTEGER NOT NULL REFERENCES users(id),
+                created_at  TEXT    NOT NULL,
+                updated_at  TEXT    NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_platform_announcements_status_pinned
+                ON platform_announcements (status, is_pinned DESC, updated_at DESC, created_at DESC);
 
             CREATE TABLE IF NOT EXISTS listings (
                 id                INTEGER PRIMARY KEY AUTOINCREMENT,

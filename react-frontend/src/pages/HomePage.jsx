@@ -58,6 +58,7 @@ function PreviewList({ items, empty, renderItem }) {
 export default function HomePage({
   user,
   articles,
+  announcements = [],
   cnArticles,
   jobs,
   newsLastUpdated,
@@ -97,6 +98,7 @@ export default function HomePage({
   )
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
+  const shouldShowAnnouncements = announcements.length > 0 || Boolean(user?.is_admin)
 
   const handleOpenArticle = (article) => {
     const nextViewCount = onArticleOpen?.(article)
@@ -292,39 +294,111 @@ export default function HomePage({
           </div>
         </div>
 
-        <Card
-          className="relative overflow-hidden rounded-[30px] border-[#E6DCCB] bg-[linear-gradient(160deg,#fffdf7_0%,#f7efe4_100%)] p-0 shadow-[0_24px_60px_rgba(86,60,33,0.14)]"
-        >
-          <div className="border-b border-[#E6DCCB] px-5 py-5 sm:px-6">
-            <Badge color="#2E7D5A">今日概览</Badge>
-            <p className="mt-4 text-[1.7rem] font-black tracking-tight text-text sm:text-2xl" style={{ fontFamily: 'var(--font-headline)' }}>
-              {user ? `欢迎回来，${user.name || '朋友'}` : '从这里开始今天的信息浏览'}
-            </p>
-            <p className="mt-2 text-sm leading-7 text-text-muted">
-              新闻更新时间 {formatDate(newsLastUpdated)}。
-            </p>
-          </div>
+        <div className="grid gap-5">
+          {shouldShowAnnouncements && (
+            <Card className="relative overflow-hidden rounded-[28px] border-[#E7D9C8] bg-[linear-gradient(160deg,#fffdf7_0%,#f9f1e6_100%)] shadow-[0_20px_50px_rgba(86,60,33,0.12)]">
+              <div
+                aria-hidden
+                className="absolute right-0 top-0 h-28 w-28 rounded-full blur-3xl"
+                style={{ background: 'rgba(157,61,51,0.12)' }}
+              />
+              <div className="relative">
+                <div className="border-b border-[#E6DCCB] px-5 py-5 sm:px-6">
+                  <div className="flex items-center justify-between gap-3">
+                    <Badge color="#9D3D33">平台公告</Badge>
+                    {user?.is_admin && (
+                      <button
+                        type="button"
+                        onClick={() => onTabChange('管理')}
+                        className="text-xs font-semibold text-accent transition-colors hover:text-accent-hover"
+                      >
+                        去管理
+                      </button>
+                    )}
+                  </div>
+                  <p className="mt-4 text-[1.45rem] font-black tracking-tight text-text sm:text-[1.65rem]" style={{ fontFamily: 'var(--font-headline)' }}>
+                    {announcements.length > 0 ? '平台最新提醒与更新' : '这里会显示管理员发布的平台公告'}
+                  </p>
+                  <p className="mt-2 text-sm leading-7 text-text-muted">
+                    {announcements.length > 0 ? '优先展示置顶公告，方便你先看到平台通知、维护提醒和重要说明。' : '目前还没有公开公告。后续管理员发布后，会优先展示在首页右侧。'}
+                  </p>
+                </div>
 
-          <div className="grid gap-4 px-5 py-5 sm:px-6">
-            <button
-              type="button"
-              onClick={() => featuredCn[0] ? handleOpenArticle(featuredCn[0]) : onTabChange('华人关注')}
-              className="flex items-center justify-between gap-3 rounded-2xl bg-white/85 px-4 py-3 text-left transition-colors hover:bg-white"
-            >
-              <div className="min-w-0">
-                <p className="text-xs uppercase tracking-[0.16em] text-text-subtle">华人精选</p>
-                <p className="mt-1 line-clamp-2 text-base font-bold text-text">{featuredCn[0]?.title_zh || featuredCn[0]?.title || '等待最新内容'}</p>
+                <div className="grid gap-3 px-5 py-5 sm:px-6">
+                  {announcements.length > 0 ? announcements.map((announcement) => (
+                    <div
+                      key={announcement.id}
+                      className="rounded-[22px] border border-white/80 bg-white/88 px-4 py-4 shadow-[0_10px_24px_rgba(58,44,31,0.06)]"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {announcement.is_pinned && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-[#9D3D33]/10 px-2.5 py-1 text-[11px] font-semibold text-[#9D3D33]">
+                                <span className="material-symbols-outlined" style={{ fontSize: 13 }}>keep</span>
+                                置顶
+                              </span>
+                            )}
+                            <span className="text-[11px] uppercase tracking-[0.14em] text-text-subtle">
+                              {formatDate(announcement.updated_at || announcement.created_at)}
+                            </span>
+                          </div>
+                          <h3 className="mt-3 text-base font-black leading-7 text-text">
+                            {announcement.title}
+                          </h3>
+                        </div>
+                      </div>
+                      <p className="mt-2 whitespace-pre-line text-sm leading-7 text-text-muted">
+                        {announcement.content}
+                      </p>
+                    </div>
+                  )) : (
+                    <div className="rounded-[22px] border border-dashed border-[#D8C8B6] bg-white/72 px-4 py-4">
+                      <p className="text-sm font-semibold text-text">还没有公开公告</p>
+                      <p className="mt-2 text-sm leading-7 text-text-muted">
+                        你可以在管理页的 `公告` 标签里发布第一条平台通知，发布后这里会自动显示。
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
-              <span className="shrink-0 text-sm font-semibold text-accent">查看</span>
-            </button>
+            </Card>
+          )}
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <StatCard label="华人相关" value={cnArticles.length} hint="已筛出与在葡华人更相关的新闻条目" />
-              <StatCard label="招聘发布" value={jobs.length} hint="公开可见的工作机会，适合快速浏览" />
-              <StatCard label="新闻来源" value={new Set(articles.map((article) => article.source)).size} hint="持续抓取的葡语媒体来源数量" />
+          <Card
+            className="relative overflow-hidden rounded-[30px] border-[#E6DCCB] bg-[linear-gradient(160deg,#fffdf7_0%,#f7efe4_100%)] p-0 shadow-[0_24px_60px_rgba(86,60,33,0.14)]"
+          >
+            <div className="border-b border-[#E6DCCB] px-5 py-5 sm:px-6">
+              <Badge color="#2E7D5A">今日概览</Badge>
+              <p className="mt-4 text-[1.7rem] font-black tracking-tight text-text sm:text-2xl" style={{ fontFamily: 'var(--font-headline)' }}>
+                {user ? `欢迎回来，${user.name || '朋友'}` : '从这里开始今天的信息浏览'}
+              </p>
+              <p className="mt-2 text-sm leading-7 text-text-muted">
+                新闻更新时间 {formatDate(newsLastUpdated)}。
+              </p>
             </div>
-          </div>
-        </Card>
+
+            <div className="grid gap-4 px-5 py-5 sm:px-6">
+              <button
+                type="button"
+                onClick={() => featuredCn[0] ? handleOpenArticle(featuredCn[0]) : onTabChange('华人关注')}
+                className="flex items-center justify-between gap-3 rounded-2xl bg-white/85 px-4 py-3 text-left transition-colors hover:bg-white"
+              >
+                <div className="min-w-0">
+                  <p className="text-xs uppercase tracking-[0.16em] text-text-subtle">华人精选</p>
+                  <p className="mt-1 line-clamp-2 text-base font-bold text-text">{featuredCn[0]?.title_zh || featuredCn[0]?.title || '等待最新内容'}</p>
+                </div>
+                <span className="shrink-0 text-sm font-semibold text-accent">查看</span>
+              </button>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <StatCard label="华人相关" value={cnArticles.length} hint="已筛出与在葡华人更相关的新闻条目" />
+                <StatCard label="招聘发布" value={jobs.length} hint="公开可见的工作机会，适合快速浏览" />
+                <StatCard label="新闻来源" value={new Set(articles.map((article) => article.source)).size} hint="持续抓取的葡语媒体来源数量" />
+              </div>
+            </div>
+          </Card>
+        </div>
       </section>
 
       <section className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">

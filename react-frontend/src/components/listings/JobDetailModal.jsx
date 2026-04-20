@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Modal from '../ui/Modal'
 import Badge from '../ui/Badge'
 import Button from '../ui/Button'
+import AdminBadge from '../ui/AdminBadge'
 import AdminActions from './AdminActions'
 import { INDUSTRY_ZH, INDUSTRY_ICONS } from '../../constants/industries'
 import { INDUSTRY_COLORS } from '../../constants/colors'
@@ -31,9 +32,12 @@ export default function JobDetailModal({ job, canManage, isAdmin, onEdit, onDele
       <div className="flex flex-col gap-4">
         <div className="flex items-start justify-between gap-3">
           <div className="flex flex-col gap-2 flex-1 min-w-0">
-            <Badge color={color} icon={INDUSTRY_ICONS[job.industry]}>
-              {INDUSTRY_ZH[job.industry] || job.industry}
-            </Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge color={color} icon={INDUSTRY_ICONS[job.industry]}>
+                {INDUSTRY_ZH[job.industry] || job.industry}
+              </Badge>
+              {job.owner_is_admin ? <AdminBadge compact /> : null}
+            </div>
             <h2
               className="text-lg font-bold text-text leading-snug"
               style={{ fontFamily: 'var(--font-headline)' }}
@@ -51,6 +55,10 @@ export default function JobDetailModal({ job, canManage, isAdmin, onEdit, onDele
         </div>
 
         <div className="flex flex-wrap gap-4 text-xs">
+          <div className="flex items-center gap-1 text-text-muted">
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>person</span>
+            <span>{job.owner_name || '社区用户'}</span>
+          </div>
           {job.salary_range && (
             <div className="flex items-center gap-1 text-success">
               <span className="material-symbols-outlined" style={{ fontSize: 14 }}>payments</span>

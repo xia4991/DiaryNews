@@ -17,6 +17,9 @@ import RealEstateSidebar from './components/listings/RealEstateSidebar'
 import SecondHandTab from './pages/SecondHandTab'
 import SecondHandSidebar from './components/listings/SecondHandSidebar'
 import AdminModerationTab from './pages/AdminModerationTab'
+import ProfilePage from './pages/ProfilePage'
+import CookieConsent from './components/CookieConsent'
+import LegalModal from './components/LegalModal'
 import { api } from './api'
 
 export default function App() {
@@ -24,8 +27,10 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('首页')
   const [fetching, setFetching] = useState(false)
   const [showLogin, setShowLogin] = useState(false)
+  const [legalPage, setLegalPage] = useState(null)
 
   const [articles, setArticles] = useState([])
+  const [announcements, setAnnouncements] = useState([])
   const [newsLastUpdated, setNewsLastUpdated] = useState(null)
   const [activeCategory, setActiveCategory] = useState('All')
   const [activeCnTag, setActiveCnTag] = useState('All')
@@ -71,18 +76,33 @@ export default function App() {
       setArticles(d.articles || [])
       setNewsLastUpdated(d.last_updated)
     })
+    api.listAnnouncements({ limit: 2 }).then(d => setAnnouncements(d.items || [])).catch(() => {})
     api.listJobs({ limit: 12 }).then(d => setJobs(d.items || [])).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    if (activeTab !== '首页') return
+    api.listAnnouncements({ limit: 2 }).then(d => setAnnouncements(d.items || [])).catch(() => {})
+  }, [activeTab])
 
   // If user logs out while on a protected tab, switch to news
   useEffect(() => {
     if (!user && activeTab === '管理') {
       setActiveTab('华人关注')
     }
+    if (!user && activeTab === '个人资料') {
+      setActiveTab('首页')
+    }
     if (user && !user.is_admin && activeTab === '管理') {
       setActiveTab('首页')
     }
   }, [user, activeTab])
+
+  useEffect(() => {
+    const handler = (e) => setLegalPage(e.detail || 'privacy')
+    window.addEventListener('open-legal', handler)
+    return () => window.removeEventListener('open-legal', handler)
+  }, [])
 
   const handleFetchNews = async () => {
     setFetching(true)
@@ -301,12 +321,13 @@ export default function App() {
         user={user}
         onLoginClick={() => setShowLogin(true)}
         sidebar={sidebar}
-        fullWidth={activeTab === '首页' || activeTab === '管理' || activeTab === 'AI 助手'}
+        fullWidth={activeTab === '首页' || activeTab === '管理' || activeTab === 'AI 助手' || activeTab === '个人资料'}
       >
         {activeTab === '首页' && (
           <HomePage
             user={user}
             articles={articles}
+            announcements={announcements}
             cnArticles={cnArticles}
             jobs={jobs}
             newsLastUpdated={newsLastUpdated}
@@ -376,10 +397,18 @@ export default function App() {
         {activeTab === 'AI 助手' && (
           <AIAssistantTab user={user} />
         )}
+        {activeTab === '个人资料' && user && (
+          <ProfilePage
+            user={user}
+            onBack={() => handleTabChange('首页')}
+          />
+        )}
         {activeTab === '管理' && user?.is_admin && (
           <AdminModerationTab />
         )}
       </AppShell>
+      <CookieConsent />
+      {legalPage && <LegalModal page={legalPage} onClose={() => setLegalPage(null)} />}
     </>
   )
 }

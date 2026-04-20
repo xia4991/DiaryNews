@@ -29,6 +29,8 @@ export const api = {
   googleLogin: (credential) => http.post('/auth/google', { credential }).then(r => r.data),
   getMe: () => http.get('/auth/me').then(r => r.data),
   updateMe: (data) => http.put('/auth/me', data).then(r => r.data),
+  exportMyData: () => http.get('/auth/me/export').then(r => r.data),
+  deleteMyAccount: () => http.delete('/auth/me').then(r => r.data),
 
   // Status
   getStatus: () => http.get('/status').then(r => r.data),
@@ -43,6 +45,7 @@ export const api = {
 
   // News
   getNews: () => http.get('/news').then(r => r.data),
+  listAnnouncements: (params) => http.get('/announcements', { params }).then(r => r.data),
   recordNewsView: (link) => http.post('/news/view', { link }).then(r => r.data),
   listNewsBriefs: (params) => http.get('/news/briefs', { params }).then(r => r.data),
   generateNewsBrief: (params) => http.post('/news/briefs/generate', null, { params }).then(r => r.data),
@@ -100,6 +103,10 @@ export const api = {
   listRecentListings: (params) => http.get('/admin/listings/recent', { params }).then(r => r.data),
   getAdminListing: (id) => http.get(`/admin/listings/${id}`).then(r => r.data),
   setListingStatus: (id, status) => http.patch(`/admin/listings/${id}/status`, { status }).then(r => r.data),
+  listAdminAnnouncements: (params) => http.get('/admin/announcements', { params }).then(r => r.data),
+  createAdminAnnouncement: (data) => http.post('/admin/announcements', data).then(r => r.data),
+  updateAdminAnnouncement: (id, data) => http.put(`/admin/announcements/${id}`, data).then(r => r.data),
+  deleteAdminAnnouncement: (id) => http.delete(`/admin/announcements/${id}`).then(r => r.data),
   reportListing: (id, reason) => http.post(`/listings/${id}/report`, { reason }).then(r => r.data),
   listAdminLogs: (params) => http.get('/admin/logs', { params }).then(r => r.data),
 }

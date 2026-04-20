@@ -3,6 +3,7 @@ import Modal from '../ui/Modal'
 import Badge from '../ui/Badge'
 import Button from '../ui/Button'
 import Field from '../ui/Field'
+import AdminBadge from '../ui/AdminBadge'
 
 const POST_CATEGORY_ZH = {
   Life: '生活问答',
@@ -25,7 +26,10 @@ function ReplyItem({ reply, canManage, onDelete }) {
     <div className="rounded-2xl bg-surface-muted px-4 py-4">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-text">{reply.owner_name || '社区用户'}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-semibold text-text">{reply.owner_name || '社区用户'}</p>
+            {reply.owner_is_admin ? <AdminBadge compact /> : null}
+          </div>
           <p className="mt-1 text-xs text-text-subtle">{formatDateTime(reply.created_at)}</p>
         </div>
         {canManage && (
@@ -96,6 +100,7 @@ export default function PostDetailModal({
           <span className="text-xs text-text-subtle">{post.city || '城市未填写'}</span>
           <span className="text-xs text-text-subtle">·</span>
           <span className="text-xs text-text-subtle">{post.owner_name || '社区用户'}</span>
+          {post.owner_is_admin ? <AdminBadge compact /> : null}
           <span className="text-xs text-text-subtle">·</span>
           <span className="text-xs text-text-subtle">{formatDateTime(post.created_at)}</span>
         </div>
