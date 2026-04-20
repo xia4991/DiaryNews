@@ -1,0 +1,19 @@
+:8080 {
+    encode gzip zstd
+
+    route {
+        # Make backend routes win before the SPA fallback.
+        @api path /api/*
+        reverse_proxy @api 127.0.0.1:8000
+
+        # Local media uploads served by FastAPI.
+        @uploads path /uploads/*
+        reverse_proxy @uploads 127.0.0.1:8000
+
+        root * /Users/yongbinjiang/Desktop/XAB/projects/DiaryNews/react-frontend/dist
+
+        # React SPA fallback
+        try_files {path} /index.html
+        file_server
+    }
+}
