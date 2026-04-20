@@ -5,7 +5,7 @@ from backend.config import DB_PATH
 
 
 def _migrate(conn) -> None:
-    for col in ["title_zh TEXT", "content_zh TEXT", "tags_zh TEXT"]:
+    for col in ["title_zh TEXT", "content_zh TEXT", "tags_zh TEXT", "view_count INTEGER NOT NULL DEFAULT 0"]:
         try:
             conn.execute(f"ALTER TABLE articles ADD COLUMN {col}")
         except sqlite3.OperationalError:
@@ -36,21 +36,26 @@ def init_db() -> None:
                 ai_summary       TEXT,
                 title_zh         TEXT,
                 content_zh       TEXT,
-                tags_zh          TEXT
+                tags_zh          TEXT,
+                view_count       INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS daily_news_briefs (
+                id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+                brief_date         TEXT    NOT NULL,
+                brief_type         TEXT    NOT NULL CHECK (brief_type IN ('china','portugal')),
+                title              TEXT    NOT NULL,
+                summary_zh         TEXT    NOT NULL,
+                bullets_json       TEXT    NOT NULL,
+                article_links_json TEXT    NOT NULL,
+                article_count      INTEGER NOT NULL DEFAULT 0,
+                generated_at       TEXT    NOT NULL,
+                updated_at         TEXT    NOT NULL
             );
 
             DROP TABLE IF EXISTS captions;
             DROP TABLE IF EXISTS videos;
             DROP TABLE IF EXISTS channels;
-
-            CREATE TABLE IF NOT EXISTS ideas (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                title      TEXT    NOT NULL,
-                category   TEXT    NOT NULL DEFAULT 'General',
-                content    TEXT    NOT NULL DEFAULT '',
-                created_at TEXT    NOT NULL,
-                updated_at TEXT    NOT NULL
-            );
 
             CREATE TABLE IF NOT EXISTS community_events (
                 id                INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -99,6 +104,8 @@ def init_db() -> None:
             );
 
             CREATE INDEX IF NOT EXISTS idx_articles_published ON articles (published DESC);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_news_briefs_type_date
+                ON daily_news_briefs (brief_type, brief_date DESC);
             CREATE TABLE IF NOT EXISTS users (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
                 google_id  TEXT    UNIQUE NOT NULL,
@@ -179,7 +186,6 @@ def init_db() -> None:
                 resolution   TEXT
             );
 
-            CREATE INDEX IF NOT EXISTS idx_ideas_created                ON ideas (created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_community_events_start       ON community_events (status, start_at ASC);
             CREATE INDEX IF NOT EXISTS idx_community_events_owner       ON community_events (owner_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_community_posts_created      ON community_posts (status, created_at DESC);

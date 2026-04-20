@@ -18,11 +18,15 @@ def article_chinese_prompt(title: str, content: str) -> str:
         "用逗号分隔；如果都不相关，写\"无\"\n"
         "   可选标签：移民签证, 房产租房, 法律法规, 工作就业, 教育留学, 税务财务, "
         "华人社区, 安全治安, 医疗社保, 中葡关系\n"
-        "3. 将正文内容翻译成中文，不是逐字翻译，而是精炼版本：去除重复和冗余内容，保留所有关键信息，"
+        "3. 根据内容判断此新闻最适合的分类（只选一个）：\n"
+        "   Política, Desporto, Economia, Saúde, Tecnologia, Internacional, "
+        "Cultura, Ambiente, Crime/Justiça, Sociedade, Geral\n"
+        "4. 将正文内容翻译成中文，不是逐字翻译，而是精炼版本：去除重复和冗余内容，保留所有关键信息，"
         "用自然流畅的中文新闻风格书写, 人名的话可以用原文名字\n\n"
         "严格使用以下格式输出：\n"
         "TITLE_ZH: <中文标题>\n"
         "TAGS_ZH: <匹配标签，逗号分隔，或 无>\n"
+        "CATEGORY: <分类名>\n"
         "CONTENT_ZH: <中文精炼内容>"
     )
 
@@ -43,4 +47,28 @@ def caption_summary_prompt(title: str, raw_text: str) -> str:
         "**结论**\n"
         "一句话总结视频的核心观点或收获。\n\n"
         "直接给出内容，不要使用「这个视频讲了」之类的开场白。"
+    )
+
+
+def daily_news_brief_prompt(brief_date: str, brief_type: str, article_digest: str) -> str:
+    audience = "在葡华人更相关的新闻" if brief_type == "china" else "葡萄牙新闻"
+    return (
+        f"日期: {brief_date}\n"
+        f"简报类型: {brief_type}\n"
+        f"内容范围: {audience}\n\n"
+        f"候选新闻:\n{article_digest}\n\n"
+        "请根据以上内容，生成一份中文“每日回顾”。要求：\n"
+        "1. 可以逐条复述新闻，但要保持清晰、紧凑，适合回顾某一天的新闻\n"
+        "2. 输出一个适合作为卡片标题的中文标题\n"
+        "3. 输出一段 2 到 4 句的中文总结\n"
+        "4. 输出 bullet 列表，每条对应一条值得回看的新闻，可多于 5 条\n"
+        "5. 标题和总结里不要使用“昨天”“今天”“明天”这类相对时间词，尽量用中性措辞\n"
+        "6. 如果新闻不足以支持完整回顾，就尽量保守总结，不要编造\n\n"
+        "严格使用以下格式输出：\n"
+        "TITLE: <中文标题>\n"
+        "SUMMARY: <中文总结>\n"
+        "BULLETS:\n"
+        "- 要点1\n"
+        "- 要点2\n"
+        "- 要点3"
     )

@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Literal, Optional
 
 log = logging.getLogger("diarynews.api")
@@ -23,6 +23,7 @@ from backend.config import (
 )
 from backend.sources import RSS_SOURCES
 from backend.chat.router import router as chat_router
+from backend.news_briefs import generate_and_store_daily_news_brief
 
 JOB_EXPIRY_SWEEP_INTERVAL_SECONDS = 24 * 60 * 60
 
@@ -66,6 +67,10 @@ app.add_middleware(
 
 class GoogleLoginRequest(BaseModel):
     credential: str
+
+
+class NewsViewRequest(BaseModel):
+    link: str
 
 
 @app.post("/api/auth/google")
@@ -407,9 +412,51 @@ def delete_community_post_reply(reply_id: int, user: dict = Depends(get_current_
 
 # ── News (public) ────────────────────────────────────────────────────────────
 
+BriefType = Literal["china", "portugal"]
+
 @app.get("/api/news")
 def get_news():
     return storage.load_news()
+
+
+@app.post("/api/news/view")
+def record_news_view(req: NewsViewRequest):
+    link = (req.link or "").strip()
+    if not link:
+        raise HTTPException(status_code=400, detail="link is required")
+    updated = storage.increment_article_view(link)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Article not found")
+    return updated
+
+
+@app.get("/api/news/briefs")
+def get_news_briefs(
+    type: BriefType = Query(...),
+    limit: int = Query(7, ge=1, le=30),
+):
+    return {"items": storage.list_daily_news_briefs(type, limit=limit)}
+
+
+@app.post("/api/news/briefs/generate")
+def generate_news_brief(
+    type: BriefType = Query(...),
+    date_str: str = Query(..., alias="date"),
+    _admin: dict = Depends(require_admin),
+):
+    try:
+        date.fromisoformat(date_str)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format, expected YYYY-MM-DD")
+
+    existing = storage.get_daily_news_brief(type, date_str)
+    brief = generate_and_store_daily_news_brief(type, date_str)
+    if brief is None:
+        raise HTTPException(status_code=400, detail="Not enough articles to generate a brief for this date")
+    return {
+        "brief": brief,
+        "replaced": existing is not None,
+    }
 
 
 @app.post("/api/news/fetch")
@@ -888,34 +935,3 @@ def admin_set_listing_status(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
-
-# ── Ideas (login required) ──────────────────────────────────────────────────
-
-class IdeaRequest(BaseModel):
-    title: str
-    category: str = "General"
-    content: str = ""
-
-
-@app.get("/api/ideas")
-def get_ideas(_user: dict = Depends(get_current_user)):
-    return storage.load_ideas()
-
-
-@app.post("/api/ideas", status_code=201)
-def create_idea(req: IdeaRequest, _user: dict = Depends(get_current_user)):
-    return storage.save_idea(req.title, req.category, req.content)
-
-
-@app.put("/api/ideas/{idea_id}")
-def update_idea(idea_id: int, req: IdeaRequest, _user: dict = Depends(get_current_user)):
-    try:
-        return storage.update_idea(idea_id, req.title, req.category, req.content)
-    except KeyError:
-        raise HTTPException(status_code=404, detail=f"Idea {idea_id} not found.")
-
-
-@app.delete("/api/ideas/{idea_id}")
-def delete_idea(idea_id: int, _user: dict = Depends(get_current_user)):
-    storage.delete_idea(idea_id)
-    return {"ok": True}

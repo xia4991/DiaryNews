@@ -1,12 +1,12 @@
 # Re-export all public functions for backward compatibility.
 # Consumers can continue to use: from backend import storage; storage.load_news()
 
-from backend.storage.news import load_news, save_news, merge_articles  # noqa: F401
-from backend.storage.ideas import (  # noqa: F401
-    load_ideas,
-    save_idea,
-    update_idea,
-    delete_idea,
+from backend.storage.news import load_news, save_news, merge_articles, increment_article_view  # noqa: F401
+from backend.storage.news_briefs import (  # noqa: F401
+    BRIEF_TYPES,
+    list_daily_news_briefs,
+    get_daily_news_brief,
+    upsert_daily_news_brief,
 )
 from backend.storage.community import (  # noqa: F401
     EVENT_CATEGORIES,

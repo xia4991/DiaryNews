@@ -1,5 +1,6 @@
 import Modal from '../ui/Modal'
 import Badge from '../ui/Badge'
+import Button from '../ui/Button'
 import SummaryText from '../SummaryText'
 import { CATEGORY_ZH } from '../../constants/categories'
 import { categoryColor, TAG_COLOR } from '../../constants/colors'
@@ -10,7 +11,11 @@ function estimateReadMinutes(text) {
   return Math.max(1, Math.round(plain.length / 700))
 }
 
-export default function ArticleModal({ article, onClose }) {
+function formatViews(value) {
+  return `${Number(value || 0)} 次`
+}
+
+export default function ArticleModal({ article, onClose, onBack }) {
   if (!article) return null
   const pub = article.published?.slice(0, 16).replace('T', ' ')
   const tags = article.tags_zh
@@ -21,7 +26,16 @@ export default function ArticleModal({ article, onClose }) {
   const readMinutes = estimateReadMinutes(originalText || bodyText)
 
   return (
-    <Modal onClose={onClose} size="xl" className="max-w-4xl rounded-[28px]">
+    <Modal
+      onClose={onClose}
+      size="xl"
+      className="max-w-4xl rounded-[28px]"
+      headerLeading={onBack ? (
+        <Button variant="ghost" size="sm" icon="arrow_back" onClick={onBack}>
+          返回每日回顾
+        </Button>
+      ) : null}
+    >
       <div className="flex flex-col gap-7">
         <div className="rounded-[24px] border border-[#E4D9C9] bg-[linear-gradient(135deg,#faf7f0_0%,#f4efe5_100%)] px-4 py-4 sm:rounded-[26px] sm:px-6 sm:py-6">
           <div className="flex items-center gap-2 mb-4 flex-wrap">
@@ -49,7 +63,7 @@ export default function ArticleModal({ article, onClose }) {
               )}
             </div>
 
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 lg:grid-cols-1 lg:gap-3">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-2 lg:gap-3">
               <div className="rounded-2xl border border-white/75 bg-white/72 px-4 py-3">
                 <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-text-subtle">来源</p>
                 <p className="mt-2 text-sm font-semibold text-text">{article.source || '未标注'}</p>
@@ -61,6 +75,10 @@ export default function ArticleModal({ article, onClose }) {
               <div className="rounded-2xl border border-white/75 bg-white/72 px-4 py-3">
                 <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-text-subtle">阅读</p>
                 <p className="mt-2 text-sm font-semibold text-text">{readMinutes ? `${readMinutes} 分钟` : '短文'}</p>
+              </div>
+              <div className="rounded-2xl border border-white/75 bg-white/72 px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-text-subtle">阅读量</p>
+                <p className="mt-2 text-sm font-semibold text-text">{formatViews(article.view_count)}</p>
               </div>
             </div>
           </div>
