@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS kb_chunks (
 
 CREATE TABLE IF NOT EXISTS conversations (
     id          TEXT PRIMARY KEY,
+    owner_id    INTEGER,
     title       TEXT NOT NULL,
     topic_hint  TEXT,
     created_at  TEXT NOT NULL,
@@ -70,8 +71,14 @@ def init_db() -> None:
     os.makedirs(os.path.dirname(CHAT_DB_PATH) or ".", exist_ok=True)
     with sqlite3.connect(CHAT_DB_PATH) as conn:
         conn.executescript(_SCHEMA)
+        if not _column_exists(conn, "conversations", "owner_id"):
+            conn.execute("ALTER TABLE conversations ADD COLUMN owner_id INTEGER")
         if not _column_exists(conn, "conversations", "topic_hint"):
             conn.execute("ALTER TABLE conversations ADD COLUMN topic_hint TEXT")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_conversations_owner_updated "
+            "ON conversations(owner_id, updated_at)"
+        )
 
 
 @contextmanager

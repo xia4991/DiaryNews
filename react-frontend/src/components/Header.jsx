@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../auth'
 import Button from './ui/Button'
-import ProfileModal from './ProfileModal'
 
 export default function Header({ activeTab, tabs, onTabChange, onFetchNews, fetching, user, onLoginClick }) {
   const { logout } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
-  const [profileOpen, setProfileOpen] = useState(false)
   const menuRef = useRef(null)
 
   useEffect(() => {
@@ -104,7 +102,7 @@ export default function Header({ activeTab, tabs, onTabChange, onFetchNews, fetc
             {menuOpen && (
               <div className="absolute right-0 top-full mt-1.5 min-w-[180px] rounded-lg overflow-hidden py-1 bg-surface border border-border shadow-modal">
                 <button
-                  onClick={() => { setMenuOpen(false); setProfileOpen(true) }}
+                  onClick={() => { setMenuOpen(false); onTabChange('个人资料') }}
                   className="w-full text-left px-3 py-2 text-sm text-text hover:bg-bg-subtle flex items-center gap-2 transition-colors"
                 >
                   <span className="material-symbols-outlined text-text-muted" style={{ fontSize: 18 }}>person</span>
@@ -126,8 +124,6 @@ export default function Header({ activeTab, tabs, onTabChange, onFetchNews, fetc
           </Button>
         )}
       </div>
-
-      {profileOpen && <ProfileModal onClose={() => setProfileOpen(false)} />}
     </header>
   )
 }

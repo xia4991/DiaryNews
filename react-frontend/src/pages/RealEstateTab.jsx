@@ -7,6 +7,7 @@ import RealEstateFormModal from '../components/listings/RealEstateFormModal'
 import Card from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
+import AdminBadge from '../components/ui/AdminBadge'
 import { DEAL_TYPE_ZH, DEAL_TYPE_COLORS, formatPrice } from '../constants/realestate'
 
 export default function RealEstateTab({ activeDealType, activeRooms, onCountsChange, onLoginRequired }) {
@@ -158,8 +159,12 @@ export default function RealEstateTab({ activeDealType, activeRooms, onCountsCha
                   </Card>
                   <Card className="rounded-[22px] border-white/80 bg-white/80 shadow-none">
                     <p className="text-[11px] uppercase tracking-[0.14em] text-text-subtle">最新发布</p>
+                    {newest?.owner_is_admin ? <div className="mt-2"><AdminBadge compact /></div> : null}
                     <p className="mt-2 line-clamp-2 text-sm font-bold leading-6 text-text">
                       {newest?.title || '等待第一条房源'}
+                    </p>
+                    <p className="mt-2 text-xs leading-6 text-text-muted">
+                      发布者：{newest?.owner_name || '社区用户'}
                     </p>
                     <p className="mt-2 text-xs leading-6 text-text-muted">{newest?.created_at?.slice(0, 10) || '暂无日期'}</p>
                   </Card>
@@ -198,9 +203,10 @@ export default function RealEstateTab({ activeDealType, activeRooms, onCountsCha
                       onClick={() => setSelected(newest)}
                       className="mt-3 w-full rounded-2xl border border-border bg-surface-muted px-4 py-4 text-left transition-colors hover:bg-surface"
                     >
-                      <p className="text-xs text-text-subtle">
-                        {DEAL_TYPE_ZH[newest.deal_type]} · {newest.created_at?.slice(0, 10)}
-                      </p>
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-text-subtle">
+                        <span>{DEAL_TYPE_ZH[newest.deal_type]} · {newest.created_at?.slice(0, 10)}</span>
+                        {newest.owner_is_admin ? <AdminBadge compact /> : null}
+                      </div>
                       <p className="mt-2 font-bold text-text">{newest.title}</p>
                       <p className="mt-1 text-lg font-black text-accent" style={{ fontFamily: 'var(--font-headline)' }}>
                         {formatPrice(newest.price_cents, newest.deal_type)}

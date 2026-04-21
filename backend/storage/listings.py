@@ -39,6 +39,27 @@ def _fetch_images(conn, listing_id: int) -> list:
     return result
 
 
+def _fetch_images_map(conn, listing_ids: list) -> dict:
+    if not listing_ids:
+        return {}
+    placeholders = ",".join("?" for _ in listing_ids)
+    rows = conn.execute(
+        "SELECT id, listing_id, position, storage_key, thumb_key, original_filename, "
+        "bytes, width, height, created_at FROM listing_images "
+        f"WHERE listing_id IN ({placeholders}) ORDER BY listing_id ASC, position ASC",
+        listing_ids,
+    ).fetchall()
+    media = get_media_storage()
+    images_by_listing = {listing_id: [] for listing_id in listing_ids}
+    for r in rows:
+        d = dict(r)
+        d["url"] = media.url(d["storage_key"])
+        d["thumb_url"] = media.url(d["thumb_key"])
+        listing_id = d.pop("listing_id")
+        images_by_listing.setdefault(listing_id, []).append(d)
+    return images_by_listing
+
+
 def _fetch_extension(conn, kind: str, listing_id: int) -> dict:
     table = _EXTENSION_TABLES.get(kind)
     if not table:
@@ -54,7 +75,13 @@ def _fetch_extension(conn, kind: str, listing_id: int) -> dict:
 
 
 def _fetch_listing(conn, listing_id: int) -> Optional[dict]:
-    row = conn.execute("SELECT * FROM listings WHERE id = ?", (listing_id,)).fetchone()
+    row = conn.execute(
+        """SELECT l.*, u.name AS owner_name, u.is_admin AS owner_is_admin
+           FROM listings l
+           JOIN users u ON u.id = l.owner_id
+           WHERE l.id = ?""",
+        (listing_id,),
+    ).fetchone()
     if not row:
         return None
     d = dict(row)
@@ -162,15 +189,19 @@ def list_listings(
             f"SELECT COUNT(*) FROM listings WHERE {where}", params
         ).fetchone()[0]
         rows = conn.execute(
-            f"SELECT * FROM listings WHERE {where} "
-            "ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            f"""SELECT l.*, u.name AS owner_name, u.is_admin AS owner_is_admin
+                FROM listings l
+                JOIN users u ON u.id = l.owner_id
+                WHERE {where} """
+            "ORDER BY l.created_at DESC LIMIT ? OFFSET ?",
             params + [limit, offset],
         ).fetchall()
+        images_by_listing = _fetch_images_map(conn, [row["id"] for row in rows])
         items = []
         for r in rows:
             d = dict(r)
             d.update(_fetch_extension(conn, d["kind"], d["id"]))
-            d["images"] = _fetch_images(conn, d["id"])
+            d["images"] = images_by_listing.get(d["id"], [])
             items.append(d)
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 
@@ -180,7 +211,10 @@ def list_all_recent(limit: int = 20) -> dict:
     with get_db() as conn:
         total = conn.execute("SELECT COUNT(*) FROM listings").fetchone()[0]
         rows = conn.execute(
-            "SELECT * FROM listings ORDER BY created_at DESC LIMIT ?",
+            """SELECT l.*, u.name AS owner_name, u.is_admin AS owner_is_admin
+               FROM listings l
+               JOIN users u ON u.id = l.owner_id
+               ORDER BY l.created_at DESC LIMIT ?""",
             (limit,),
         ).fetchall()
         items = []
@@ -338,15 +372,19 @@ def list_jobs(
             params,
         ).fetchone()[0]
         rows = conn.execute(
-            f"SELECT l.*, j.industry, j.salary_range FROM listings l "
-            f"JOIN listing_jobs j ON j.listing_id = l.id WHERE {where} "
+            f"""SELECT l.*, u.name AS owner_name, u.is_admin AS owner_is_admin,
+                       j.industry, j.salary_range
+                FROM listings l
+                JOIN users u ON u.id = l.owner_id
+                JOIN listing_jobs j ON j.listing_id = l.id WHERE {where} """
             "ORDER BY l.created_at DESC LIMIT ? OFFSET ?",
             params + [limit, offset],
         ).fetchall()
+        images_by_listing = _fetch_images_map(conn, [row["id"] for row in rows])
         items = []
         for r in rows:
             d = dict(r)
-            d["images"] = _fetch_images(conn, d["id"])
+            d["images"] = images_by_listing.get(d["id"], [])
             items.append(d)
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 
@@ -491,16 +529,20 @@ def list_realestate(
             params,
         ).fetchone()[0]
         rows = conn.execute(
-            f"SELECT l.*, r.deal_type, r.price_cents, r.rooms, r.bathrooms, "
-            f"r.area_m2, r.furnished FROM listings l "
-            f"JOIN listing_realestate r ON r.listing_id = l.id WHERE {where} "
+            f"""SELECT l.*, u.name AS owner_name, u.is_admin AS owner_is_admin,
+                       r.deal_type, r.price_cents, r.rooms, r.bathrooms,
+                       r.area_m2, r.furnished
+                FROM listings l
+                JOIN users u ON u.id = l.owner_id
+                JOIN listing_realestate r ON r.listing_id = l.id WHERE {where} """
             "ORDER BY l.created_at DESC LIMIT ? OFFSET ?",
             params + [limit, offset],
         ).fetchall()
+        images_by_listing = _fetch_images_map(conn, [row["id"] for row in rows])
         items = []
         for row in rows:
             d = dict(row)
-            d["images"] = _fetch_images(conn, d["id"])
+            d["images"] = images_by_listing.get(d["id"], [])
             items.append(d)
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 
@@ -649,15 +691,19 @@ def list_secondhand(
             params,
         ).fetchone()[0]
         rows = conn.execute(
-            f"SELECT l.*, s.category, s.condition, s.price_cents FROM listings l "
-            f"JOIN listing_secondhand s ON s.listing_id = l.id WHERE {where} "
+            f"""SELECT l.*, u.name AS owner_name, u.is_admin AS owner_is_admin,
+                       s.category, s.condition, s.price_cents
+                FROM listings l
+                JOIN users u ON u.id = l.owner_id
+                JOIN listing_secondhand s ON s.listing_id = l.id WHERE {where} """
             "ORDER BY l.created_at DESC LIMIT ? OFFSET ?",
             params + [limit, offset],
         ).fetchall()
+        images_by_listing = _fetch_images_map(conn, [row["id"] for row in rows])
         items = []
         for row in rows:
             d = dict(row)
-            d["images"] = _fetch_images(conn, d["id"])
+            d["images"] = images_by_listing.get(d["id"], [])
             items.append(d)
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 

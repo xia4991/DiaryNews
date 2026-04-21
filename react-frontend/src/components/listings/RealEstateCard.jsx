@@ -1,5 +1,6 @@
 import Badge from '../ui/Badge'
 import Card from '../ui/Card'
+import AdminBadge from '../ui/AdminBadge'
 import { DEAL_TYPE_ZH, DEAL_TYPE_COLORS, formatPrice } from '../../constants/realestate'
 
 export default function RealEstateCard({ listing, onClick }) {
@@ -30,6 +31,7 @@ export default function RealEstateCard({ listing, onClick }) {
       <div className="px-4 py-3.5">
         <div className="flex items-center gap-2">
           <Badge color={color}>{DEAL_TYPE_ZH[listing.deal_type]}</Badge>
+          {listing.owner_is_admin ? <AdminBadge compact /> : null}
           {listing.rooms != null && (
             <span className="text-xs text-text-muted">{listing.rooms}房</span>
           )}
@@ -46,6 +48,11 @@ export default function RealEstateCard({ listing, onClick }) {
             {listing.location}
           </p>
         )}
+        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-text-muted">
+          <span className="material-symbols-outlined" style={{ fontSize: 13 }}>person</span>
+          <span>{listing.owner_name || '社区用户'}</span>
+          {listing.owner_is_admin ? <AdminBadge compact /> : null}
+        </div>
       </div>
     </Card>
   )

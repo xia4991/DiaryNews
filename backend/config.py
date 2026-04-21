@@ -35,3 +35,6 @@ NEWS_FETCH_INTERVAL = int(os.environ.get("NEWS_FETCH_INTERVAL", "3600"))  # 0 to
 MEDIA_BACKEND    = os.environ.get("MEDIA_BACKEND", "local")      # local | s3
 MEDIA_LOCAL_ROOT = os.environ.get("MEDIA_LOCAL_ROOT", "data/uploads")
 MEDIA_PUBLIC_URL = os.environ.get("MEDIA_PUBLIC_URL", "/uploads")
+
+# ── Site ─────────────────────────────────────────────────────────────────────
+SITE_URL = os.environ.get("SITE_URL", "https://app.huarenpt.com")

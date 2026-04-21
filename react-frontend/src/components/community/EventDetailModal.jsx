@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Modal from '../ui/Modal'
 import Badge from '../ui/Badge'
 import Button from '../ui/Button'
+import AdminBadge from '../ui/AdminBadge'
 
 const EVENT_CATEGORY_ZH = {
   Meetup: '聚会',
@@ -52,6 +53,7 @@ export default function EventDetailModal({ event, canManage, onEdit, onDelete, o
             <div className="flex items-center gap-2 flex-wrap">
               <Badge color="#2E7D5A">{EVENT_CATEGORY_ZH[event.category] || event.category}</Badge>
               <span className="text-xs text-text-subtle">{event.city || '城市待定'}</span>
+              {event.owner_is_admin ? <AdminBadge compact /> : null}
             </div>
             <h2 className="text-lg font-bold text-text leading-snug" style={{ fontFamily: 'var(--font-headline)' }}>
               {event.title}
@@ -74,6 +76,14 @@ export default function EventDetailModal({ event, canManage, onEdit, onDelete, o
           <div className="rounded-xl bg-surface-muted px-4 py-3">
             <p className="text-[11px] uppercase tracking-[0.14em] text-text-subtle">费用</p>
             <p className="mt-2 text-sm font-semibold text-text">{event.is_free ? '免费' : (event.fee_text || '收费')}</p>
+          </div>
+        </div>
+
+        <div className="rounded-xl bg-surface-muted px-4 py-3">
+          <p className="text-[11px] uppercase tracking-[0.14em] text-text-subtle">发布者</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <p className="text-sm font-semibold text-text">{event.owner_name || '社区用户'}</p>
+            {event.owner_is_admin ? <AdminBadge compact /> : null}
           </div>
         </div>
 

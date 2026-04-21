@@ -4,6 +4,7 @@ import Card from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
+import Field from '../components/ui/Field'
 
 const KIND_ZH = { job: '招聘', realestate: '房产', secondhand: '二手' }
 const KIND_COLORS = { job: '#2E7D5A', realestate: '#2B6CB0', secondhand: '#8B5CF6' }
@@ -15,6 +16,7 @@ const LOG_TYPE_META = {
   user_login: { label: '用户', color: '#10B981', icon: 'person' },
   brief_generate: { label: '简报', color: '#8B5CF6', icon: 'summarize' },
   listing_moderate: { label: '管理操作', color: '#F59E0B', icon: 'shield' },
+  announcement_manage: { label: '公告', color: '#9D3D33', icon: 'campaign' },
 }
 
 const LOG_FILTERS = [
@@ -23,6 +25,7 @@ const LOG_FILTERS = [
   { key: 'user_login', label: '用户' },
   { key: 'brief_generate', label: '简报' },
   { key: 'listing_moderate', label: '管理操作' },
+  { key: 'announcement_manage', label: '公告' },
 ]
 
 function timeAgo(isoStr) {
@@ -41,17 +44,20 @@ export default function AdminModerationTab() {
   const [tab, setTab] = useState('reports')
   const [reports, setReports] = useState([])
   const [listings, setListings] = useState([])
+  const [announcements, setAnnouncements] = useState([])
   const [loading, setLoading] = useState(true)
 
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [r, l] = await Promise.all([
+      const [r, l, a] = await Promise.all([
         api.listReports({ limit: 50 }),
         api.listRecentListings({ limit: 20 }),
+        api.listAdminAnnouncements({ limit: 20 }),
       ])
       setReports(r.items || [])
       setListings(l.items || [])
+      setAnnouncements(a.items || [])
     } finally {
       setLoading(false)
     }
@@ -64,7 +70,26 @@ export default function AdminModerationTab() {
     await loadData()
   }
 
+  const handleCreateAnnouncement = async (payload) => {
+    await api.createAdminAnnouncement(payload)
+    await loadData()
+  }
+
+  const handleUpdateAnnouncement = async (announcementId, payload) => {
+    await api.updateAdminAnnouncement(announcementId, payload)
+    await loadData()
+  }
+
+  const handleDeleteAnnouncement = async (announcementId) => {
+    await api.deleteAdminAnnouncement(announcementId)
+    await loadData()
+  }
+
   const unresolvedCount = reports.length
+  const activeAnnouncementCount = useMemo(
+    () => announcements.filter((item) => item.status === 'active').length,
+    [announcements]
+  )
 
   return (
     <div className="grid gap-6">
@@ -99,6 +124,14 @@ export default function AdminModerationTab() {
               最近发布
             </Button>
             <Button
+              variant={tab === 'announcements' ? 'primary' : 'ghost'}
+              size="sm"
+              icon="campaign"
+              onClick={() => setTab('announcements')}
+            >
+              公告 {activeAnnouncementCount > 0 && `(${activeAnnouncementCount})`}
+            </Button>
+            <Button
               variant={tab === 'logs' ? 'primary' : 'ghost'}
               size="sm"
               icon="history"
@@ -118,6 +151,13 @@ export default function AdminModerationTab() {
         <ReportsSection reports={reports} onAction={handleStatus} />
       ) : tab === 'recent' ? (
         <RecentListingsSection listings={listings} onAction={handleStatus} />
+      ) : tab === 'announcements' ? (
+        <AnnouncementsSection
+          announcements={announcements}
+          onCreate={handleCreateAnnouncement}
+          onUpdate={handleUpdateAnnouncement}
+          onDelete={handleDeleteAnnouncement}
+        />
       ) : (
         <LogsSection />
       )}
@@ -422,6 +462,233 @@ function ListingDetailModal({ listing, onClose, onAction }) {
         </div>
       </div>
     </Modal>
+  )
+}
+
+function AnnouncementEditorModal({ announcement, onSave, onClose }) {
+  const [title, setTitle] = useState(announcement?.title || '')
+  const [content, setContent] = useState(announcement?.content || '')
+  const [isPinned, setIsPinned] = useState(Boolean(announcement?.is_pinned))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    const nextTitle = title.trim()
+    const nextContent = content.trim()
+    if (!nextTitle) {
+      setError('标题不能为空')
+      return
+    }
+    if (!nextContent) {
+      setError('正文不能为空')
+      return
+    }
+
+    setSaving(true)
+    setError('')
+    try {
+      await onSave({
+        title: nextTitle,
+        content: nextContent,
+        is_pinned: isPinned,
+      })
+      onClose()
+    } catch (err) {
+      setError(err.response?.data?.detail || '保存失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Modal onClose={onClose} title={announcement ? '编辑公告' : '发布公告'} size="md">
+      <form onSubmit={handleSubmit} className="grid gap-4">
+        <Field label="标题" required error={!title.trim() && error ? error : ''}>
+          <input
+            id="announcement-title"
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="例如：平台持续开发中，欢迎反馈问题"
+          />
+        </Field>
+
+        <Field label="正文" required error={title.trim() && !content.trim() && error ? error : ''}>
+          <textarea
+            id="announcement-content"
+            rows={7}
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="写下你希望首页公告栏展示的内容。"
+            className="resize-none"
+          />
+        </Field>
+
+        <label className="inline-flex items-center gap-2 text-sm text-text">
+          <input
+            type="checkbox"
+            checked={isPinned}
+            onChange={(e) => setIsPinned(e.target.checked)}
+            className="h-4 w-4 rounded border border-border-strong"
+          />
+          置顶这条公告
+        </label>
+
+        {error && title.trim() && content.trim() ? (
+          <p className="text-sm text-danger">{error}</p>
+        ) : null}
+
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onClose}>
+            取消
+          </Button>
+          <Button type="submit" variant="primary" icon="save" loading={saving}>
+            {saving ? '保存中…' : '保存公告'}
+          </Button>
+        </div>
+      </form>
+    </Modal>
+  )
+}
+
+function AnnouncementsSection({ announcements, onCreate, onUpdate, onDelete }) {
+  const [editingAnnouncement, setEditingAnnouncement] = useState(null)
+  const [creating, setCreating] = useState(false)
+  const [workingId, setWorkingId] = useState(null)
+
+  const handleCreate = async (payload) => {
+    await onCreate(payload)
+  }
+
+  const handleUpdate = async (announcementId, payload) => {
+    await onUpdate(announcementId, payload)
+  }
+
+  const handleStatusChange = async (announcementId, status) => {
+    setWorkingId(announcementId)
+    try {
+      await onUpdate(announcementId, { status })
+    } finally {
+      setWorkingId(null)
+    }
+  }
+
+  const handleTogglePin = async (announcement) => {
+    setWorkingId(announcement.id)
+    try {
+      await onUpdate(announcement.id, { is_pinned: !announcement.is_pinned })
+    } finally {
+      setWorkingId(null)
+    }
+  }
+
+  const handleDelete = async (announcementId) => {
+    setWorkingId(announcementId)
+    try {
+      await onDelete(announcementId)
+    } finally {
+      setWorkingId(null)
+    }
+  }
+
+  return (
+    <div className="grid gap-3">
+      {creating && (
+        <AnnouncementEditorModal
+          onSave={handleCreate}
+          onClose={() => setCreating(false)}
+        />
+      )}
+      {editingAnnouncement && (
+        <AnnouncementEditorModal
+          announcement={editingAnnouncement}
+          onSave={(payload) => handleUpdate(editingAnnouncement.id, payload)}
+          onClose={() => setEditingAnnouncement(null)}
+        />
+      )}
+
+      <div className="flex items-center gap-2">
+        <Badge color="#9D3D33">公告</Badge>
+        <h2 className="text-xl font-black tracking-tight text-text" style={{ fontFamily: 'var(--font-headline)' }}>
+          平台公告
+        </h2>
+        <Button variant="primary" size="sm" icon="add" onClick={() => setCreating(true)} className="ml-auto">
+          发布公告
+        </Button>
+      </div>
+
+      {announcements.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-3 text-text-muted">
+          <span className="material-symbols-outlined text-text-subtle" style={{ fontSize: 40 }}>campaign</span>
+          <p className="text-sm">还没有平台公告，发布后就可以接到首页。</p>
+        </div>
+      ) : (
+        announcements.map((announcement) => {
+          const statusColor = STATUS_COLORS[announcement.status] || '#6B7280'
+          const busy = workingId === announcement.id
+          return (
+            <Card key={announcement.id} className="rounded-2xl">
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge color="#9D3D33">公告</Badge>
+                    {announcement.is_pinned ? (
+                      <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={{ background: '#9D3D3318', color: '#9D3D33' }}>
+                        置顶
+                      </span>
+                    ) : null}
+                    <span
+                      className="rounded px-1.5 py-0.5 text-[10px] font-bold"
+                      style={{ background: `${statusColor}18`, color: statusColor }}
+                    >
+                      {STATUS_ZH[announcement.status] || announcement.status}
+                    </span>
+                    {busy ? (
+                      <span className="material-symbols-outlined animate-spin text-accent" style={{ fontSize: 14 }}>progress_activity</span>
+                    ) : null}
+                  </div>
+                  <p className="mt-2 text-lg font-bold text-text">{announcement.title}</p>
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-text-muted">
+                    {announcement.content}
+                  </p>
+                  <p className="mt-3 text-xs text-text-subtle">
+                    {announcement.creator_name || '管理员'} · 更新于 {announcement.updated_at?.slice(0, 16).replace('T', ' ')} · {timeAgo(announcement.updated_at)}
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                  <Button variant="ghost" size="sm" icon="edit" onClick={() => setEditingAnnouncement(announcement)}>
+                    编辑
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={announcement.is_pinned ? 'keep_off' : 'keep'}
+                    onClick={() => handleTogglePin(announcement)}
+                  >
+                    {announcement.is_pinned ? '取消置顶' : '置顶'}
+                  </Button>
+                  {announcement.status !== 'active' ? (
+                    <Button variant="subtle" size="sm" icon="check_circle" onClick={() => handleStatusChange(announcement.id, 'active')}>
+                      发布
+                    </Button>
+                  ) : (
+                    <Button variant="subtle" size="sm" icon="visibility_off" onClick={() => handleStatusChange(announcement.id, 'hidden')}>
+                      隐藏
+                    </Button>
+                  )}
+                  {announcement.status !== 'removed' ? (
+                    <Button variant="danger" size="sm" icon="delete" onClick={() => handleDelete(announcement.id)}>
+                      删除
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            </Card>
+          )
+        })
+      )}
+    </div>
   )
 }
 

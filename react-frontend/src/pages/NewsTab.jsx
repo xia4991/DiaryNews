@@ -17,6 +17,10 @@ import { sortArticlesByHotness } from '../utils/newsHotness'
 
 const INITIAL_FEED_COUNT = 24
 const FEED_STEP = 24
+const CHINA_FEED_SORT_OPTIONS = [
+  { value: 'date', label: '按日期' },
+  { value: 'views', label: '按浏览' },
+]
 
 function buildTopTags(articles) {
   return Object.entries(
@@ -53,6 +57,20 @@ function hotWindowEmptyLabel(window) {
   return '当前还没有热门新闻'
 }
 
+function sortChinaFeedArticles(articles, sortBy) {
+  const sorted = [...articles]
+
+  if (sortBy === 'views') {
+    return sorted.sort((a, b) => {
+      const viewDiff = Number(b.view_count || 0) - Number(a.view_count || 0)
+      if (viewDiff !== 0) return viewDiff
+      return (b.published || '').localeCompare(a.published || '')
+    })
+  }
+
+  return sorted.sort((a, b) => (b.published || '').localeCompare(a.published || ''))
+}
+
 export default function NewsTab({
   articles,
   tabTitle = '葡萄牙新闻',
@@ -66,6 +84,7 @@ export default function NewsTab({
   const [articleReturnContext, setArticleReturnContext] = useState(null)
   const [briefInitialScrollTop, setBriefInitialScrollTop] = useState(0)
   const [visibleCount, setVisibleCount] = useState(INITIAL_FEED_COUNT)
+  const [chinaFeedSort, setChinaFeedSort] = useState('date')
   const [hotWindow, setHotWindow] = useState('week')
   const [briefModalOpen, setBriefModalOpen] = useState(false)
   const [selectedBrief, setSelectedBrief] = useState(null)
@@ -163,6 +182,14 @@ export default function NewsTab({
     setBriefInitialScrollTop(0)
   }, [])
 
+  const featured = articles[0] || null
+  const rest = articles.slice(1)
+  const feed = rest.slice(3)
+  const chinaSortedFeed = useMemo(
+    () => sortChinaFeedArticles(feed, chinaFeedSort),
+    [feed, chinaFeedSort]
+  )
+
   if (!articles.length) {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-4">
@@ -174,10 +201,10 @@ export default function NewsTab({
     )
   }
 
-  const [featured, ...rest] = articles
-  const feed = rest.slice(3)
   const visibleFeed = feed.slice(0, visibleCount)
   const hasMoreFeed = feed.length > visibleFeed.length
+  const chinaVisibleFeed = chinaSortedFeed.slice(0, visibleCount)
+  const chinaHasMoreFeed = chinaSortedFeed.length > chinaVisibleFeed.length
 
   if (layout === 'china') {
     return (
@@ -314,15 +341,34 @@ export default function NewsTab({
                     持续关注
                   </h2>
                 </div>
+                <div className="inline-flex rounded-full border border-border bg-white/78 p-1 shadow-[0_10px_24px_rgba(62,45,24,0.08)]">
+                  {CHINA_FEED_SORT_OPTIONS.map((option) => {
+                    const active = chinaFeedSort === option.value
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setChinaFeedSort(option.value)}
+                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors sm:px-4 ${
+                          active
+                            ? 'bg-accent text-white shadow-[0_8px_18px_rgba(157,61,51,0.22)]'
+                            : 'text-text-muted hover:bg-surface hover:text-text'
+                        }`}
+                      >
+                        {option.label}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
 
               <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {visibleFeed.map(article => (
+                {chinaVisibleFeed.map(article => (
                   <ArticleCard key={article.link} article={article} onClick={handleOpenArticle} />
                 ))}
               </section>
 
-              {hasMoreFeed && (
+              {chinaHasMoreFeed && (
                 <div className="mt-6 flex justify-center">
                   <Button variant="ghost" onClick={() => setVisibleCount(count => count + FEED_STEP)}>
                     加载更多
