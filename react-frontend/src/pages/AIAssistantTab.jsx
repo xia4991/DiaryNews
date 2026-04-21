@@ -47,7 +47,32 @@ function MessageBubble({ message }) {
   )
 }
 
-export default function AIAssistantTab({ user }) {
+function LoginGate({ onLoginRequired }) {
+  return (
+    <div className="mx-auto w-full max-w-[980px]">
+      <SectionHeader
+        title="AI 助手"
+        subtitle="登录后可以保存你的专属会话，并且访问受保护的 wiki 问答能力。"
+      />
+
+      <Card className="bg-[linear-gradient(135deg,rgba(157,61,51,0.08),rgba(43,108,176,0.08))]">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-lg font-semibold text-text">需要先登录</p>
+            <p className="mt-2 text-sm leading-7 text-text-muted">
+              AI 助手现在按账号隔离会话，未登录状态下不会再暴露公共聊天数据。
+            </p>
+          </div>
+          <Button icon="login" onClick={onLoginRequired}>
+            登录后继续
+          </Button>
+        </div>
+      </Card>
+    </div>
+  )
+}
+
+function AuthenticatedAssistant({ user }) {
   const [conversations, setConversations] = useState([])
   const [activeConversationId, setActiveConversationId] = useState(null)
   const [messages, setMessages] = useState([])
@@ -299,4 +324,11 @@ export default function AIAssistantTab({ user }) {
       </div>
     </div>
   )
+}
+
+export default function AIAssistantTab({ user, onLoginRequired }) {
+  if (!user) {
+    return <LoginGate onLoginRequired={onLoginRequired} />
+  }
+  return <AuthenticatedAssistant user={user} />
 }

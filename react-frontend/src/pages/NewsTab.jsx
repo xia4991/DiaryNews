@@ -182,6 +182,14 @@ export default function NewsTab({
     setBriefInitialScrollTop(0)
   }, [])
 
+  const featured = articles[0] || null
+  const rest = articles.slice(1)
+  const feed = rest.slice(3)
+  const chinaSortedFeed = useMemo(
+    () => sortChinaFeedArticles(feed, chinaFeedSort),
+    [feed, chinaFeedSort]
+  )
+
   if (!articles.length) {
     return (
       <div className="flex flex-col items-center justify-center py-32 gap-4">
@@ -193,14 +201,8 @@ export default function NewsTab({
     )
   }
 
-  const [featured, ...rest] = articles
-  const feed = rest.slice(3)
   const visibleFeed = feed.slice(0, visibleCount)
   const hasMoreFeed = feed.length > visibleFeed.length
-  const chinaSortedFeed = useMemo(
-    () => sortChinaFeedArticles(feed, chinaFeedSort),
-    [feed, chinaFeedSort]
-  )
   const chinaVisibleFeed = chinaSortedFeed.slice(0, visibleCount)
   const chinaHasMoreFeed = chinaSortedFeed.length > chinaVisibleFeed.length
 

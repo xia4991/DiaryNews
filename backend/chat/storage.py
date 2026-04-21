@@ -188,45 +188,53 @@ def list_source_chunks(source_id: str) -> List[dict]:
     return [dict(row) for row in rows]
 
 
-def create_conversation(title: str, topic_hint: Optional[str] = None) -> dict:
+def create_conversation(owner_id: int, title: str, topic_hint: Optional[str] = None) -> dict:
     init_db()
     conversation_id = str(uuid.uuid4())
     now = _now_iso()
     with get_db() as conn:
         conn.execute(
             """
-            INSERT INTO conversations (id, title, topic_hint, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO conversations (id, owner_id, title, topic_hint, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             """,
-            (conversation_id, title, topic_hint, now, now),
+            (conversation_id, owner_id, title, topic_hint, now, now),
         )
         row = conn.execute("SELECT * FROM conversations WHERE id = ?", (conversation_id,)).fetchone()
     return dict(row)
 
 
-def list_conversations(limit: int = 50) -> List[dict]:
+def list_conversations(owner_id: int, limit: int = 50) -> List[dict]:
     init_db()
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT * FROM conversations ORDER BY updated_at DESC LIMIT ?",
-            (limit,),
+            "SELECT * FROM conversations WHERE owner_id = ? ORDER BY updated_at DESC LIMIT ?",
+            (owner_id, limit),
         ).fetchall()
     return [dict(row) for row in rows]
 
 
-def get_conversation(conversation_id: str) -> dict:
+def get_conversation(conversation_id: str, owner_id: int) -> dict:
     init_db()
     with get_db() as conn:
-        row = conn.execute("SELECT * FROM conversations WHERE id = ?", (conversation_id,)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM conversations WHERE id = ? AND owner_id = ?",
+            (conversation_id, owner_id),
+        ).fetchone()
     if row is None:
         raise KeyError(conversation_id)
     return dict(row)
 
 
-def delete_conversation(conversation_id: str) -> None:
+def delete_conversation(conversation_id: str, owner_id: int) -> None:
     init_db()
     with get_db() as conn:
-        conn.execute("DELETE FROM conversations WHERE id = ?", (conversation_id,))
+        cur = conn.execute(
+            "DELETE FROM conversations WHERE id = ? AND owner_id = ?",
+            (conversation_id, owner_id),
+        )
+    if cur.rowcount == 0:
+        raise KeyError(conversation_id)
 
 
 def list_messages(conversation_id: str, limit: Optional[int] = None) -> List[dict]:

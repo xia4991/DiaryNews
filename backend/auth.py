@@ -13,6 +13,8 @@ log = logging.getLogger("diarynews.auth")
 
 if not JWT_SECRET:
     raise RuntimeError("JWT_SECRET environment variable is required")
+if not GOOGLE_CLIENT_ID:
+    raise RuntimeError("GOOGLE_CLIENT_ID environment variable is required")
 
 _bearer = HTTPBearer(auto_error=False)
 

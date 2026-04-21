@@ -395,7 +395,7 @@ export default function App() {
           />
         )}
         {activeTab === 'AI 助手' && (
-          <AIAssistantTab user={user} />
+          <AIAssistantTab user={user} onLoginRequired={() => setShowLogin(true)} />
         )}
         {activeTab === '个人资料' && user && (
           <ProfilePage
