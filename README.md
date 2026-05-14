@@ -41,6 +41,31 @@ cp .env.example .env   # then fill in your API keys
 
 ### Run
 
+**Backend + frontend together**:
+```bash
+./run-project.sh
+```
+
+Stop the local development stack from another terminal:
+```bash
+./stop-project.sh --dev
+```
+
+If dependencies need to be installed or refreshed:
+```bash
+./run-project.sh --install
+```
+
+**Public website stack** (`https://app.huarenpt.com` via Caddy + Cloudflare Tunnel):
+```bash
+./run-public.sh
+```
+
+Stop every process started by either runner:
+```bash
+./stop-project.sh
+```
+
 **Backend** (terminal 1):
 ```bash
 python main.py

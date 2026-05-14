@@ -119,6 +119,8 @@ For your current domain, the recommended hostname is:
 
 - `app.huarenpt.com`
 
+Make sure the Cloudflare account has the `huarenpt.com` zone.
+
 Expected result:
 
 ```yaml
