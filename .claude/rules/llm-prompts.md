@@ -11,8 +11,22 @@ paths:
 
 - Model: `MiniMax-M2.5` at `https://api.minimaxi.com/v1/chat/completions`
 - Auth: `MINIMAX_API_KEY` env var
-- Rate limiting is tight: enrichment runs sequentially with a 3s sleep between calls
+- Rate limiting is tight: `services.enrich_pending_news` sleeps `MINIMAX_RATE_LIMIT_SLEEP_SEC` (env, default 3) **between** iterations. One-off callers like brief generation do not sleep.
 - Strips `<think>...</think>` tags from responses
+
+### Wrapper contract — `call_minimax()`
+
+`call_minimax(prompt, *, max_tokens, model=MINIMAX_MODEL, timeout=MINIMAX_TIMEOUT_SEC, max_retries=MINIMAX_MAX_RETRIES, prompt_version="")`
+
+- Returns the cleaned content string on success.
+- Raises one of `MiniMaxError` subclasses on failure — never silent fallback:
+  - `MiniMaxConfigError` — `MINIMAX_API_KEY` unset. Callers should abort the batch (operator-fixable).
+  - `MiniMaxRateLimitError` — HTTP 429 after internal retries exhausted.
+  - `MiniMaxHTTPError` — non-2xx HTTP. 5xx is retried, 4xx is not. `status_code` attribute available.
+  - `MiniMaxTimeoutError` — request timeout after retries exhausted.
+  - `MiniMaxResponseError` — bad JSON shape or empty content.
+- Internal retry: `max_retries` (env `MINIMAX_MAX_RETRIES`, default 2) for transient errors (429 / 5xx / timeout / network). Backoff `1s → 3s → 10s`.
+- No internal `time.sleep()`. The legacy 3s pre-call sleep moved to `services.enrich_pending_news`, so one-off brief generation is not silently delayed.
 
 ## Prompt Output Contract
 

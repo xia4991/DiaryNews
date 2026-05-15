@@ -5,12 +5,14 @@ No FastAPI imports. All functions are synchronous.
 
 import logging
 import threading
+import time
 from datetime import datetime, timezone
 from io import BytesIO
 
 from backend import storage
-from backend.config import MAX_ENRICHMENT_ATTEMPTS
+from backend.config import MAX_ENRICHMENT_ATTEMPTS, MINIMAX_RATE_LIMIT_SLEEP_SEC
 from backend.crawler import run_all
+from backend.llm import MiniMaxConfigError, MiniMaxError
 from backend.news import re_enrich_article
 from backend.storage_media import get_media_storage
 
@@ -90,6 +92,9 @@ def enrich_pending_news(max_retry: int = 20) -> dict:
     """Stage B — run MiniMax enrichment on articles still missing Chinese fields.
 
     Non-blocking: if another enrich is already running, returns status='already_running'.
+    Sleeps `MINIMAX_RATE_LIMIT_SLEEP_SEC` between iterations to respect MiniMax
+    rate limits — the sleep used to live inside `call_minimax()` itself, which
+    silently delayed one-off callers like brief generation.
     """
     if not _enrich_lock.acquire(blocking=False):
         return {"status": "already_running", "retried_count": 0, "done_count": 0}
@@ -100,7 +105,10 @@ def enrich_pending_news(max_retry: int = 20) -> dict:
 
         enriched: list = []
         done = 0
-        for article in pending:
+        aborted_reason = ""
+        for index, article in enumerate(pending):
+            if index > 0 and MINIMAX_RATE_LIMIT_SLEEP_SEC > 0:
+                time.sleep(MINIMAX_RATE_LIMIT_SLEEP_SEC)
             link = article["link"]
             new_attempts = (article.get("enrichment_attempts") or 0) + 1
             try:
@@ -118,11 +126,35 @@ def enrich_pending_news(max_retry: int = 20) -> dict:
                     updated["enrichment_attempts"] = new_attempts
                     updated["enrichment_error"] = reason
                 enriched.append(updated)
-            except Exception as exc:
-                log.warning("enrich failed for '%s': %s", link, exc)
+            except MiniMaxConfigError as exc:
+                # Operator-fixable; no point burning attempts across the rest of the batch.
+                log.error(
+                    "MiniMax config error during enrichment, aborting cycle: %s", exc
+                )
+                storage.mark_enrichment_status(
+                    link, "pending", increment_attempts=False,
+                    error=f"MiniMaxConfigError: {exc}",
+                )
+                aborted_reason = "config"
+                break
+            except MiniMaxError as exc:
+                # Transient (rate-limit, timeout, 5xx) already retried inside call_minimax.
+                # Only flip to failed once the per-row retry ceiling is hit.
+                log.warning(
+                    "MiniMax %s for '%s' (attempt %d/%d): %s",
+                    type(exc).__name__, link, new_attempts, MAX_ENRICHMENT_ATTEMPTS, exc,
+                )
+                will_be_failed = new_attempts >= MAX_ENRICHMENT_ATTEMPTS
+                storage.mark_enrichment_status(
+                    link, "failed" if will_be_failed else "pending",
+                    increment_attempts=True,
+                    error=f"{type(exc).__name__}: {str(exc)[:300]}",
+                )
+            except Exception as exc:  # noqa: BLE001
+                log.exception("Unexpected error enriching '%s'", link)
                 storage.mark_enrichment_status(
                     link, "failed", increment_attempts=True,
-                    error=f"{type(exc).__name__}: {exc}",
+                    error=f"{type(exc).__name__}: {str(exc)[:300]}",
                 )
 
         if enriched:
@@ -130,7 +162,10 @@ def enrich_pending_news(max_retry: int = 20) -> dict:
             storage.save_news({"last_updated": now, "articles": enriched})
             log.info("Stage B enriched %d articles (%d marked done)", len(enriched), done)
 
-        return {"retried_count": len(enriched), "done_count": done}
+        result = {"retried_count": len(enriched), "done_count": done}
+        if aborted_reason:
+            result["aborted"] = aborted_reason
+        return result
     finally:
         _enrich_lock.release()
 

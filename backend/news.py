@@ -71,7 +71,9 @@ def _enrich_article(article: dict) -> dict:
     text_for_llm = content[:3000] if content else article["summary"]
 
     zh_prompt = article_chinese_prompt(article["title"], text_for_llm)
-    zh_raw = call_minimax(zh_prompt, max_tokens=1024, fallback="")
+    # call_minimax raises MiniMaxError subclasses on failure; the caller in
+    # services.py handles them per type. No more silent fallback.
+    zh_raw = call_minimax(zh_prompt, max_tokens=1024)
     zh_fields = _parse_chinese_response(zh_raw)
 
     llm_category = zh_fields.get("category", "")
@@ -104,11 +106,15 @@ def ensure_scraped_content(article: dict) -> tuple[str, str]:
 
 
 def re_enrich_article(article: dict) -> dict:
-    """Run LLM enrichment, scraping the body on demand when missing."""
+    """Run LLM enrichment, scraping the body on demand when missing.
+
+    Raises MiniMaxError subclasses on LLM failure; callers in services.py decide
+    whether to retry, mark failed, or abort the whole batch.
+    """
     text_for_llm, scraped_content = ensure_scraped_content(article)
 
     zh_prompt = article_chinese_prompt(article["title"], text_for_llm)
-    zh_raw = call_minimax(zh_prompt, max_tokens=1024, fallback="")
+    zh_raw = call_minimax(zh_prompt, max_tokens=1024)
     zh_fields = _parse_chinese_response(zh_raw)
 
     llm_category = zh_fields.get("category", "")

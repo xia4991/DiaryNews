@@ -3,10 +3,14 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from backend.llm import call_minimax
+import logging
+
+from backend.llm import MiniMaxConfigError, MiniMaxError, call_minimax
 from backend.prompts import daily_news_brief_prompt
 from backend.storage.news import load_news
 from backend.storage.news_briefs import upsert_daily_news_brief
+
+log = logging.getLogger("diarynews.news_briefs")
 
 PORTUGAL_TZ = ZoneInfo("Europe/Lisbon")
 MAX_PORTUGAL_BRIEF_ARTICLES = 20
@@ -130,8 +134,17 @@ def build_daily_news_brief(brief_type: str, brief_date: str) -> Optional[dict]:
         return None
 
     prompt = daily_news_brief_prompt(brief_date, brief_type, _build_digest(selected))
-    fallback = ""
-    raw = call_minimax(prompt, max_tokens=900, fallback=fallback)
+    raw = ""
+    try:
+        raw = call_minimax(prompt, max_tokens=900, prompt_version="daily_brief_v1")
+    except MiniMaxConfigError:
+        # Bubble config errors so admins see them; they're operator-fixable.
+        raise
+    except MiniMaxError as exc:
+        log.warning(
+            "Brief LLM failed (%s) for %s %s — using rule-based fallback: %s",
+            type(exc).__name__, brief_type, brief_date, exc,
+        )
     parsed = _parse_brief_response(raw) or _fallback_brief(brief_date, brief_type, selected)
     return {
         "brief_date": brief_date,

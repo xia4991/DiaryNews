@@ -12,6 +12,12 @@ MAX_VIDEOS = 1000
 
 MINIMAX_API_URL = "https://api.minimaxi.com/v1/chat/completions"
 MINIMAX_MODEL = "MiniMax-M2.5"
+# Pacing for batch MiniMax callers. Was hard-coded inside call_minimax; now the
+# enrichment loop sleeps between iterations and one-off callers (brief gen) skip it.
+MINIMAX_RATE_LIMIT_SLEEP_SEC = int(os.environ.get("MINIMAX_RATE_LIMIT_SLEEP_SEC", "3"))
+MINIMAX_TIMEOUT_SEC = int(os.environ.get("MINIMAX_TIMEOUT_SEC", "60"))
+MINIMAX_MAX_RETRIES = int(os.environ.get("MINIMAX_MAX_RETRIES", "2"))
+
 
 ENABLE_WHISPER_API   = os.environ.get("ENABLE_WHISPER_API", "false").lower() == "true"
 ENABLE_WHISPER_LOCAL = os.environ.get("ENABLE_WHISPER_LOCAL", "false").lower() == "true"
