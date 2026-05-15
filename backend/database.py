@@ -36,6 +36,12 @@ def _migrate(conn) -> None:
             conn.execute(f"ALTER TABLE users ADD COLUMN {col}")
         except sqlite3.OperationalError:
             pass
+    # daily_news_briefs.generated_by added in F4: 'llm' | 'fallback' | 'failed'
+    for col in ["generated_by TEXT NOT NULL DEFAULT 'llm'"]:
+        try:
+            conn.execute(f"ALTER TABLE daily_news_briefs ADD COLUMN {col}")
+        except sqlite3.OperationalError:
+            pass
 
 
 def init_db() -> None:
@@ -91,6 +97,7 @@ def init_db() -> None:
                 bullets_json       TEXT    NOT NULL,
                 article_links_json TEXT    NOT NULL,
                 article_count      INTEGER NOT NULL DEFAULT 0,
+                generated_by       TEXT    NOT NULL DEFAULT 'llm',
                 generated_at       TEXT    NOT NULL,
                 updated_at         TEXT    NOT NULL
             );
