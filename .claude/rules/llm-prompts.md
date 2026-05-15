@@ -11,7 +11,7 @@ paths:
 
 - Model: `MiniMax-M2.5` at `https://api.minimaxi.com/v1/chat/completions`
 - Auth: `MINIMAX_API_KEY` env var
-- Rate limiting is tight: 3s sleep between calls, max 2 concurrent enrichment workers
+- Rate limiting is tight: enrichment runs sequentially with a 3s sleep between calls
 - Strips `<think>...</think>` tags from responses
 
 ## Prompt Output Contract
@@ -49,4 +49,4 @@ The tags classification is piggybacked on the translation call — zero extra AP
 
 ## Retry Logic
 
-`re_enrich_article()` retries LLM using stored `scraped_content` (no re-scraping). Skips Portuguese summary if it already looks valid. Capped at 20 articles per fetch cycle.
+`re_enrich_article()` scrapes the article body on demand when `scraped_content` is empty, otherwise reuses the stored body; falls back to RSS `summary` if scraping returns empty. Per-cycle the runner picks up to `max_retry` (default 20) pending rows whose `enrichment_attempts < MAX_ENRICHMENT_ATTEMPTS` (env, default 3). On the attempt that hits the ceiling without producing both `title_zh` and `content_zh`, the row transitions to `failed` with the last `enrichment_error` recorded.

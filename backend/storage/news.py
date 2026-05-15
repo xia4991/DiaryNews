@@ -1,6 +1,6 @@
 from typing import Optional
 
-from backend.config import MAX_ARTICLES
+from backend.config import MAX_ARTICLES, MAX_ENRICHMENT_ATTEMPTS
 from backend.database import get_db
 from backend.storage.base import _ensure_db, _get_meta, _set_meta
 
@@ -67,11 +67,11 @@ def _bulk_upsert_articles(articles: list) -> None:
                (link, title, summary, source, category, published, scraped_content, ai_summary,
                 title_zh, content_zh, tags_zh,
                 author, image_url, language, guid, rss_category, fetched_at,
-                enrichment_status, enrichment_attempts)
+                enrichment_status, enrichment_attempts, enrichment_error)
                VALUES (:link,:title,:summary,:source,:category,:published,:scraped_content,:ai_summary,
                 :title_zh,:content_zh,:tags_zh,
                 :author,:image_url,:language,:guid,:rss_category,:fetched_at,
-                :enrichment_status,:enrichment_attempts)
+                :enrichment_status,:enrichment_attempts,:enrichment_error)
                ON CONFLICT(link) DO UPDATE SET
                  title = excluded.title,
                  summary = excluded.summary,
@@ -90,7 +90,8 @@ def _bulk_upsert_articles(articles: list) -> None:
                  rss_category = excluded.rss_category,
                  fetched_at = excluded.fetched_at,
                  enrichment_status = excluded.enrichment_status,
-                 enrichment_attempts = excluded.enrichment_attempts""",
+                 enrichment_attempts = excluded.enrichment_attempts,
+                 enrichment_error = excluded.enrichment_error""",
             [
                 {
                     "link":                a.get("link", ""),
@@ -112,6 +113,7 @@ def _bulk_upsert_articles(articles: list) -> None:
                     "fetched_at":          a.get("fetched_at", ""),
                     "enrichment_status":   a.get("enrichment_status", "pending"),
                     "enrichment_attempts": a.get("enrichment_attempts", 0),
+                    "enrichment_error":    a.get("enrichment_error", ""),
                 }
                 for a in articles
             ],
@@ -139,7 +141,7 @@ def list_recent_articles(limit: int = 20, status: Optional[str] = None) -> list:
         sql = (
             "SELECT link, title, source, category, published, fetched_at, "
             "image_url, author, rss_category, enrichment_status, enrichment_attempts, "
-            "title_zh, tags_zh "
+            "enrichment_error, title_zh, tags_zh "
             "FROM articles"
         )
         params: list = []
@@ -152,40 +154,46 @@ def list_recent_articles(limit: int = 20, status: Optional[str] = None) -> list:
     return [dict(r) for r in rows]
 
 
-def list_pending_enrichment(limit: int = 20) -> list:
-    """Return articles still missing Chinese enrichment, most recent first."""
+def list_pending_enrichment(limit: int = 20, max_attempts: int = MAX_ENRICHMENT_ATTEMPTS) -> list:
+    """Return articles still missing Chinese enrichment that haven't hit the retry ceiling."""
     _ensure_db()
     with get_db() as conn:
         rows = conn.execute(
             """SELECT * FROM articles
-               WHERE enrichment_status != 'done'
+               WHERE enrichment_status NOT IN ('done', 'failed')
+                 AND COALESCE(enrichment_attempts, 0) < ?
                  AND (title_zh = '' OR title_zh IS NULL
                       OR content_zh = '' OR content_zh IS NULL
                       OR tags_zh IS NULL)
                ORDER BY published DESC
                LIMIT ?""",
-            (limit,),
+            (max_attempts, limit),
         ).fetchall()
     return [dict(r) for r in rows]
 
 
-def mark_enrichment_status(link: str, status: str, increment_attempts: bool = True) -> None:
-    """Update enrichment_status for one article. Bumps enrichment_attempts by default."""
+def mark_enrichment_status(
+    link: str,
+    status: str,
+    increment_attempts: bool = True,
+    error: Optional[str] = None,
+) -> None:
+    """Update enrichment_status for one article. Bumps enrichment_attempts by default.
+
+    If `error` is not None, also writes it to `enrichment_error` (pass "" to clear).
+    """
     _ensure_db()
+    sets = ["enrichment_status = ?"]
+    params: list = [status]
+    if increment_attempts:
+        sets.append("enrichment_attempts = COALESCE(enrichment_attempts, 0) + 1")
+    if error is not None:
+        sets.append("enrichment_error = ?")
+        params.append(error)
+    params.append(link)
+    sql = f"UPDATE articles SET {', '.join(sets)} WHERE link = ?"
     with get_db() as conn:
-        if increment_attempts:
-            conn.execute(
-                """UPDATE articles
-                   SET enrichment_status = ?,
-                       enrichment_attempts = COALESCE(enrichment_attempts, 0) + 1
-                   WHERE link = ?""",
-                (status, link),
-            )
-        else:
-            conn.execute(
-                "UPDATE articles SET enrichment_status = ? WHERE link = ?",
-                (status, link),
-            )
+        conn.execute(sql, params)
 
 
 def increment_article_view(link: str) -> Optional[dict]:

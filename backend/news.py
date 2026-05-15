@@ -87,9 +87,25 @@ def _enrich_article(article: dict) -> dict:
     }
 
 
+def ensure_scraped_content(article: dict) -> tuple[str, str]:
+    """Return (text_for_llm, scraped_content_to_persist).
+
+    Reuse stored scraped_content if present. Otherwise scrape on demand;
+    on scrape failure fall back to RSS summary for the LLM and leave
+    scraped_content empty so a future retry may try again.
+    """
+    stored = article.get("scraped_content") or ""
+    if stored:
+        return stored[:3000], stored
+    fresh = scrape_article(article["link"])
+    if fresh:
+        return fresh[:3000], fresh
+    return article.get("summary", "") or "", ""
+
+
 def re_enrich_article(article: dict) -> dict:
-    """Retry LLM calls for an article that already has scraped_content stored."""
-    text_for_llm = (article.get("scraped_content") or "")[:3000] or article.get("summary", "")
+    """Run LLM enrichment, scraping the body on demand when missing."""
+    text_for_llm, scraped_content = ensure_scraped_content(article)
 
     zh_prompt = article_chinese_prompt(article["title"], text_for_llm)
     zh_raw = call_minimax(zh_prompt, max_tokens=1024, fallback="")
@@ -100,6 +116,7 @@ def re_enrich_article(article: dict) -> dict:
                or _classify_cn_tags(article["title"], article.get("summary", "")))
     return {
         **article,
+        "scraped_content": scraped_content or article.get("scraped_content", ""),
         "category": llm_category if llm_category in VALID_CATEGORIES else article.get("category", "Geral"),
         "title_zh": zh_fields["title_zh"] or article.get("title_zh", ""),
         "tags_zh": tags_zh,

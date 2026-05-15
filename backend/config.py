@@ -30,6 +30,7 @@ CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "http://localh
 # ── Media storage ────────────────────────────────────────────────────────────
 # ── News fetch ───────────────────────────────────────────────────────────────
 NEWS_FETCH_INTERVAL = int(os.environ.get("NEWS_FETCH_INTERVAL", "3600"))  # 0 to disable
+MAX_ENRICHMENT_ATTEMPTS = int(os.environ.get("MAX_ENRICHMENT_ATTEMPTS", "3"))
 
 # ── Media storage ────────────────────────────────────────────────────────────
 MEDIA_BACKEND    = os.environ.get("MEDIA_BACKEND", "local")      # local | s3

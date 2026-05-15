@@ -31,15 +31,16 @@ link (PK), title, summary, source, category, published,
 scraped_content, ai_summary, title_zh, content_zh, tags_zh,
 view_count,
 author, image_url, language, guid, rss_category, fetched_at,
-enrichment_status, enrichment_attempts
+enrichment_status, enrichment_attempts, enrichment_error
 ```
 
 - `category` — Portuguese keyword-matched topic (Politica, Desporto, etc.)
 - `tags_zh` — comma-separated Chinese-interest tags from LLM (or empty)
 - `title_zh` / `content_zh` — Chinese translation from LLM
 - `image_url`, `author`, `guid`, `rss_category` — captured from RSS by adapters
-- `enrichment_status` — `pending` (just collected) | `done` (LLM filled title_zh/content_zh) | `failed`
-- `enrichment_attempts` — incremented each Stage B run; lets us cap retries on hopeless rows
+- `enrichment_status` — `pending` (just collected) | `done` (LLM filled title_zh/content_zh) | `failed` (terminal — capped retries exhausted or exception)
+- `enrichment_attempts` — incremented each Stage B run; capped by `MAX_ENRICHMENT_ATTEMPTS` (env, default 3). At the ceiling the row auto-transitions to `failed`.
+- `enrichment_error` — last failure reason (e.g. `LLM 响应缺失 TITLE_ZH`, `RuntimeError: ...`); cleared on `done`. Surfaced by `/api/admin/news/recent`.
 
 ## DB Schema — source_health table
 
@@ -50,8 +51,9 @@ source (PK), last_fetched_at, last_status, last_error, last_duration_ms,
 entries_count, articles_count, consecutive_failures, total_fetches
 ```
 
-- `last_status` — `ok` | `http_error` | `parse_error` | `empty`
-- `consecutive_failures` — resets on `ok`; `empty` is non-fatal and does NOT bump it
+- `last_status` — `ok` | `partial_ok` | `empty` | `http_error` | `parse_error`
+- `partial_ok` — adapter aggregated multiple sub-fetches and at least one failed but at least one succeeded (e.g. RTP's 5 section feeds). Non-fatal: preserves `consecutive_failures` but writes a `last_error` annotation like `2/5 sub-feeds failed: ...`
+- `consecutive_failures` — resets on `ok`; `empty` and `partial_ok` preserve it (do not bump)
 - Surface via `GET /api/admin/sources/health`
 
 ## Storage Patterns
@@ -69,13 +71,25 @@ entries_count, articles_count, consecutive_failures, total_fetches
 2. Each adapter does HTTP GET (15s timeout, 2 retries with 1s/3s backoff), parses with `feedparser`, returns `FetchResult`
 3. Runner aggregates, filters out `existing_urls`, dedupes by fuzzy title+date, filters by `max_age_hours`, writes `source_health`
 4. `storage.save_raw_articles()` upserts the new articles with `enrichment_status='pending'`
+5. Returns `(articles, results, stats)` where `stats = {raw_count, existing_skipped, dedupe_skipped, age_skipped, cap_skipped, returned_count}` — surfaces *why* a cycle returned fewer articles
 
 **Stage B — enrich** (slow, MiniMax rate-limited):
-1. `storage.list_pending_enrichment(limit)` finds rows still missing `title_zh`/`content_zh`/`tags_zh`
-2. For each: `re_enrich_article()` scrapes (if needed) and calls MiniMax
-3. `storage.mark_enrichment_status(link, 'done'|'pending'|'failed')` updates per-row state
+1. `storage.list_pending_enrichment(limit, max_attempts=MAX_ENRICHMENT_ATTEMPTS)` finds rows still missing `title_zh`/`content_zh`/`tags_zh` whose status is neither `done` nor `failed` and whose `enrichment_attempts < max_attempts`
+2. `re_enrich_article()` scrapes on demand if `scraped_content` is empty (RSS `summary` as fallback), then calls MiniMax
+3. Success / missing-field outcomes both write final `enrichment_status` + `enrichment_attempts` + `enrichment_error` into the row dict and persist via a single `storage.save_news()` (one upsert, no clobber). If `attempts` reaches `MAX_ENRICHMENT_ATTEMPTS` while still missing fields, status auto-transitions to `failed`.
+4. Exception path uses `storage.mark_enrichment_status(link, 'failed', error=f"{type(exc).__name__}: ...")` directly
 
-`fetch_and_save_news()` runs A then B inline (legacy `/api/news/fetch` behavior). `/api/news/enrich` runs B only (cron-safe, idempotent).
+`fetch_and_save_news()` runs A then B inline (legacy `/api/news/fetch` behavior). `/api/news/enrich` runs B only (cron-safe, idempotent). Both `collect_news` and `enrich_pending_news` hold module-level `threading.Lock`s (`_collect_lock`, `_enrich_lock`); a non-blocking acquire failure returns `{"status": "already_running", ...}` which the api layer maps to HTTP 409.
+
+## Crawler / News Endpoints
+
+| Method | Path | Behavior |
+|---|---|---|
+| POST | `/api/news/collect` | Admin. Stage A only — returns `{new_count, sources, stats, last_updated}`. 409 if a collect is already running. |
+| POST | `/api/news/enrich?max_retry=N` | Admin. Stage B only, idempotent — returns `{retried_count, done_count}`. 409 if an enrich is already running. |
+| POST | `/api/news/fetch` | Admin. Legacy — runs Stage A then B inline. |
+| GET | `/api/admin/sources/health` | Admin. `{sources: [...source_health rows...], stats: get_article_stats()}` |
+| GET | `/api/admin/news/recent?status=&limit=` | Admin. Recent articles with optional `enrichment_status` filter. Each row includes `enrichment_error`. |
 
 ## Adding a New Source
 

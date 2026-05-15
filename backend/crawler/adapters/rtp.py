@@ -163,16 +163,21 @@ class RTPAdapter(BaseAdapter):
         # Status rollup:
         #   - every sub-feed failed                   → http_error
         #   - all succeeded but produced zero entries → empty
-        #   - otherwise                               → ok (partial errors annotated)
+        #   - at least one failed, at least one ok    → partial_ok
+        #   - all succeeded with entries              → ok
         if sub_ok == 0:
             status = "http_error"
             error = "; ".join(f"{k}: {v}" for k, v in sub_errors.items()) or "all sub-feeds failed"
         elif total_entries == 0:
             status = "empty"
             error = None
+        elif sub_errors:
+            status = "partial_ok"
+            error = (f"{len(sub_errors)}/{len(sub_items)} sub-feeds failed: "
+                     + "; ".join(f"{k}: {v}" for k, v in sub_errors.items()))
         else:
             status = "ok"
-            error = "; ".join(f"{k}: {v}" for k, v in sub_errors.items()) if sub_errors else None
+            error = None
 
         log.info(
             "RTP: %d sub-feeds ok, %d failed, %d raw entries → %d unique articles in %dms",

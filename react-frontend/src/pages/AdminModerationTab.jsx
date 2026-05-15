@@ -704,6 +704,7 @@ function AnnouncementsSection({ announcements, onCreate, onUpdate, onDelete }) {
 
 const SOURCE_STATUS_META = {
   ok:          { label: '正常',    color: '#10B981', icon: 'check_circle' },
+  partial_ok:  { label: '部分正常', color: '#F59E0B', icon: 'warning' },
   empty:       { label: '空',      color: '#6B7280', icon: 'inbox' },
   http_error:  { label: 'HTTP 错误', color: '#EF4444', icon: 'wifi_off' },
   parse_error: { label: '解析错误',  color: '#F59E0B', icon: 'broken_image' },
@@ -737,11 +738,15 @@ function CrawlerSection() {
     setBusy('fetch')
     setToast(null)
     try {
-      const r = await api.fetchNews()
-      setToast({ type: 'ok', msg: `抓取完成：新增 ${r.new_count} 条，翻译 ${r.done_count} 条` })
+      const r = await api.collectNews()
+      setToast({ type: 'ok', msg: `抓取完成：新增 ${r.new_count} 条` })
       await reload()
     } catch (e) {
-      setToast({ type: 'err', msg: e.response?.data?.detail || '抓取失败' })
+      if (e.response?.status === 409) {
+        setToast({ type: 'err', msg: '已有抓取任务正在运行' })
+      } else {
+        setToast({ type: 'err', msg: e.response?.data?.detail || '抓取失败' })
+      }
     } finally {
       setBusy(null)
     }
@@ -755,7 +760,11 @@ function CrawlerSection() {
       setToast({ type: 'ok', msg: `翻译完成：处理 ${r.retried_count} 条，成功 ${r.done_count} 条` })
       await reload()
     } catch (e) {
-      setToast({ type: 'err', msg: e.response?.data?.detail || '翻译失败' })
+      if (e.response?.status === 409) {
+        setToast({ type: 'err', msg: '已有翻译任务正在运行' })
+      } else {
+        setToast({ type: 'err', msg: e.response?.data?.detail || '翻译失败' })
+      }
     } finally {
       setBusy(null)
     }
@@ -1006,6 +1015,11 @@ function RecentArticleRow({ article }) {
           <p className="mt-1 text-sm text-text leading-snug line-clamp-2">{article.title}</p>
           {article.title_zh && (
             <p className="mt-0.5 text-xs text-text-muted line-clamp-1">{article.title_zh}</p>
+          )}
+          {article.enrichment_error && (
+            <p className="mt-1 text-[11px] text-danger truncate" title={article.enrichment_error}>
+              翻译错误：{article.enrichment_error}
+            </p>
           )}
           <div className="mt-1.5 flex gap-3 text-[10px] text-text-subtle flex-wrap">
             {article.author && <span>作者: {article.author}</span>}

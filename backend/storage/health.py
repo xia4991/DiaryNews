@@ -18,8 +18,9 @@ def upsert_source_health(
     """Record one fetch cycle's outcome for a source.
 
     `consecutive_failures` resets to 0 on `ok`, increments on `http_error`/`parse_error`.
-    `status='empty'` (feed parsed fine but had 0 entries) is non-fatal and doesn't bump
-    the failure counter — only resets `last_fetched_at` and stats.
+    `status='empty'` (feed parsed fine but had 0 entries) and `status='partial_ok'`
+    (some sub-feeds failed but enough succeeded) are non-fatal and preserve the
+    failure counter — `partial_ok` still stores `last_error` for visibility.
     """
     _ensure_db()
     with get_db() as conn:
@@ -33,7 +34,7 @@ def upsert_source_health(
 
         if status == "ok":
             new_failures = 0
-        elif status == "empty":
+        elif status in ("empty", "partial_ok"):
             new_failures = prev_failures
         else:
             new_failures = prev_failures + 1

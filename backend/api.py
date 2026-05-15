@@ -629,13 +629,25 @@ async def fetch_news(_admin: dict = Depends(require_admin)):
     return await asyncio.to_thread(services.fetch_and_save_news)
 
 
+@app.post("/api/news/collect")
+async def collect_news(_admin: dict = Depends(require_admin)):
+    """Stage A only — run RSS adapters, persist as pending. No LLM calls."""
+    result = await asyncio.to_thread(services.collect_news)
+    if result.get("status") == "already_running":
+        raise HTTPException(status_code=409, detail="Crawler already running")
+    return result
+
+
 @app.post("/api/news/enrich")
 async def enrich_news(
     max_retry: int = Query(20, ge=1, le=100),
     _admin: dict = Depends(require_admin),
 ):
     """Stage B only — run LLM enrichment on pending articles, idempotent."""
-    return await asyncio.to_thread(services.enrich_pending_news, max_retry)
+    result = await asyncio.to_thread(services.enrich_pending_news, max_retry)
+    if result.get("status") == "already_running":
+        raise HTTPException(status_code=409, detail="Crawler already running")
+    return result
 
 
 @app.get("/api/admin/sources/health")

@@ -25,8 +25,13 @@ class CrawlerRunner:
         existing_urls: Optional[set] = None,
         max_age_hours: int = 24,
         max_articles: int = 0,
-    ) -> tuple[list[dict], list[FetchResult]]:
-        """Fetch all sources, dedupe, filter by age, return (articles_as_dicts, per_source_results)."""
+    ) -> tuple[list[dict], list[FetchResult], dict]:
+        """Fetch all sources, dedupe, filter by age.
+
+        Returns (articles_as_dicts, per_source_results, stats). `stats` keys:
+        raw_count, existing_skipped, dedupe_skipped, age_skipped, cap_skipped,
+        returned_count — useful for diagnosing 'why fewer articles today?'.
+        """
         existing_urls = existing_urls or set()
         results: list[FetchResult] = []
 
@@ -64,20 +69,28 @@ class CrawlerRunner:
             articles_count_by_source[r.source] = len(r.articles)
             all_articles.extend(r.articles)
 
+        raw_count = len(all_articles)
         new_articles = [a for a in all_articles if a.link not in existing_urls]
+        existing_skipped = raw_count - len(new_articles)
+
         new_dicts = [a.to_dict() for a in new_articles]
+        before_dedupe = len(new_dicts)
         new_dicts = deduplicate(new_dicts)
+        dedupe_skipped = before_dedupe - len(new_dicts)
 
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=max_age_hours)).isoformat()
         before_age = len(new_dicts)
         new_dicts = [a for a in new_dicts if a.get("published", "") >= cutoff]
-        if before_age != len(new_dicts):
+        age_skipped = before_age - len(new_dicts)
+        if age_skipped > 0:
             log.info(
                 "Age filter: %d → %d (skipped %d older than %dh)",
-                before_age, len(new_dicts), before_age - len(new_dicts), max_age_hours,
+                before_age, len(new_dicts), age_skipped, max_age_hours,
             )
 
+        cap_skipped = 0
         if max_articles and len(new_dicts) > max_articles:
+            cap_skipped = len(new_dicts) - max_articles
             log.info("Capping %d new articles to %d for this cycle", len(new_dicts), max_articles)
             new_dicts = new_dicts[:max_articles]
 
@@ -92,14 +105,28 @@ class CrawlerRunner:
                 error=r.error,
             )
 
-        return new_dicts, results
+        stats = {
+            "raw_count": raw_count,
+            "existing_skipped": existing_skipped,
+            "dedupe_skipped": dedupe_skipped,
+            "age_skipped": age_skipped,
+            "cap_skipped": cap_skipped,
+            "returned_count": len(new_dicts),
+        }
+        log.info(
+            "Crawler stats: raw=%d existing_skipped=%d dedupe_skipped=%d "
+            "age_skipped=%d cap_skipped=%d returned=%d",
+            raw_count, existing_skipped, dedupe_skipped,
+            age_skipped, cap_skipped, len(new_dicts),
+        )
+        return new_dicts, results, stats
 
 
 def run_all(
     existing_urls: Optional[set] = None,
     max_age_hours: int = 24,
     max_articles: int = 0,
-) -> tuple[list[dict], list[FetchResult]]:
+) -> tuple[list[dict], list[FetchResult], dict]:
     """Convenience entry point — instantiates the registered adapters and runs them."""
     from backend.crawler.adapters import load_all_adapters
 

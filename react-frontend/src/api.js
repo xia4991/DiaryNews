@@ -50,6 +50,7 @@ export const api = {
   listNewsBriefs: (params) => http.get('/news/briefs', { params }).then(r => r.data),
   generateNewsBrief: (params) => http.post('/news/briefs/generate', null, { params }).then(r => r.data),
   fetchNews: () => http.post('/news/fetch').then(r => r.data),
+  collectNews: () => http.post('/news/collect').then(r => r.data),
 
   // Media
   uploadMedia: (file) => {

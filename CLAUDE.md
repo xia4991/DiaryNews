@@ -28,14 +28,15 @@ React SPA frontend (`react-frontend/`) + FastAPI backend (`backend/`), connected
 
 ## Data Flow
 
-1. **Stage A — collect**: POST `/api/news/fetch` (or `services.collect_news()`) → `CrawlerRunner` runs all 9 adapters in parallel → dedupe + age filter → save raw articles as `enrichment_status='pending'` → write `source_health`
-2. **Stage B — enrich**: `services.enrich_pending_news()` (also runs inline at end of `/api/news/fetch`, or standalone via `/api/news/enrich`) → scrape via trafilatura → call MiniMax for Chinese title/content/tags → mark `enrichment_status='done'`
+1. **Stage A — collect**: POST `/api/news/collect` (admin UI button) or legacy `/api/news/fetch` (A+B inline) → `CrawlerRunner` runs all 9 adapters in parallel → dedupe + age filter → save raw articles as `enrichment_status='pending'` → write `source_health` (status one of `ok | partial_ok | empty | http_error | parse_error`)
+2. **Stage B — enrich**: `services.enrich_pending_news()` (inline at end of `/api/news/fetch`, or standalone via `/api/news/enrich`) → scrape on demand via trafilatura (RSS summary as fallback) → call MiniMax for Chinese title/content/tags → mark `enrichment_status='done'`. Rows failing repeatedly record an `enrichment_error` reason; after `MAX_ENRICHMENT_ATTEMPTS` (env, default 3) the row transitions to `failed` and is no longer retried.
 
 ## Key Design Notes
 
 - Article categories are keyword-matched in Portuguese; frontend translates to Chinese via `CATEGORY_ZH` maps
 - Chinese-interest tags (`tags_zh`) are LLM-classified, piggybacked on the translation call (zero extra API cost)
-- MiniMax rate limiting is tight — 2 enrichment workers, 3s sleep between calls
+- MiniMax rate limiting is tight — enrichment runs sequentially with a 3s sleep between calls
+- `collect_news` and `enrich_pending_news` are guarded by process-local `threading.Lock`s; concurrent invocations return HTTP 409 `Crawler already running`
 - Data stored in SQLite at `data/diarynews.db` (auto-created)
 
 ## Workflow

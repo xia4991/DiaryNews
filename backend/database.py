@@ -18,6 +18,7 @@ def _migrate(conn) -> None:
         "fetched_at TEXT DEFAULT ''",
         "enrichment_status TEXT DEFAULT 'pending'",
         "enrichment_attempts INTEGER NOT NULL DEFAULT 0",
+        "enrichment_error TEXT DEFAULT ''",
     ]
     for col in article_cols:
         try:
@@ -59,7 +60,8 @@ def init_db() -> None:
                 rss_category         TEXT    DEFAULT '',
                 fetched_at           TEXT    DEFAULT '',
                 enrichment_status    TEXT    DEFAULT 'pending',
-                enrichment_attempts  INTEGER NOT NULL DEFAULT 0
+                enrichment_attempts  INTEGER NOT NULL DEFAULT 0,
+                enrichment_error     TEXT    DEFAULT ''
             );
 
             CREATE TABLE IF NOT EXISTS source_health (

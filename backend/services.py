@@ -4,10 +4,12 @@ No FastAPI imports. All functions are synchronous.
 """
 
 import logging
+import threading
 from datetime import datetime, timezone
 from io import BytesIO
 
 from backend import storage
+from backend.config import MAX_ENRICHMENT_ATTEMPTS
 from backend.crawler import run_all
 from backend.news import re_enrich_article
 from backend.storage_media import get_media_storage
@@ -17,70 +19,120 @@ log = logging.getLogger("diarynews.services")
 
 # ── News ─────────────────────────────────────────────────────────────────────
 
+_collect_lock = threading.Lock()
+_enrich_lock = threading.Lock()
+
+
 def collect_news(max_new: int = 0, max_age_hours: int = 24) -> dict:
     """Stage A — run all RSS adapters, persist raw articles as pending, update source_health.
 
-    Fast (~ a few hundred ms per adapter). Returns counts + per-source health summary.
+    Fast (~ a few hundred ms per adapter). Returns counts + per-source health summary
+    plus a `stats` dict explaining where articles went between raw fetch and final save
+    (existing-skip / dedupe-skip / age-skip / cap-skip).
+    Non-blocking: if another collect is already running, returns status='already_running'.
     """
-    data = storage.load_news()
-    existing_urls = {a["link"] for a in data.get("articles", [])}
-
-    new_articles, results = run_all(
-        existing_urls=existing_urls,
-        max_age_hours=max_age_hours,
-        max_articles=max_new,
-    )
-    now = datetime.now(timezone.utc).isoformat()
-    if new_articles:
-        storage.save_raw_articles(new_articles, last_updated=now)
-    else:
-        storage.save_raw_articles([], last_updated=now)
-
-    health = [
-        {
-            "source": r.source,
-            "status": r.status,
-            "entries": r.entries_count,
-            "articles": len(r.articles),
-            "duration_ms": r.duration_ms,
-            "error": r.error,
+    if not _collect_lock.acquire(blocking=False):
+        return {
+            "status": "already_running",
+            "new_count": 0,
+            "last_updated": "",
+            "sources": [],
+            "stats": {},
         }
-        for r in results
-    ]
-    return {
-        "new_count": len(new_articles),
-        "last_updated": now,
-        "sources": health,
-    }
+    try:
+        data = storage.load_news()
+        existing_urls = {a["link"] for a in data.get("articles", [])}
+
+        new_articles, results, stats = run_all(
+            existing_urls=existing_urls,
+            max_age_hours=max_age_hours,
+            max_articles=max_new,
+        )
+        now = datetime.now(timezone.utc).isoformat()
+        if new_articles:
+            storage.save_raw_articles(new_articles, last_updated=now)
+        else:
+            storage.save_raw_articles([], last_updated=now)
+
+        health = [
+            {
+                "source": r.source,
+                "status": r.status,
+                "entries": r.entries_count,
+                "articles": len(r.articles),
+                "duration_ms": r.duration_ms,
+                "error": r.error,
+            }
+            for r in results
+        ]
+        return {
+            "new_count": len(new_articles),
+            "last_updated": now,
+            "sources": health,
+            "stats": stats,
+        }
+    finally:
+        _collect_lock.release()
+
+
+def _enrichment_failure_reason(updated: dict) -> str:
+    """Short human-readable reason for why a Stage B run did not produce a complete row."""
+    has_title = bool(updated.get("title_zh"))
+    has_content = bool(updated.get("content_zh"))
+    if not has_title and not has_content:
+        return "LLM 未返回有效字段"
+    if not has_title:
+        return "LLM 响应缺失 TITLE_ZH"
+    return "LLM 响应缺失 CONTENT_ZH"
 
 
 def enrich_pending_news(max_retry: int = 20) -> dict:
-    """Stage B — run MiniMax enrichment on articles still missing Chinese fields."""
-    pending = storage.list_pending_enrichment(limit=max_retry)
-    if not pending:
-        return {"retried_count": 0, "done_count": 0}
+    """Stage B — run MiniMax enrichment on articles still missing Chinese fields.
 
-    enriched: list = []
-    done = 0
-    for article in pending:
-        try:
-            updated = re_enrich_article(article)
-            enriched.append(updated)
-            if updated.get("title_zh") and updated.get("content_zh"):
-                storage.mark_enrichment_status(article["link"], "done", increment_attempts=True)
-                done += 1
-            else:
-                storage.mark_enrichment_status(article["link"], "pending", increment_attempts=True)
-        except Exception as exc:
-            log.warning("enrich failed for '%s': %s", article["link"], exc)
-            storage.mark_enrichment_status(article["link"], "failed", increment_attempts=True)
+    Non-blocking: if another enrich is already running, returns status='already_running'.
+    """
+    if not _enrich_lock.acquire(blocking=False):
+        return {"status": "already_running", "retried_count": 0, "done_count": 0}
+    try:
+        pending = storage.list_pending_enrichment(limit=max_retry)
+        if not pending:
+            return {"retried_count": 0, "done_count": 0}
 
-    if enriched:
-        now = datetime.now(timezone.utc).isoformat()
-        storage.save_news({"last_updated": now, "articles": enriched})
-        log.info("Stage B enriched %d articles (%d marked done)", len(enriched), done)
+        enriched: list = []
+        done = 0
+        for article in pending:
+            link = article["link"]
+            new_attempts = (article.get("enrichment_attempts") or 0) + 1
+            try:
+                updated = re_enrich_article(article)
+                if updated.get("title_zh") and updated.get("content_zh"):
+                    updated["enrichment_status"] = "done"
+                    updated["enrichment_attempts"] = new_attempts
+                    updated["enrichment_error"] = ""
+                    done += 1
+                else:
+                    reason = _enrichment_failure_reason(updated)
+                    updated["enrichment_status"] = (
+                        "failed" if new_attempts >= MAX_ENRICHMENT_ATTEMPTS else "pending"
+                    )
+                    updated["enrichment_attempts"] = new_attempts
+                    updated["enrichment_error"] = reason
+                enriched.append(updated)
+            except Exception as exc:
+                log.warning("enrich failed for '%s': %s", link, exc)
+                storage.mark_enrichment_status(
+                    link, "failed", increment_attempts=True,
+                    error=f"{type(exc).__name__}: {exc}",
+                )
 
-    return {"retried_count": len(enriched), "done_count": done}
+        if enriched:
+            now = datetime.now(timezone.utc).isoformat()
+            storage.save_news({"last_updated": now, "articles": enriched})
+            log.info("Stage B enriched %d articles (%d marked done)", len(enriched), done)
+
+        return {"retried_count": len(enriched), "done_count": done}
+    finally:
+        _enrich_lock.release()
 
 
 def fetch_and_save_news(max_new: int = 0, max_retry: int = 20, max_age_hours: int = 24) -> dict:
@@ -96,6 +148,7 @@ def fetch_and_save_news(max_new: int = 0, max_retry: int = 20, max_age_hours: in
             "retried_count": enriched["retried_count"],
             "done_count": enriched["done_count"],
             "sources": collected["sources"],
+            "stats": collected.get("stats", {}),
         },
     )
 
@@ -105,6 +158,7 @@ def fetch_and_save_news(max_new: int = 0, max_retry: int = 20, max_age_hours: in
         "done_count": enriched["done_count"],
         "last_updated": collected["last_updated"],
         "sources": collected["sources"],
+        "stats": collected.get("stats", {}),
     }
 
 
