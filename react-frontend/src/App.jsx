@@ -34,6 +34,7 @@ export default function App() {
   const [newsLastUpdated, setNewsLastUpdated] = useState(null)
   const [activeCategory, setActiveCategory] = useState('All')
   const [activeCnTag, setActiveCnTag] = useState('All')
+  const [activeSource, setActiveSource] = useState('All')
 
   const [jobs, setJobs] = useState([])
   const [jobsIndustry, setJobsIndustry] = useState('All')
@@ -132,11 +133,25 @@ export default function App() {
       .sort((a, b) => b.count - a.count)
   }, [articles])
 
-  const filteredArticles = useMemo(() => (
-    activeCategory === 'All'
-      ? articles
-      : articles.filter(a => a.category === activeCategory)
-  ), [articles, activeCategory])
+  // Build source (出处) list with counts — only used by 葡萄牙新闻 tab
+  const sources = useMemo(() => {
+    const sourceMap = {}
+    for (const a of articles) {
+      const src = a.source || ''
+      if (!src) continue
+      sourceMap[src] = (sourceMap[src] || 0) + 1
+    }
+    return Object.entries(sourceMap)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+  }, [articles])
+
+  const filteredArticles = useMemo(() => {
+    let out = articles
+    if (activeSource !== 'All') out = out.filter(a => a.source === activeSource)
+    if (activeCategory !== 'All') out = out.filter(a => a.category === activeCategory)
+    return out
+  }, [articles, activeCategory, activeSource])
 
   // Chinese-interest articles: tagged by LLM/keywords, or from relevant categories
   const CN_RELEVANT_CATEGORIES = useMemo(() => new Set(['Sociedade', 'Economia', 'Internacional']), [])
@@ -245,6 +260,7 @@ export default function App() {
       setActiveTab(tab)
       setActiveCategory('All')
       setActiveCnTag('All')
+      setActiveSource('All')
       setJobsIndustry('All')
       setReDealType('All')
       setReRooms('All')
@@ -260,6 +276,9 @@ export default function App() {
         categories={categories}
         activeCategory={activeCategory}
         onCategoryChange={setActiveCategory}
+        sources={sources}
+        activeSource={activeSource}
+        onSourceChange={setActiveSource}
         lastUpdated={newsLastUpdated}
       />
     )
@@ -341,7 +360,7 @@ export default function App() {
             <NewsTabSkeleton variant="portugal" />
           ) : (
             <NewsTab
-              key={`portugal-${activeCategory}`}
+              key={`portugal-${activeSource}-${activeCategory}`}
               articles={filteredArticles}
               layout="portugal"
               isAdmin={user?.is_admin}

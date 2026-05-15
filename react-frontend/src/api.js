@@ -109,4 +109,9 @@ export const api = {
   deleteAdminAnnouncement: (id) => http.delete(`/admin/announcements/${id}`).then(r => r.data),
   reportListing: (id, reason) => http.post(`/listings/${id}/report`, { reason }).then(r => r.data),
   listAdminLogs: (params) => http.get('/admin/logs', { params }).then(r => r.data),
+
+  // Admin / Crawler
+  getSourceHealth: () => http.get('/admin/sources/health').then(r => r.data),
+  listRecentArticles: (params) => http.get('/admin/news/recent', { params }).then(r => r.data),
+  enrichNews: (params) => http.post('/news/enrich', null, { params }).then(r => r.data),
 }

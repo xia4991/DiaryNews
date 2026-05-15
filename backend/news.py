@@ -1,28 +1,22 @@
-import logging
-import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timedelta, timezone
+"""LLM enrichment for news articles.
 
-import feedparser
+RSS fetching has moved to `backend.crawler/`. This module is now only the
+slow, rate-limited side of the pipeline: scraping article bodies and asking
+MiniMax for Chinese translation + tagging.
+
+`classify()` is also re-exported here so legacy callers still work.
+"""
+
+import logging
+
 import requests as _requests
 
-from rapidfuzz import fuzz
-
-from backend.sources import CATEGORIES, CN_TAG_KEYWORDS, RSS_SOURCES, SOURCE_PRIORITY
+from backend.crawler.parsing import classify, deduplicate, parse_date  # noqa: F401 (legacy import path)
 from backend.llm import call_minimax
 from backend.prompts import article_chinese_prompt
-from backend.utils import strip_html
+from backend.sources import CATEGORIES, CN_TAG_KEYWORDS
 
 log = logging.getLogger("diarynews.news")
-
-
-def classify(title: str, summary: str) -> str:
-    text = (title + " " + summary).lower()
-    for category, keywords in CATEGORIES:
-        for kw in keywords:
-            if kw in text:
-                return category
-    return "Geral"
 
 
 def _classify_cn_tags(title: str, summary: str) -> str:
@@ -33,36 +27,14 @@ def _classify_cn_tags(title: str, summary: str) -> str:
     return ", ".join(matched)
 
 
-def _deduplicate(articles: list) -> list:
-    """Remove near-duplicate articles, keeping the highest-priority source."""
-    articles.sort(key=lambda a: SOURCE_PRIORITY.get(a["source"], 99))
-    accepted = []
-    for article in articles:
-        pub_date = article["published"][:10]
-        is_dup = any(
-            kept["published"][:10] == pub_date
-            and fuzz.token_sort_ratio(article["title"].lower(), kept["title"].lower()) > 70
-            for kept in accepted
-        )
-        if not is_dup:
-            accepted.append(article)
-    if len(articles) != len(accepted):
-        log.info("Dedup: %d articles → %d (dropped %d duplicates)",
-                 len(articles), len(accepted), len(articles) - len(accepted))
-    return accepted
-
-
-def _parse_date(entry) -> str:
-    if entry.get("published_parsed"):
-        dt = datetime(*entry.published_parsed[:6], tzinfo=timezone.utc)
-        return dt.isoformat()
-    return datetime.now(timezone.utc).isoformat()
-
-
 def scrape_article(url: str) -> str:
     try:
         import trafilatura
-        resp = _requests.get(url, timeout=15, headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"})
+        resp = _requests.get(
+            url,
+            timeout=15,
+            headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"},
+        )
         resp.raise_for_status()
         text = trafilatura.extract(resp.text, include_comments=False, include_tables=False)
         return text or ""
@@ -133,77 +105,3 @@ def re_enrich_article(article: dict) -> dict:
         "tags_zh": tags_zh,
         "content_zh": zh_fields["content_zh"] or article.get("content_zh", ""),
     }
-
-
-def _parse_feed(source_name: str, url: str) -> list:
-    """Parse a single RSS feed and return raw article dicts."""
-    articles = []
-    try:
-        resp = _requests.get(url, timeout=15)
-        feed = feedparser.parse(resp.content)
-        for entry in feed.entries:
-            title = strip_html(entry.get("title", ""))
-            summary = strip_html(entry.get("summary", entry.get("description", "")))
-            link = entry.get("link", "")
-            if not title or not link:
-                continue
-            articles.append({
-                "title":     title,
-                "summary":   summary[:500],
-                "link":      link,
-                "source":    source_name,
-                "category":  classify(title, summary),
-                "published": _parse_date(entry),
-            })
-    except Exception as exc:
-        log.warning("Failed to parse feed '%s': %s", source_name, exc)
-    return articles
-
-
-def fetch_all_feeds(existing_urls: set = None, max_articles: int = 0, max_age_hours: int = 24) -> list:
-    existing_urls = existing_urls or set()
-
-    # Parse all RSS feeds in parallel
-    raw_articles = []
-    with ThreadPoolExecutor(max_workers=9) as executor:
-        futures = {executor.submit(_parse_feed, name, url): name
-                   for name, url in RSS_SOURCES.items()}
-        for future in as_completed(futures):
-            raw_articles.extend(future.result())
-
-    new_articles = [a for a in raw_articles if a["link"] not in existing_urls]
-    new_articles = _deduplicate(new_articles)
-
-    cutoff = (datetime.now(timezone.utc) - timedelta(hours=max_age_hours)).isoformat()
-    before_age = len(new_articles)
-    new_articles = [a for a in new_articles if a["published"] >= cutoff]
-    if before_age != len(new_articles):
-        log.info("Age filter: %d → %d (skipped %d older than %dh)",
-                 before_age, len(new_articles), before_age - len(new_articles), max_age_hours)
-
-    if max_articles and len(new_articles) > max_articles:
-        log.info("Capping %d new articles to %d for this cycle",
-                 len(new_articles), max_articles)
-        new_articles = new_articles[:max_articles]
-
-    if not new_articles:
-        return []
-
-    # Enrich new articles (scrape + LLM) sequentially
-    enriched = []
-    start = time.monotonic()
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        futures = {executor.submit(_enrich_article, a): a for a in new_articles}
-        for future in as_completed(futures):
-            try:
-                enriched.append(future.result())
-            except Exception as exc:
-                original = futures[future]
-                log.warning("_enrich_article failed for '%s': %s", original["link"], exc)
-                enriched.append({**original, "scraped_content": "", "ai_summary": original["summary"]})
-    elapsed = time.monotonic() - start
-    log.info("Enriched %d articles in %.1fs (%.1fs/article)",
-             len(enriched), elapsed, elapsed / len(enriched) if enriched else 0)
-    return enriched
-
-

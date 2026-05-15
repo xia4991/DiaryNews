@@ -3,12 +3,12 @@
 RSS_SOURCES = {
     "RTP":                "https://www.rtp.pt/noticias/rss",
     "Observador":         "https://observador.pt/feed/",
-    "SIC Notícias":       "https://sicnoticias.pt/feed",
+    "SIC Notícias":       "https://rss.impresa.pt/feed/latest/sicnot.rss?type=ARTICLE,VIDEO,GALLERY,STREAM,PLAYLIST,EVENT,NEWSLETTER&limit=20&pubsubhub=true",
     "TVI24":              "https://tvi24.iol.pt/rss/ultimas",
     "Jornal de Notícias": "https://www.jn.pt/rss/",
     "Público":            "https://feeds.feedburner.com/PublicoRSS",
-    "Diário de Notícias": "https://www.dn.pt/rss/",
-    "Expresso":           "https://expresso.pt/rss",
+    "Diário de Notícias": "https://www.dn.pt/feed/",
+    "Expresso":           "https://rss.impresa.pt/feed/latest/expresso.rss?type=ARTICLE,VIDEO,GALLERY,STREAM,PLAYLIST,EVENT,NEWSLETTER&limit=20&pubsubhub=true",
     "ECO":                "https://eco.sapo.pt/feed/",
 }
 

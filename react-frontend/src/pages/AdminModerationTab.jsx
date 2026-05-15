@@ -139,6 +139,14 @@ export default function AdminModerationTab() {
             >
               系统日志
             </Button>
+            <Button
+              variant={tab === 'crawler' ? 'primary' : 'ghost'}
+              size="sm"
+              icon="rss_feed"
+              onClick={() => setTab('crawler')}
+            >
+              爬虫
+            </Button>
           </div>
         </div>
       </Card>
@@ -158,6 +166,8 @@ export default function AdminModerationTab() {
           onUpdate={handleUpdateAnnouncement}
           onDelete={handleDeleteAnnouncement}
         />
+      ) : tab === 'crawler' ? (
+        <CrawlerSection />
       ) : (
         <LogsSection />
       )}
@@ -689,6 +699,330 @@ function AnnouncementsSection({ announcements, onCreate, onUpdate, onDelete }) {
         })
       )}
     </div>
+  )
+}
+
+const SOURCE_STATUS_META = {
+  ok:          { label: '正常',    color: '#10B981', icon: 'check_circle' },
+  empty:       { label: '空',      color: '#6B7280', icon: 'inbox' },
+  http_error:  { label: 'HTTP 错误', color: '#EF4444', icon: 'wifi_off' },
+  parse_error: { label: '解析错误',  color: '#F59E0B', icon: 'broken_image' },
+}
+
+function CrawlerSection() {
+  const [data, setData] = useState({ sources: [], stats: null })
+  const [recent, setRecent] = useState([])
+  const [statusFilter, setStatusFilter] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(null)
+  const [toast, setToast] = useState(null)
+
+  const reload = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [health, recentResp] = await Promise.all([
+        api.getSourceHealth(),
+        api.listRecentArticles({ limit: 20, ...(statusFilter ? { status: statusFilter } : {}) }),
+      ])
+      setData({ sources: health.sources || [], stats: health.stats })
+      setRecent(recentResp.items || [])
+    } finally {
+      setLoading(false)
+    }
+  }, [statusFilter])
+
+  useEffect(() => { reload() }, [reload])
+
+  const handleFetch = async () => {
+    setBusy('fetch')
+    setToast(null)
+    try {
+      const r = await api.fetchNews()
+      setToast({ type: 'ok', msg: `抓取完成：新增 ${r.new_count} 条，翻译 ${r.done_count} 条` })
+      await reload()
+    } catch (e) {
+      setToast({ type: 'err', msg: e.response?.data?.detail || '抓取失败' })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const handleEnrich = async () => {
+    setBusy('enrich')
+    setToast(null)
+    try {
+      const r = await api.enrichNews({ max_retry: 20 })
+      setToast({ type: 'ok', msg: `翻译完成：处理 ${r.retried_count} 条，成功 ${r.done_count} 条` })
+      await reload()
+    } catch (e) {
+      setToast({ type: 'err', msg: e.response?.data?.detail || '翻译失败' })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const stats = data.stats || { total: 0, pending: 0, done: 0, failed: 0, by_source: [] }
+  const sourcesByName = useMemo(() => {
+    const map = new Map()
+    for (const s of data.sources || []) map.set(s.source, s)
+    return map
+  }, [data.sources])
+
+  return (
+    <div className="grid gap-4">
+      {/* Header + actions */}
+      <Card className="rounded-2xl">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge color="#2B6CB0">爬虫</Badge>
+          <h2 className="text-xl font-black tracking-tight text-text" style={{ fontFamily: 'var(--font-headline)' }}>
+            爬虫状态
+          </h2>
+          <div className="ml-auto flex gap-2 flex-wrap">
+            <Button variant="ghost" size="sm" icon="refresh" onClick={reload} loading={loading}>
+              刷新
+            </Button>
+            <Button variant="subtle" size="sm" icon="translate" onClick={handleEnrich} loading={busy === 'enrich'}>
+              重试翻译
+            </Button>
+            <Button variant="primary" size="sm" icon="cloud_download" onClick={handleFetch} loading={busy === 'fetch'}>
+              立即抓取
+            </Button>
+          </div>
+        </div>
+        {toast && (
+          <div
+            className="mt-3 rounded-lg px-3 py-2 text-xs"
+            style={{
+              background: toast.type === 'ok' ? '#10B98118' : '#EF444418',
+              color: toast.type === 'ok' ? '#10B981' : '#EF4444',
+            }}
+          >
+            {toast.msg}
+          </div>
+        )}
+      </Card>
+
+      {/* Stats summary */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatTile label="文章总数" value={stats.total} color="#5E6478" icon="article" />
+        <StatTile label="待翻译" value={stats.pending} color="#F59E0B" icon="hourglass_top" />
+        <StatTile label="已翻译" value={stats.done} color="#10B981" icon="check_circle" />
+        <StatTile label="翻译失败" value={stats.failed} color="#EF4444" icon="error" />
+      </div>
+
+      {/* Per-source health */}
+      <div className="grid gap-3">
+        <div className="flex items-center gap-2">
+          <Badge color="#5E6478">9 个源</Badge>
+          <h3 className="text-base font-bold text-text">数据源健康</h3>
+        </div>
+        {loading && data.sources.length === 0 ? (
+          <div className="flex items-center justify-center py-10">
+            <span className="material-symbols-outlined animate-spin text-accent" style={{ fontSize: 24 }}>progress_activity</span>
+          </div>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {(stats.by_source || []).map((src) => {
+              const health = sourcesByName.get(src.source)
+              return <SourceHealthCard key={src.source} src={src} health={health} />
+            })}
+            {/* Show sources that have health entries but no articles yet */}
+            {(data.sources || [])
+              .filter((h) => !(stats.by_source || []).some((s) => s.source === h.source))
+              .map((h) => (
+                <SourceHealthCard
+                  key={h.source}
+                  src={{ source: h.source, total: 0, done: 0, pending: 0, failed: 0, with_image: 0, with_author: 0 }}
+                  health={h}
+                />
+              ))}
+          </div>
+        )}
+      </div>
+
+      {/* Recent articles */}
+      <div className="grid gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Badge color="#8B5CF6">最近</Badge>
+          <h3 className="text-base font-bold text-text">最近抓取的文章</h3>
+          <div className="ml-auto flex gap-1.5 flex-wrap">
+            {[
+              { k: '', label: '全部' },
+              { k: 'pending', label: '待翻译' },
+              { k: 'done', label: '已翻译' },
+              { k: 'failed', label: '失败' },
+            ].map((f) => (
+              <button
+                key={f.k || 'all'}
+                onClick={() => setStatusFilter(f.k)}
+                className="rounded-full px-3 py-1 text-xs font-semibold transition-colors"
+                style={{
+                  background: statusFilter === f.k ? '#DC5050' : 'rgba(255,255,255,0.06)',
+                  color: statusFilter === f.k ? '#fff' : 'var(--color-text-muted)',
+                }}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {recent.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 gap-2 text-text-muted">
+            <span className="material-symbols-outlined text-text-subtle" style={{ fontSize: 32 }}>inbox</span>
+            <p className="text-xs">没有匹配的文章。</p>
+          </div>
+        ) : (
+          <div className="grid gap-2">
+            {recent.map((a) => <RecentArticleRow key={a.link} article={a} />)}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function StatTile({ label, value, color, icon }) {
+  return (
+    <Card className="rounded-2xl">
+      <div className="flex items-center gap-3">
+        <span
+          className="material-symbols-outlined rounded-lg p-2"
+          style={{ fontSize: 22, background: `${color}18`, color }}
+        >
+          {icon}
+        </span>
+        <div className="flex flex-col">
+          <span className="text-xs text-text-muted">{label}</span>
+          <span className="text-2xl font-black text-text" style={{ fontFamily: 'var(--font-headline)' }}>
+            {value?.toLocaleString() ?? '—'}
+          </span>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+function SourceHealthCard({ src, health }) {
+  const status = health?.last_status || 'unknown'
+  const meta = SOURCE_STATUS_META[status] || { label: status || '未知', color: '#6B7280', icon: 'help' }
+  const failures = health?.consecutive_failures || 0
+  const isAlarming = failures >= 3
+
+  return (
+    <Card
+      className="rounded-2xl"
+      style={{ borderColor: isAlarming ? '#EF4444' : undefined, borderWidth: isAlarming ? 1 : undefined }}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-bold text-text truncate">{src.source}</span>
+            <span
+              className="rounded px-1.5 py-0.5 text-[10px] font-bold inline-flex items-center gap-0.5"
+              style={{ background: `${meta.color}18`, color: meta.color }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 12 }}>{meta.icon}</span>
+              {meta.label}
+            </span>
+            {failures > 0 && (
+              <span
+                className="rounded px-1.5 py-0.5 text-[10px] font-bold"
+                style={{ background: '#EF444418', color: '#EF4444' }}
+                title="连续失败次数"
+              >
+                ×{failures}
+              </span>
+            )}
+          </div>
+          <p className="mt-1.5 text-[11px] text-text-subtle">
+            {health?.last_fetched_at
+              ? `${timeAgo(health.last_fetched_at)} · ${health.last_duration_ms || 0}ms`
+              : '尚未抓取'}
+          </p>
+          {health?.last_error && (
+            <p className="mt-1 text-[11px] text-danger truncate" title={health.last_error}>
+              {health.last_error}
+            </p>
+          )}
+        </div>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+        <Stat k="文章数" v={src.total} />
+        <Stat k="待翻译" v={src.pending} highlight={src.pending > 0 ? '#F59E0B' : undefined} />
+        <Stat k="带配图" v={`${src.with_image}/${src.total || 0}`} />
+        <Stat k="总抓取" v={health?.total_fetches || 0} />
+      </div>
+    </Card>
+  )
+}
+
+function Stat({ k, v, highlight }) {
+  return (
+    <div className="flex items-center justify-between rounded-lg px-2 py-1" style={{ background: 'rgba(255,255,255,0.04)' }}>
+      <span className="text-text-subtle">{k}</span>
+      <span className="font-semibold" style={{ color: highlight || 'var(--color-text)' }}>{v ?? 0}</span>
+    </div>
+  )
+}
+
+function RecentArticleRow({ article }) {
+  const status = article.enrichment_status || 'pending'
+  const statusColor = status === 'done' ? '#10B981' : status === 'failed' ? '#EF4444' : '#F59E0B'
+  const statusLabel = status === 'done' ? '已译' : status === 'failed' ? '失败' : '待译'
+  return (
+    <Card className="rounded-2xl">
+      <div className="flex items-start gap-3">
+        {article.image_url ? (
+          <img
+            src={article.image_url}
+            alt=""
+            className="h-14 w-14 shrink-0 rounded-lg object-cover"
+            onError={(e) => { e.target.style.display = 'none' }}
+          />
+        ) : (
+          <div
+            className="h-14 w-14 shrink-0 rounded-lg flex items-center justify-center"
+            style={{ background: 'rgba(255,255,255,0.05)' }}
+          >
+            <span className="material-symbols-outlined text-text-subtle" style={{ fontSize: 22 }}>image</span>
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge color="#5E6478">{article.source}</Badge>
+            <span
+              className="rounded px-1.5 py-0.5 text-[10px] font-bold"
+              style={{ background: `${statusColor}18`, color: statusColor }}
+            >
+              {statusLabel}
+            </span>
+            {article.rss_category && (
+              <span className="text-[10px] text-text-subtle">{article.rss_category}</span>
+            )}
+            <span className="text-[10px] text-text-subtle ml-auto">
+              {article.fetched_at ? timeAgo(article.fetched_at) : ''}
+            </span>
+          </div>
+          <p className="mt-1 text-sm text-text leading-snug line-clamp-2">{article.title}</p>
+          {article.title_zh && (
+            <p className="mt-0.5 text-xs text-text-muted line-clamp-1">{article.title_zh}</p>
+          )}
+          <div className="mt-1.5 flex gap-3 text-[10px] text-text-subtle flex-wrap">
+            {article.author && <span>作者: {article.author}</span>}
+            {article.tags_zh && <span style={{ color: '#ffb74d' }}>{article.tags_zh}</span>}
+            <a
+              href={article.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-auto inline-flex items-center gap-0.5 text-accent hover:underline"
+            >
+              原文
+              <span className="material-symbols-outlined" style={{ fontSize: 11 }}>open_in_new</span>
+            </a>
+          </div>
+        </div>
+      </div>
+    </Card>
   )
 }
 

@@ -8,7 +8,8 @@ from datetime import datetime, timezone
 from io import BytesIO
 
 from backend import storage
-from backend.news import fetch_all_feeds, re_enrich_article
+from backend.crawler import run_all
+from backend.news import re_enrich_article
 from backend.storage_media import get_media_storage
 
 log = logging.getLogger("diarynews.services")
@@ -16,48 +17,94 @@ log = logging.getLogger("diarynews.services")
 
 # ── News ─────────────────────────────────────────────────────────────────────
 
-def fetch_and_save_news(max_new: int = 0, max_retry: int = 20, max_age_hours: int = 24) -> dict:
-    """Fetch new feeds first (fast), then retry incomplete articles.
+def collect_news(max_new: int = 0, max_age_hours: int = 24) -> dict:
+    """Stage A — run all RSS adapters, persist raw articles as pending, update source_health.
 
-    max_new: cap on new articles to enrich (0 = unlimited, used by manual fetch).
-    max_retry: cap on incomplete articles to retry per cycle.
+    Fast (~ a few hundred ms per adapter). Returns counts + per-source health summary.
     """
     data = storage.load_news()
-    existing = data.get("articles", [])
-    existing_urls = {a["link"] for a in existing}
+    existing_urls = {a["link"] for a in data.get("articles", [])}
 
-    # Step 1: Fetch & save new articles (fast when most already exist)
-    new_articles = fetch_all_feeds(existing_urls=existing_urls, max_articles=max_new, max_age_hours=max_age_hours)
+    new_articles, results = run_all(
+        existing_urls=existing_urls,
+        max_age_hours=max_age_hours,
+        max_articles=max_new,
+    )
     now = datetime.now(timezone.utc).isoformat()
     if new_articles:
-        storage.save_news({"last_updated": now, "articles": new_articles})
+        storage.save_raw_articles(new_articles, last_updated=now)
+    else:
+        storage.save_raw_articles([], last_updated=now)
 
-    # Step 2: Retry incomplete articles (missing translation or tags)
-    incomplete = [a for a in existing
-                  if not a.get("title_zh") or not a.get("content_zh") or not a.get("tags_zh")][:max_retry]
-    retried = []
-    for article in incomplete:
-        try:
-            retried.append(re_enrich_article(article))
-        except Exception as exc:
-            log.warning("re_enrich failed for '%s': %s", article["link"], exc)
-            retried.append(article)
-
-    if retried:
-        storage.save_news({"last_updated": now, "articles": retried})
-        log.info("Retried LLM for %d incomplete articles", len(retried))
-
-    if not new_articles and not retried:
-        storage.save_news({"last_updated": now, "articles": []})
-
-    storage.add_log("news_fetch",
-        f"抓取完成: {len(new_articles)}条新文章, {len(retried)}条重试",
-        {"new_count": len(new_articles), "retried_count": len(retried)})
-
+    health = [
+        {
+            "source": r.source,
+            "status": r.status,
+            "entries": r.entries_count,
+            "articles": len(r.articles),
+            "duration_ms": r.duration_ms,
+            "error": r.error,
+        }
+        for r in results
+    ]
     return {
         "new_count": len(new_articles),
-        "retried_count": len(retried),
         "last_updated": now,
+        "sources": health,
+    }
+
+
+def enrich_pending_news(max_retry: int = 20) -> dict:
+    """Stage B — run MiniMax enrichment on articles still missing Chinese fields."""
+    pending = storage.list_pending_enrichment(limit=max_retry)
+    if not pending:
+        return {"retried_count": 0, "done_count": 0}
+
+    enriched: list = []
+    done = 0
+    for article in pending:
+        try:
+            updated = re_enrich_article(article)
+            enriched.append(updated)
+            if updated.get("title_zh") and updated.get("content_zh"):
+                storage.mark_enrichment_status(article["link"], "done", increment_attempts=True)
+                done += 1
+            else:
+                storage.mark_enrichment_status(article["link"], "pending", increment_attempts=True)
+        except Exception as exc:
+            log.warning("enrich failed for '%s': %s", article["link"], exc)
+            storage.mark_enrichment_status(article["link"], "failed", increment_attempts=True)
+
+    if enriched:
+        now = datetime.now(timezone.utc).isoformat()
+        storage.save_news({"last_updated": now, "articles": enriched})
+        log.info("Stage B enriched %d articles (%d marked done)", len(enriched), done)
+
+    return {"retried_count": len(enriched), "done_count": done}
+
+
+def fetch_and_save_news(max_new: int = 0, max_retry: int = 20, max_age_hours: int = 24) -> dict:
+    """Stage A + Stage B inline — preserves the legacy /api/news/fetch behavior."""
+    collected = collect_news(max_new=max_new, max_age_hours=max_age_hours)
+    enriched = enrich_pending_news(max_retry=max_retry)
+
+    storage.add_log(
+        "news_fetch",
+        f"抓取完成: {collected['new_count']}条新文章, {enriched['retried_count']}条重试",
+        {
+            "new_count": collected["new_count"],
+            "retried_count": enriched["retried_count"],
+            "done_count": enriched["done_count"],
+            "sources": collected["sources"],
+        },
+    )
+
+    return {
+        "new_count": collected["new_count"],
+        "retried_count": enriched["retried_count"],
+        "done_count": enriched["done_count"],
+        "last_updated": collected["last_updated"],
+        "sources": collected["sources"],
     }
 
 

@@ -629,6 +629,33 @@ async def fetch_news(_admin: dict = Depends(require_admin)):
     return await asyncio.to_thread(services.fetch_and_save_news)
 
 
+@app.post("/api/news/enrich")
+async def enrich_news(
+    max_retry: int = Query(20, ge=1, le=100),
+    _admin: dict = Depends(require_admin),
+):
+    """Stage B only — run LLM enrichment on pending articles, idempotent."""
+    return await asyncio.to_thread(services.enrich_pending_news, max_retry)
+
+
+@app.get("/api/admin/sources/health")
+def admin_sources_health(_admin: dict = Depends(require_admin)):
+    return {
+        "sources": storage.load_source_health(),
+        "stats": storage.get_article_stats(),
+    }
+
+
+@app.get("/api/admin/news/recent")
+def admin_news_recent(
+    limit: int = Query(20, ge=1, le=100),
+    status: Optional[str] = Query(None),
+    _admin: dict = Depends(require_admin),
+):
+    """Most-recent articles for admin inspection. Optional status filter (pending/done/failed)."""
+    return {"items": storage.list_recent_articles(limit=limit, status=status)}
+
+
 # ── Media upload ─────────────────────────────────────────────────────────────
 
 @app.post("/api/media/upload")

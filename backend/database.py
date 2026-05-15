@@ -5,7 +5,21 @@ from backend.config import DB_PATH
 
 
 def _migrate(conn) -> None:
-    for col in ["title_zh TEXT", "content_zh TEXT", "tags_zh TEXT", "view_count INTEGER NOT NULL DEFAULT 0"]:
+    article_cols = [
+        "title_zh TEXT",
+        "content_zh TEXT",
+        "tags_zh TEXT",
+        "view_count INTEGER NOT NULL DEFAULT 0",
+        "author TEXT DEFAULT ''",
+        "image_url TEXT DEFAULT ''",
+        "language TEXT DEFAULT 'pt'",
+        "guid TEXT DEFAULT ''",
+        "rss_category TEXT DEFAULT ''",
+        "fetched_at TEXT DEFAULT ''",
+        "enrichment_status TEXT DEFAULT 'pending'",
+        "enrichment_attempts INTEGER NOT NULL DEFAULT 0",
+    ]
+    for col in article_cols:
         try:
             conn.execute(f"ALTER TABLE articles ADD COLUMN {col}")
         except sqlite3.OperationalError:
@@ -26,18 +40,38 @@ def init_db() -> None:
             );
 
             CREATE TABLE IF NOT EXISTS articles (
-                link             TEXT PRIMARY KEY,
-                title            TEXT NOT NULL,
-                summary          TEXT,
-                source           TEXT,
-                category         TEXT,
-                published        TEXT,
-                scraped_content  TEXT,
-                ai_summary       TEXT,
-                title_zh         TEXT,
-                content_zh       TEXT,
-                tags_zh          TEXT,
-                view_count       INTEGER NOT NULL DEFAULT 0
+                link                 TEXT PRIMARY KEY,
+                title                TEXT NOT NULL,
+                summary              TEXT,
+                source               TEXT,
+                category             TEXT,
+                published            TEXT,
+                scraped_content      TEXT,
+                ai_summary           TEXT,
+                title_zh             TEXT,
+                content_zh           TEXT,
+                tags_zh              TEXT,
+                view_count           INTEGER NOT NULL DEFAULT 0,
+                author               TEXT    DEFAULT '',
+                image_url            TEXT    DEFAULT '',
+                language             TEXT    DEFAULT 'pt',
+                guid                 TEXT    DEFAULT '',
+                rss_category         TEXT    DEFAULT '',
+                fetched_at           TEXT    DEFAULT '',
+                enrichment_status    TEXT    DEFAULT 'pending',
+                enrichment_attempts  INTEGER NOT NULL DEFAULT 0
+            );
+
+            CREATE TABLE IF NOT EXISTS source_health (
+                source                TEXT PRIMARY KEY,
+                last_fetched_at       TEXT,
+                last_status           TEXT,
+                last_error            TEXT,
+                last_duration_ms      INTEGER,
+                entries_count         INTEGER,
+                articles_count        INTEGER,
+                consecutive_failures  INTEGER NOT NULL DEFAULT 0,
+                total_fetches         INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS daily_news_briefs (
@@ -226,6 +260,11 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_admin_logs_type    ON admin_logs (event_type, created_at DESC);
         """)
         _migrate(conn)
+        # Indexes that depend on migrated columns must run after _migrate
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_articles_enrichment "
+            "ON articles (enrichment_status, published DESC)"
+        )
 
 
 @contextmanager

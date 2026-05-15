@@ -17,6 +17,40 @@ def load_news() -> dict:
     }
 
 
+def get_article_stats() -> dict:
+    """Aggregate counts for admin dashboards: total + by enrichment_status + per-source."""
+    _ensure_db()
+    with get_db() as conn:
+        total_row = conn.execute("SELECT COUNT(*) AS c FROM articles").fetchone()
+        status_rows = conn.execute(
+            "SELECT enrichment_status AS s, COUNT(*) AS c FROM articles GROUP BY enrichment_status"
+        ).fetchall()
+        source_rows = conn.execute(
+            """SELECT
+                 source,
+                 COUNT(*) AS total,
+                 SUM(CASE WHEN enrichment_status = 'done'    THEN 1 ELSE 0 END) AS done,
+                 SUM(CASE WHEN enrichment_status = 'pending' THEN 1 ELSE 0 END) AS pending,
+                 SUM(CASE WHEN enrichment_status = 'failed'  THEN 1 ELSE 0 END) AS failed,
+                 SUM(CASE WHEN image_url != ''  THEN 1 ELSE 0 END) AS with_image,
+                 SUM(CASE WHEN author    != ''  THEN 1 ELSE 0 END) AS with_author,
+                 MAX(fetched_at) AS last_fetched_at
+               FROM articles
+               WHERE source IS NOT NULL AND source != ''
+               GROUP BY source
+               ORDER BY source ASC"""
+        ).fetchall()
+
+    by_status = {r["s"] or "unknown": r["c"] for r in status_rows}
+    return {
+        "total": total_row["c"] if total_row else 0,
+        "pending": by_status.get("pending", 0),
+        "done": by_status.get("done", 0),
+        "failed": by_status.get("failed", 0),
+        "by_source": [dict(r) for r in source_rows],
+    }
+
+
 def save_news(data: dict) -> None:
     _ensure_db()
     _bulk_upsert_articles(data.get("articles", []))
@@ -31,9 +65,13 @@ def _bulk_upsert_articles(articles: list) -> None:
         conn.executemany(
             """INSERT INTO articles
                (link, title, summary, source, category, published, scraped_content, ai_summary,
-                title_zh, content_zh, tags_zh)
+                title_zh, content_zh, tags_zh,
+                author, image_url, language, guid, rss_category, fetched_at,
+                enrichment_status, enrichment_attempts)
                VALUES (:link,:title,:summary,:source,:category,:published,:scraped_content,:ai_summary,
-                :title_zh,:content_zh,:tags_zh)
+                :title_zh,:content_zh,:tags_zh,
+                :author,:image_url,:language,:guid,:rss_category,:fetched_at,
+                :enrichment_status,:enrichment_attempts)
                ON CONFLICT(link) DO UPDATE SET
                  title = excluded.title,
                  summary = excluded.summary,
@@ -44,24 +82,110 @@ def _bulk_upsert_articles(articles: list) -> None:
                  ai_summary = excluded.ai_summary,
                  title_zh = excluded.title_zh,
                  content_zh = excluded.content_zh,
-                 tags_zh = excluded.tags_zh""",
+                 tags_zh = excluded.tags_zh,
+                 author = excluded.author,
+                 image_url = excluded.image_url,
+                 language = excluded.language,
+                 guid = excluded.guid,
+                 rss_category = excluded.rss_category,
+                 fetched_at = excluded.fetched_at,
+                 enrichment_status = excluded.enrichment_status,
+                 enrichment_attempts = excluded.enrichment_attempts""",
             [
                 {
-                    "link":            a.get("link", ""),
-                    "title":           a.get("title", ""),
-                    "summary":         a.get("summary", ""),
-                    "source":          a.get("source", ""),
-                    "category":        a.get("category", ""),
-                    "published":       a.get("published", ""),
-                    "scraped_content": a.get("scraped_content", ""),
-                    "ai_summary":      a.get("ai_summary", ""),
-                    "title_zh":        a.get("title_zh", ""),
-                    "content_zh":      a.get("content_zh", ""),
-                    "tags_zh":         a.get("tags_zh", ""),
+                    "link":                a.get("link", ""),
+                    "title":               a.get("title", ""),
+                    "summary":             a.get("summary", ""),
+                    "source":              a.get("source", ""),
+                    "category":            a.get("category", ""),
+                    "published":           a.get("published", ""),
+                    "scraped_content":     a.get("scraped_content", ""),
+                    "ai_summary":          a.get("ai_summary", ""),
+                    "title_zh":            a.get("title_zh", ""),
+                    "content_zh":          a.get("content_zh", ""),
+                    "tags_zh":             a.get("tags_zh", ""),
+                    "author":              a.get("author", ""),
+                    "image_url":           a.get("image_url", ""),
+                    "language":            a.get("language", "pt"),
+                    "guid":                a.get("guid", ""),
+                    "rss_category":        a.get("rss_category", ""),
+                    "fetched_at":          a.get("fetched_at", ""),
+                    "enrichment_status":   a.get("enrichment_status", "pending"),
+                    "enrichment_attempts": a.get("enrichment_attempts", 0),
                 }
                 for a in articles
             ],
         )
+
+
+def save_raw_articles(articles: list, last_updated: str) -> None:
+    """Stage A — persist freshly-crawled raw articles as enrichment_status='pending'.
+
+    Public alias around _bulk_upsert_articles + last_updated meta + trim.
+    """
+    _ensure_db()
+    for a in articles:
+        a.setdefault("enrichment_status", "pending")
+    _bulk_upsert_articles(articles)
+    if last_updated:
+        _set_meta("news_last_updated", last_updated)
+    _trim_articles()
+
+
+def list_recent_articles(limit: int = 20, status: Optional[str] = None) -> list:
+    """Recent articles for admin inspection. Optional enrichment_status filter."""
+    _ensure_db()
+    with get_db() as conn:
+        sql = (
+            "SELECT link, title, source, category, published, fetched_at, "
+            "image_url, author, rss_category, enrichment_status, enrichment_attempts, "
+            "title_zh, tags_zh "
+            "FROM articles"
+        )
+        params: list = []
+        if status:
+            sql += " WHERE enrichment_status = ?"
+            params.append(status)
+        sql += " ORDER BY fetched_at DESC, published DESC LIMIT ?"
+        params.append(limit)
+        rows = conn.execute(sql, params).fetchall()
+    return [dict(r) for r in rows]
+
+
+def list_pending_enrichment(limit: int = 20) -> list:
+    """Return articles still missing Chinese enrichment, most recent first."""
+    _ensure_db()
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT * FROM articles
+               WHERE enrichment_status != 'done'
+                 AND (title_zh = '' OR title_zh IS NULL
+                      OR content_zh = '' OR content_zh IS NULL
+                      OR tags_zh IS NULL)
+               ORDER BY published DESC
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def mark_enrichment_status(link: str, status: str, increment_attempts: bool = True) -> None:
+    """Update enrichment_status for one article. Bumps enrichment_attempts by default."""
+    _ensure_db()
+    with get_db() as conn:
+        if increment_attempts:
+            conn.execute(
+                """UPDATE articles
+                   SET enrichment_status = ?,
+                       enrichment_attempts = COALESCE(enrichment_attempts, 0) + 1
+                   WHERE link = ?""",
+                (status, link),
+            )
+        else:
+            conn.execute(
+                "UPDATE articles SET enrichment_status = ? WHERE link = ?",
+                (status, link),
+            )
 
 
 def increment_article_view(link: str) -> Optional[dict]:

@@ -2,7 +2,17 @@ import SidebarShell from './SidebarShell'
 import { navItemClass, navCountClass, sectionLabel } from './sidebarShellStyles.jsx'
 import { CATEGORY_ZH, CATEGORY_ICONS } from '../constants/categories'
 
-export default function Sidebar({ categories, activeCategory, onCategoryChange, lastUpdated }) {
+export default function Sidebar({
+  categories,
+  activeCategory,
+  onCategoryChange,
+  sources = [],
+  activeSource = 'All',
+  onSourceChange,
+  lastUpdated,
+}) {
+  const hasSources = sources.length > 0 && typeof onSourceChange === 'function'
+
   return (
     <SidebarShell title="分类" lastUpdated={lastUpdated}>
       <button onClick={() => onCategoryChange('All')} className={navItemClass(activeCategory === 'All')}>
@@ -20,6 +30,26 @@ export default function Sidebar({ categories, activeCategory, onCategoryChange, 
           <span className={navCountClass}>{cat.count}</span>
         </button>
       ))}
+
+      {hasSources && (
+        <>
+          {sectionLabel('出处')}
+
+          <button onClick={() => onSourceChange('All')} className={navItemClass(activeSource === 'All')}>
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>language</span>
+            <span className="flex-1">全部来源</span>
+          </button>
+
+          {sources.map(src => (
+            <button key={src.name} onClick={() => onSourceChange(src.name)}
+              className={navItemClass(activeSource === src.name)}>
+              <span className="material-symbols-outlined" style={{ fontSize: 16 }}>rss_feed</span>
+              <span className="flex-1 truncate">{src.name}</span>
+              <span className={navCountClass}>{src.count}</span>
+            </button>
+          ))}
+        </>
+      )}
     </SidebarShell>
   )
 }
