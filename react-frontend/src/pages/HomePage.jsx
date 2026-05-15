@@ -185,7 +185,7 @@ export default function HomePage({
                 </h2>
 
                 <p className="mt-3 max-w-2xl text-sm leading-7 text-text-muted sm:mt-4 sm:text-[15px] sm:leading-8">
-                  {leadArticle?.content_zh || leadArticle?.ai_summary || leadArticle?.summary || '获取新闻后，首页会自动把最相关的华人内容放到这里，方便你不用先点进栏目也能看到重点。'}
+                  {leadArticle?.summary_zh || leadArticle?.content_zh || leadArticle?.ai_summary || leadArticle?.summary || '获取新闻后，首页会自动把最相关的华人内容放到这里，方便你不用先点进栏目也能看到重点。'}
                 </p>
 
                 <div className="mt-6 flex flex-wrap items-center gap-2">
@@ -440,7 +440,7 @@ export default function HomePage({
                   {article.title_zh || article.title}
                 </h3>
                 <p className="mt-2 text-sm leading-7 text-text-muted line-clamp-3">
-                  {article.content_zh || article.ai_summary || article.summary}
+                  {article.summary_zh || article.content_zh || article.ai_summary || article.summary}
                 </p>
                 <div className="mt-3 flex items-center justify-between gap-3">
                   <span className="text-xs text-text-subtle">{formatViews(article.view_count)}</span>

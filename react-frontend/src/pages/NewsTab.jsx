@@ -266,7 +266,7 @@ export default function NewsTab({
                       {featured.title_zh || featured.title}
                     </h2>
                     <p className="mt-4 line-clamp-4 text-sm leading-7 text-text-muted">
-                      {featured.content_zh || featured.ai_summary || featured.summary}
+                      {featured.summary_zh || featured.content_zh || featured.ai_summary || featured.summary}
                     </p>
                     <div className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-accent">
                       阅读重点
@@ -490,7 +490,7 @@ export default function NewsTab({
                       {featured.title_zh || featured.title}
                     </h2>
                     <p className="mt-4 line-clamp-4 text-sm leading-7 text-text-muted">
-                      {featured.content_zh || featured.ai_summary || featured.summary}
+                      {featured.summary_zh || featured.content_zh || featured.ai_summary || featured.summary}
                     </p>
                     <div className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-accent">
                       打开头条

@@ -19,6 +19,12 @@ def _migrate(conn) -> None:
         "enrichment_status TEXT DEFAULT 'pending'",
         "enrichment_attempts INTEGER NOT NULL DEFAULT 0",
         "enrichment_error TEXT DEFAULT ''",
+        "enriched_at TEXT DEFAULT ''",
+        "enrichment_model TEXT DEFAULT ''",
+        "enrichment_prompt_version TEXT DEFAULT ''",
+        "enrichment_input_hash TEXT DEFAULT ''",
+        "summary_zh TEXT DEFAULT ''",
+        "relevance_reason TEXT DEFAULT ''",
     ]
     for col in article_cols:
         try:
@@ -28,6 +34,12 @@ def _migrate(conn) -> None:
     for col in ["phone TEXT", "updated_at TEXT", "google_name TEXT"]:
         try:
             conn.execute(f"ALTER TABLE users ADD COLUMN {col}")
+        except sqlite3.OperationalError:
+            pass
+    # daily_news_briefs.generated_by added in F4: 'llm' | 'fallback' | 'failed'
+    for col in ["generated_by TEXT NOT NULL DEFAULT 'llm'"]:
+        try:
+            conn.execute(f"ALTER TABLE daily_news_briefs ADD COLUMN {col}")
         except sqlite3.OperationalError:
             pass
 
@@ -85,6 +97,7 @@ def init_db() -> None:
                 bullets_json       TEXT    NOT NULL,
                 article_links_json TEXT    NOT NULL,
                 article_count      INTEGER NOT NULL DEFAULT 0,
+                generated_by       TEXT    NOT NULL DEFAULT 'llm',
                 generated_at       TEXT    NOT NULL,
                 updated_at         TEXT    NOT NULL
             );

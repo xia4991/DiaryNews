@@ -61,6 +61,9 @@ def get_daily_news_brief(brief_type: str, brief_date: str) -> Optional[dict]:
     return _serialize_brief(row) if row else None
 
 
+_VALID_GENERATED_BY = ("llm", "fallback", "failed")
+
+
 def upsert_daily_news_brief(
     brief_type: str,
     brief_date: str,
@@ -68,9 +71,20 @@ def upsert_daily_news_brief(
     summary_zh: str,
     bullets: list,
     article_links: list,
+    generated_by: str = "llm",
 ) -> dict:
+    """Upsert a daily brief row.
+
+    `generated_by` is one of:
+      - 'llm'      — LLM produced the title/summary/bullets successfully
+      - 'fallback' — LLM failed/empty; rule-based stand-in was stored
+      - 'failed'   — both LLM and fallback failed (reserved; current code uses 'fallback')
+    Admin UI surfaces this so 'fallback' briefs can be retried later.
+    """
     if brief_type not in BRIEF_TYPES:
         raise ValueError(f"Invalid brief_type: {brief_type!r}")
+    if generated_by not in _VALID_GENERATED_BY:
+        raise ValueError(f"Invalid generated_by: {generated_by!r}")
     _ensure_db()
     now = _now_iso()
     bullets_json = json.dumps(bullets or [], ensure_ascii=False)
@@ -81,15 +95,16 @@ def upsert_daily_news_brief(
             """
             INSERT INTO daily_news_briefs (
                 brief_date, brief_type, title, summary_zh, bullets_json,
-                article_links_json, article_count, generated_at, updated_at
+                article_links_json, article_count, generated_by, generated_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(brief_type, brief_date) DO UPDATE SET
                 title = excluded.title,
                 summary_zh = excluded.summary_zh,
                 bullets_json = excluded.bullets_json,
                 article_links_json = excluded.article_links_json,
                 article_count = excluded.article_count,
+                generated_by = excluded.generated_by,
                 generated_at = excluded.generated_at,
                 updated_at = excluded.updated_at
             """,
@@ -101,6 +116,7 @@ def upsert_daily_news_brief(
                 bullets_json,
                 article_links_json,
                 article_count,
+                generated_by,
                 now,
                 now,
             ),

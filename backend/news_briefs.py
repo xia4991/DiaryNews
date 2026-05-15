@@ -1,16 +1,25 @@
+import logging
 import re
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from backend.llm import call_minimax
+from backend.llm import MiniMaxConfigError, MiniMaxError, call_minimax
 from backend.prompts import daily_news_brief_prompt
 from backend.storage.news import load_news
 from backend.storage.news_briefs import upsert_daily_news_brief
 
+log = logging.getLogger("diarynews.news_briefs")
+
 PORTUGAL_TZ = ZoneInfo("Europe/Lisbon")
+MAX_CHINA_BRIEF_ARTICLES = 20
 MAX_PORTUGAL_BRIEF_ARTICLES = 20
 MIN_BRIEF_ARTICLES = 3
+
+# Tags promoted to the top when ranking China-brief candidates. Operationally
+# these are the topics expats most need to know about; less time-sensitive tags
+# (e.g. 中葡关系) still get picked up if there is room.
+CHINA_PRIORITY_TAGS = ("移民签证", "法律法规", "工作就业", "税务财务", "安全治安")
 
 _TITLE_RE = re.compile(r"^TITLE:\s*(.*)$", re.MULTILINE)
 _SUMMARY_RE = re.compile(r"^SUMMARY:\s*(.*?)(?:\nBULLETS:|\Z)", re.MULTILINE | re.DOTALL)
@@ -28,24 +37,92 @@ def _parse_iso_to_portugal_day(value: str) -> Optional[str]:
     return dt.astimezone(PORTUGAL_TZ).date().isoformat()
 
 
+def _has_chinese_content(article: dict) -> bool:
+    """Brief inputs require either a card-ready summary or a refined body."""
+    return bool((article.get("summary_zh") or "").strip() or (article.get("content_zh") or "").strip())
+
+
+def _parse_tags(article: dict) -> list:
+    raw = (article.get("tags_zh") or "").strip()
+    if not raw:
+        return []
+    return [t.strip() for t in raw.split(",") if t.strip()]
+
+
+def _china_rank_key(article: dict) -> tuple:
+    """Higher tuple => earlier in sort order (we reverse-sort)."""
+    tags = _parse_tags(article)
+    priority_hits = sum(1 for t in tags if t in CHINA_PRIORITY_TAGS)
+    return (priority_hits, len(tags), article.get("published") or "")
+
+
+def _dedupe_articles(articles: list) -> list:
+    """Drop near-duplicates by normalizing title to its first 8 word-chars
+    (strips whitespace + punctuation, lowercased). Catches the cross-source
+    'same story, one source adds (Updated)' case for Chinese headlines without
+    needing full fuzzy matching."""
+    seen = set()
+    out = []
+    for a in articles:
+        title = (a.get("title_zh") or a.get("title") or "").strip().lower()
+        normalized = re.sub(r"[\s\W]+", "", title, flags=re.UNICODE)
+        key = normalized[:8]
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(a)
+    return out
+
+
 def _filter_articles_for_day(articles: list, brief_type: str, brief_date: str) -> list:
-    selected = []
+    """Pick the day's brief candidates with content-quality and editorial caps.
+
+    Stage A rules common to both types:
+      - Article published on `brief_date` (in Portugal TZ)
+      - `enrichment_status == 'done'`
+      - Either `summary_zh` or `content_zh` non-empty
+    China brief additionally:
+      - Has at least one Chinese-interest tag
+      - Ranked by (# priority tags, # total tags, published-desc)
+    Portugal brief:
+      - Ranked by published-desc only.
+    Both pipelines run `_dedupe_articles()` and cap at MAX_*_BRIEF_ARTICLES.
+    """
+    candidates = []
     for article in articles:
         article_day = _parse_iso_to_portugal_day(article.get("published", ""))
         if article_day != brief_date:
             continue
-        if brief_type == "china" and not (article.get("tags_zh") or "").strip():
+        if (article.get("enrichment_status") or "") != "done":
             continue
-        selected.append(article)
-    selected.sort(key=lambda article: article.get("published") or "", reverse=True)
+        if not _has_chinese_content(article):
+            continue
+        if brief_type == "china" and not _parse_tags(article):
+            continue
+        candidates.append(article)
+
     if brief_type == "china":
-        return selected
-    return selected[:MAX_PORTUGAL_BRIEF_ARTICLES]
+        candidates.sort(key=_china_rank_key, reverse=True)
+        cap = MAX_CHINA_BRIEF_ARTICLES
+    else:
+        candidates.sort(key=lambda a: a.get("published") or "", reverse=True)
+        cap = MAX_PORTUGAL_BRIEF_ARTICLES
+
+    return _dedupe_articles(candidates)[:cap]
 
 
 def _article_digest(article: dict) -> str:
+    """Compact per-article block for the LLM digest. Prefers `summary_zh` (the
+    purpose-built card preview) over the longer `content_zh`, keeping the brief
+    prompt small enough that 20 articles don't blow the context window."""
     title = article.get("title_zh") or article.get("title") or ""
-    summary = article.get("content_zh") or article.get("ai_summary") or article.get("summary") or ""
+    summary = (
+        article.get("summary_zh")
+        or article.get("content_zh")
+        or article.get("ai_summary")
+        or article.get("summary")
+        or ""
+    )
     summary = summary.strip().replace("\n", " ")
     if len(summary) > 220:
         summary = summary[:220].rstrip() + "..."
@@ -96,9 +173,8 @@ def _fallback_brief(brief_date: str, brief_type: str, articles: list) -> dict:
     if brief_type == "china":
         seen = set()
         for article in primary:
-            for tag in (article.get("tags_zh") or "").split(","):
-                tag = tag.strip()
-                if tag and tag not in seen:
+            for tag in _parse_tags(article):
+                if tag not in seen:
                     seen.add(tag)
                     lead_tags.append(tag)
         title = "重点回顾：" + "、".join(lead_tags[:3]) if lead_tags else "重点回顾"
@@ -108,7 +184,13 @@ def _fallback_brief(brief_date: str, brief_type: str, articles: list) -> dict:
     bullets = []
     for article in primary:
         title_zh = article.get("title_zh") or article.get("title") or ""
-        summary = article.get("content_zh") or article.get("ai_summary") or article.get("summary") or ""
+        summary = (
+            article.get("summary_zh")
+            or article.get("content_zh")
+            or article.get("ai_summary")
+            or article.get("summary")
+            or ""
+        )
         summary = summary.strip().replace("\n", " ")
         if len(summary) > 80:
             summary = summary[:80].rstrip() + "..."
@@ -130,9 +212,25 @@ def build_daily_news_brief(brief_type: str, brief_date: str) -> Optional[dict]:
         return None
 
     prompt = daily_news_brief_prompt(brief_date, brief_type, _build_digest(selected))
-    fallback = ""
-    raw = call_minimax(prompt, max_tokens=900, fallback=fallback)
-    parsed = _parse_brief_response(raw) or _fallback_brief(brief_date, brief_type, selected)
+    raw = ""
+    try:
+        raw = call_minimax(prompt, max_tokens=900, prompt_version="daily_brief_v1")
+    except MiniMaxConfigError:
+        # Bubble config errors so admins see them; they're operator-fixable.
+        raise
+    except MiniMaxError as exc:
+        log.warning(
+            "Brief LLM failed (%s) for %s %s — using rule-based fallback: %s",
+            type(exc).__name__, brief_type, brief_date, exc,
+        )
+
+    parsed = _parse_brief_response(raw)
+    if parsed:
+        generated_by = "llm"
+    else:
+        parsed = _fallback_brief(brief_date, brief_type, selected)
+        generated_by = "fallback"
+
     return {
         "brief_date": brief_date,
         "brief_type": brief_type,
@@ -141,6 +239,7 @@ def build_daily_news_brief(brief_type: str, brief_date: str) -> Optional[dict]:
         "bullets": parsed["bullets"],
         "article_links": [article["link"] for article in selected],
         "article_count": len(selected),
+        "generated_by": generated_by,
     }
 
 
@@ -155,6 +254,7 @@ def generate_and_store_daily_news_brief(brief_type: str, brief_date: str) -> Opt
         summary_zh=brief["summary_zh"],
         bullets=brief["bullets"],
         article_links=brief["article_links"],
+        generated_by=brief.get("generated_by", "llm"),
     )
 
 

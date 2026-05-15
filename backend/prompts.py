@@ -1,25 +1,40 @@
-"""LLM prompt templates — single source of truth for all prompts."""
+"""LLM prompt templates — single source of truth for all prompts.
+
+Prompt version identifiers are persisted to `articles.enrichment_prompt_version`
+so re-enrichment can be triggered by future contract changes without overwriting
+rows produced by an earlier prompt.
+"""
+
+ARTICLE_ENRICHMENT_PROMPT_VERSION = "article_enrichment_v2"
 
 
 def article_chinese_prompt(title: str, content: str) -> str:
+    """Article enrichment v2 — strict JSON output contract.
+
+    See `_parse_chinese_response_json` in backend/news.py for the parser. The
+    legacy line-prefix format is kept as a fallback parser to avoid clobbering
+    rows during rollout if a single response falls back to the old format.
+    """
     return (
         f"Título: {title}\n\nConteúdo:\n{content}\n\n"
-        "请将以上葡萄牙语新闻翻译成中文，并判断是否与在葡华人相关。要求：\n"
-        "1. 翻译标题为中文\n"
-        "2. 判断此新闻是否与以下华人关注话题相关。如果相关，列出所有匹配的标签（可多选），"
-        "用逗号分隔；如果都不相关，写\"无\"\n"
-        "   可选标签：移民签证, 房产租房, 法律法规, 工作就业, 教育留学, 税务财务, "
-        "华人社区, 安全治安, 医疗社保, 中葡关系\n"
-        "3. 根据内容判断此新闻最适合的分类（只选一个）：\n"
-        "   Política, Desporto, Economia, Saúde, Tecnologia, Internacional, "
-        "Cultura, Ambiente, Crime/Justiça, Sociedade, Geral\n"
-        "4. 将正文内容翻译成中文，不是逐字翻译，而是精炼版本：去除重复和冗余内容，保留所有关键信息，"
-        "用自然流畅的中文新闻风格书写, 人名的话可以用原文名字\n\n"
-        "严格使用以下格式输出：\n"
-        "TITLE_ZH: <中文标题>\n"
-        "TAGS_ZH: <匹配标签，逗号分隔，或 无>\n"
-        "CATEGORY: <分类名>\n"
-        "CONTENT_ZH: <中文精炼内容>"
+        "请将以上葡萄牙语新闻翻译成中文，并判断是否与在葡华人相关。\n\n"
+        "严格输出一个 JSON 对象（不要任何 Markdown 代码围栏或解释文字）：\n"
+        "{\n"
+        '  "title_zh": "中文标题",\n'
+        '  "summary_zh": "2-3 句中文摘要，用于卡片预览，必须简洁",\n'
+        '  "content_zh": "更完整但精炼的中文正文，保留所有关键事实、人名、地名",\n'
+        '  "tags_zh": ["标签1", "标签2"],\n'
+        '  "category": "分类名",\n'
+        '  "relevance_reason": "为什么与在葡华人有关；如不相关则为空字符串"\n'
+        "}\n\n"
+        "约束：\n"
+        "- summary_zh 必须简短，用于卡片，不超过 120 字；content_zh 可较长。\n"
+        "- tags_zh 仅可使用以下标签（若与在葡华人无关，必须为 []）：\n"
+        "  移民签证, 房产租房, 法律法规, 工作就业, 教育留学, 税务财务, 华人社区, 安全治安, 医疗社保, 中葡关系\n"
+        "- category 仅可使用以下之一：\n"
+        "  Política, Desporto, Economia, Saúde, Tecnologia, Internacional, Cultura, Ambiente, Crime/Justiça, Sociedade, Geral\n"
+        "- 不要编造原文未出现的事实；人名地名保留原文写法。\n"
+        "- 输出必须是合法 JSON，使用双引号，无尾随逗号，无注释。"
     )
 
 

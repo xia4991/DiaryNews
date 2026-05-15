@@ -11,28 +11,57 @@ paths:
 
 - Model: `MiniMax-M2.5` at `https://api.minimaxi.com/v1/chat/completions`
 - Auth: `MINIMAX_API_KEY` env var
-- Rate limiting is tight: enrichment runs sequentially with a 3s sleep between calls
+- Rate limiting is tight: `services.enrich_pending_news` sleeps `MINIMAX_RATE_LIMIT_SLEEP_SEC` (env, default 3) **between** iterations. One-off callers like brief generation do not sleep.
 - Strips `<think>...</think>` tags from responses
 
-## Prompt Output Contract
+### Wrapper contract — `call_minimax()`
 
-The Chinese translation prompt (`article_chinese_prompt`) returns structured output:
+`call_minimax(prompt, *, max_tokens, model=MINIMAX_MODEL, timeout=MINIMAX_TIMEOUT_SEC, max_retries=MINIMAX_MAX_RETRIES, prompt_version="")`
 
+- Returns the cleaned content string on success.
+- Raises one of `MiniMaxError` subclasses on failure — never silent fallback:
+  - `MiniMaxConfigError` — `MINIMAX_API_KEY` unset. Callers should abort the batch (operator-fixable).
+  - `MiniMaxRateLimitError` — HTTP 429 after internal retries exhausted.
+  - `MiniMaxHTTPError` — non-2xx HTTP. 5xx is retried, 4xx is not. `status_code` attribute available.
+  - `MiniMaxTimeoutError` — request timeout after retries exhausted.
+  - `MiniMaxResponseError` — bad JSON shape or empty content.
+- Internal retry: `max_retries` (env `MINIMAX_MAX_RETRIES`, default 2) for transient errors (429 / 5xx / timeout / network). Backoff `1s → 3s → 10s`.
+- No internal `time.sleep()`. The legacy 3s pre-call sleep moved to `services.enrich_pending_news`, so one-off brief generation is not silently delayed.
+
+## Prompt Output Contract (article_enrichment_v2)
+
+`article_chinese_prompt` returns a strict JSON object. Version tag persisted to `articles.enrichment_prompt_version`:
+
+```python
+ARTICLE_ENRICHMENT_PROMPT_VERSION = "article_enrichment_v2"
 ```
-TITLE_ZH: <Chinese title>
-TAGS_ZH: <comma-separated tags, or 无>
-CONTENT_ZH: <Chinese refined content — may be multiline>
+
+Expected shape:
+
+```json
+{
+  "title_zh": "中文标题",
+  "summary_zh": "2-3 句中文摘要，用于卡片",
+  "content_zh": "更完整但精炼的中文正文",
+  "tags_zh": ["移民签证", "法律法规"],
+  "category": "Sociedade",
+  "relevance_reason": "为什么与在葡华人有关；不相关则空字符串"
+}
 ```
 
-**Critical**: `CONTENT_ZH:` MUST be the last field. The parser grabs everything after `CONTENT_ZH:` as multiline content. Any field added after it will be swallowed.
+Constraints embedded in the prompt:
+- `tags_zh` is restricted to the 10 allowed tags; `[]` when not relevant to the Chinese-in-Portugal audience.
+- `category` is restricted to the configured Portuguese category set.
+- No fabrication of facts beyond the input; names kept in original spelling.
 
-## Parser — `_parse_chinese_response()`
+## Parser — `_parse_chinese_response()` in `backend/news.py`
 
-- Reads lines sequentially
-- `TITLE_ZH:` and `TAGS_ZH:` extracted from single lines
-- `CONTENT_ZH:` triggers a `break` — everything from that marker to end of text becomes `content_zh`
-- `TAGS_ZH: 无` is normalized to empty string `""`
-- Returns `{"title_zh", "tags_zh", "content_zh"}` — all default to `""` if missing
+Two-stage with rollout-safe fallback:
+
+1. `_parse_chinese_response_json()` — extracts the JSON object (tolerating Markdown code fences and surrounding chatter), validates types, normalizes `tags_zh` to a comma-separated string of allowed tags only.
+2. On JSON failure, falls back to `_parse_chinese_response_lines()` — the legacy `TITLE_ZH:` / `TAGS_ZH:` / `CATEGORY:` / `CONTENT_ZH:` line-prefix parser. `summary_zh` and `relevance_reason` remain `""` in legacy responses.
+
+Always returns the v2-shaped dict: `{title_zh, summary_zh, content_zh, tags_zh, category, relevance_reason}` — all default to `""` if missing.
 
 ## Chinese-Interest Tags (10)
 

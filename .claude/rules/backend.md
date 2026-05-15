@@ -28,19 +28,34 @@ paths:
 
 ```
 link (PK), title, summary, source, category, published,
-scraped_content, ai_summary, title_zh, content_zh, tags_zh,
+scraped_content, ai_summary,
+title_zh, summary_zh, content_zh, tags_zh, relevance_reason,
 view_count,
 author, image_url, language, guid, rss_category, fetched_at,
-enrichment_status, enrichment_attempts, enrichment_error
+enrichment_status, enrichment_attempts, enrichment_error,
+enriched_at, enrichment_model, enrichment_prompt_version, enrichment_input_hash
 ```
+
+- `summary_zh` — short Chinese summary for card previews (v2 prompt). Distinct from `content_zh` which is the fuller refined body.
+- `relevance_reason` — short Chinese explanation of why the article matters to the Chinese-in-Portugal audience; empty when not relevant.
 
 - `category` — Portuguese keyword-matched topic (Politica, Desporto, etc.)
 - `tags_zh` — comma-separated Chinese-interest tags from LLM (or empty)
 - `title_zh` / `content_zh` — Chinese translation from LLM
 - `image_url`, `author`, `guid`, `rss_category` — captured from RSS by adapters
-- `enrichment_status` — `pending` (just collected) | `done` (LLM filled title_zh/content_zh) | `failed` (terminal — capped retries exhausted or exception)
+- `enrichment_status` — `pending` | `done` (`title_zh` + `content_zh` non-empty) | `failed` (terminal). Content is the source of truth — `repair_enrichment_status()` reconciles stale state. `list_pending_enrichment()` gates on content completeness + retry ceiling, not status alone.
 - `enrichment_attempts` — incremented each Stage B run; capped by `MAX_ENRICHMENT_ATTEMPTS` (env, default 3). At the ceiling the row auto-transitions to `failed`.
-- `enrichment_error` — last failure reason (e.g. `LLM 响应缺失 TITLE_ZH`, `RuntimeError: ...`); cleared on `done`. Surfaced by `/api/admin/news/recent`.
+- `enrichment_error` — last failure reason; cleared on `done`. Surfaced by `/api/admin/news/recent`.
+- `enriched_at`, `enrichment_model`, `enrichment_prompt_version`, `enrichment_input_hash` — observability columns written by Stage B once Article Enrichment V2 (Feature 2 of the MiniMax optimization plan) lands.
+
+### Upsert preserve-on-empty
+
+`_bulk_upsert_articles()` uses `COALESCE(NULLIF(excluded.col, ''), col)` for
+`scraped_content`, `ai_summary`, `title_zh`, `content_zh`, `tags_zh`, and the
+four enrichment metadata columns above. A Stage A re-fetch of an already-
+enriched article therefore cannot blank out its Chinese content; only Stage B
+(which passes real values) overwrites them. `enrichment_attempts` is preserved
+via `MAX(old, new)` so the retry counter is monotonic.
 
 ## DB Schema — source_health table
 

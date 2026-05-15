@@ -21,7 +21,8 @@ export default function ArticleModal({ article, onClose, onBack }) {
   const tags = article.tags_zh
     ? article.tags_zh.split(',').map(t => t.trim()).filter(Boolean)
     : []
-  const bodyText = article.content_zh || article.ai_summary || article.summary
+  // Modal prefers the fuller content_zh; falls back to summary_zh, then legacy fields.
+  const bodyText = article.content_zh || article.summary_zh || article.ai_summary || article.summary
   const originalText = article.scraped_content || article.summary || ''
   const readMinutes = estimateReadMinutes(originalText || bodyText)
 
