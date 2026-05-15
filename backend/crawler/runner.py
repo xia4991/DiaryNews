@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from backend.config import MIN_SUMMARY_WORDS
 from backend.crawler.base import BaseAdapter, FetchResult, RawArticle
 from backend.crawler.parsing import deduplicate
 from backend.storage.health import upsert_source_health
@@ -25,6 +26,7 @@ class CrawlerRunner:
         existing_urls: Optional[set] = None,
         max_age_hours: int = 24,
         max_articles: int = 0,
+        min_summary_words: int = MIN_SUMMARY_WORDS,
     ) -> tuple[list[dict], list[FetchResult], dict]:
         """Fetch all sources, dedupe, filter by age.
 
@@ -88,6 +90,20 @@ class CrawlerRunner:
                 before_age, len(new_dicts), age_skipped, max_age_hours,
             )
 
+        short_skipped = 0
+        if min_summary_words > 0:
+            before_short = len(new_dicts)
+            new_dicts = [
+                a for a in new_dicts
+                if len((a.get("summary") or "").split()) >= min_summary_words
+            ]
+            short_skipped = before_short - len(new_dicts)
+            if short_skipped > 0:
+                log.info(
+                    "Short-summary filter: %d → %d (skipped %d shorter than %d words)",
+                    before_short, len(new_dicts), short_skipped, min_summary_words,
+                )
+
         cap_skipped = 0
         if max_articles and len(new_dicts) > max_articles:
             cap_skipped = len(new_dicts) - max_articles
@@ -110,14 +126,15 @@ class CrawlerRunner:
             "existing_skipped": existing_skipped,
             "dedupe_skipped": dedupe_skipped,
             "age_skipped": age_skipped,
+            "short_skipped": short_skipped,
             "cap_skipped": cap_skipped,
             "returned_count": len(new_dicts),
         }
         log.info(
             "Crawler stats: raw=%d existing_skipped=%d dedupe_skipped=%d "
-            "age_skipped=%d cap_skipped=%d returned=%d",
+            "age_skipped=%d short_skipped=%d cap_skipped=%d returned=%d",
             raw_count, existing_skipped, dedupe_skipped,
-            age_skipped, cap_skipped, len(new_dicts),
+            age_skipped, short_skipped, cap_skipped, len(new_dicts),
         )
         return new_dicts, results, stats
 
@@ -126,9 +143,15 @@ def run_all(
     existing_urls: Optional[set] = None,
     max_age_hours: int = 24,
     max_articles: int = 0,
+    min_summary_words: int = MIN_SUMMARY_WORDS,
 ) -> tuple[list[dict], list[FetchResult], dict]:
     """Convenience entry point — instantiates the registered adapters and runs them."""
     from backend.crawler.adapters import load_all_adapters
 
     runner = CrawlerRunner(adapters=load_all_adapters())
-    return runner.run(existing_urls=existing_urls, max_age_hours=max_age_hours, max_articles=max_articles)
+    return runner.run(
+        existing_urls=existing_urls,
+        max_age_hours=max_age_hours,
+        max_articles=max_articles,
+        min_summary_words=min_summary_words,
+    )
