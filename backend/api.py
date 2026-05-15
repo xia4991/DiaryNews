@@ -1,12 +1,14 @@
 import asyncio
 import logging
+import threading
+import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal, Optional
 
 log = logging.getLogger("diarynews.api")
 
-from fastapi import FastAPI, HTTPException, Depends, Query, UploadFile, File
+from fastapi import FastAPI, HTTPException, Depends, Query, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -31,15 +33,15 @@ from backend.news_briefs import generate_and_store_daily_news_brief
 JOB_EXPIRY_SWEEP_INTERVAL_SECONDS = 24 * 60 * 60
 
 
-async def _job_expiry_loop():
-    """Background task: sweep expired jobs once at boot, then every 24h."""
+async def _listing_expiry_loop():
+    """Background task: sweep expired listings (job/realestate/secondhand) once at boot, then every 24h."""
     while True:
         try:
-            count = await asyncio.to_thread(storage.expire_stale_jobs)
+            count = await asyncio.to_thread(storage.expire_stale_listings)
             if count:
-                log.info("Expired %d stale job listings", count)
+                log.info("Expired %d stale listings", count)
         except Exception:
-            log.exception("Job expiry sweep failed")
+            log.exception("Listing expiry sweep failed")
         await asyncio.sleep(JOB_EXPIRY_SWEEP_INTERVAL_SECONDS)
 
 
@@ -63,7 +65,7 @@ app.include_router(chat_router, prefix="/api/chat")
 
 @app.on_event("startup")
 async def _start_background_tasks():
-    asyncio.create_task(_job_expiry_loop())
+    asyncio.create_task(_listing_expiry_loop())
     if NEWS_FETCH_INTERVAL > 0:
         asyncio.create_task(_news_fetch_loop())
         log.info("Auto-fetch enabled: every %ds", NEWS_FETCH_INTERVAL)
@@ -581,15 +583,43 @@ def get_news():
     return storage.load_news()
 
 
+# In-process (client, link) dedup for view counting. One vote per hour per client.
+# Single-process scope by design — multi-worker deployments would need a shared store.
+# Uses request.client.host only; X-Forwarded-For is ignored to keep dedup unspoofable
+# until we add an explicit TRUST_PROXY_HEADERS toggle.
+_VIEW_DEDUP_WINDOW_SEC = 60 * 60
+_VIEW_DEDUP_MAX_ENTRIES = 10_000
+_view_dedup: dict[tuple[str, str], float] = {}
+_view_dedup_lock = threading.Lock()
+
+
+def _should_count_view(client_id: str, link: str) -> bool:
+    now = time.monotonic()
+    key = (client_id, link)
+    with _view_dedup_lock:
+        last = _view_dedup.get(key)
+        if last is not None and now - last < _VIEW_DEDUP_WINDOW_SEC:
+            return False
+        _view_dedup[key] = now
+        if len(_view_dedup) > _VIEW_DEDUP_MAX_ENTRIES:
+            cutoff = now - _VIEW_DEDUP_WINDOW_SEC
+            for k, ts in list(_view_dedup.items()):
+                if ts < cutoff:
+                    del _view_dedup[k]
+        return True
+
+
 @app.post("/api/news/view")
-def record_news_view(req: NewsViewRequest):
+def record_news_view(req: NewsViewRequest, request: Request):
     link = (req.link or "").strip()
     if not link:
         raise HTTPException(status_code=400, detail="link is required")
-    updated = storage.increment_article_view(link)
-    if not updated:
+    client_id = request.client.host if request.client else "unknown"
+    should_count = _should_count_view(client_id, link)
+    result = storage.increment_article_view(link, increment=should_count)
+    if not result:
         raise HTTPException(status_code=404, detail="Article not found")
-    return updated
+    return result
 
 
 @app.get("/api/news/briefs")
@@ -1200,9 +1230,18 @@ _SPA_DIR = Path(__file__).resolve().parent.parent / "react-frontend" / "dist"
 if _SPA_DIR.is_dir():
     app.mount("/assets", StaticFiles(directory=_SPA_DIR / "assets"), name="spa-assets")
 
+    _SPA_ROOT = _SPA_DIR.resolve()
+
     @app.get("/{path:path}")
     async def _spa_fallback(path: str):
-        file = _SPA_DIR / path
-        if file.is_file() and ".." not in path:
-            return FileResponse(file)
-        return FileResponse(_SPA_DIR / "index.html")
+        # API routes are explicit; an unmatched /api/* must surface as 404 instead
+        # of being swallowed by the SPA, otherwise typos return 200 + HTML.
+        if path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not found")
+        try:
+            candidate = (_SPA_ROOT / path).resolve()
+        except (OSError, RuntimeError):
+            return FileResponse(_SPA_ROOT / "index.html")
+        if candidate.is_file() and candidate.is_relative_to(_SPA_ROOT):
+            return FileResponse(candidate)
+        return FileResponse(_SPA_ROOT / "index.html")
