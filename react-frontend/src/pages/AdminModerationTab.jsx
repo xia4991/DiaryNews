@@ -819,6 +819,50 @@ function CrawlerSection() {
         <StatTile label="翻译失败" value={stats.failed} color="#EF4444" icon="error" />
       </div>
 
+      {/* Enrichment diagnostics */}
+      {(stats.failures_by_error?.length > 0 || stats.pending_by_source?.length > 0 || stats.scraped_no_chinese > 0) && (
+        <Card>
+          <h3 className="text-sm font-bold text-text">翻译诊断</h3>
+          <div className="mt-3 grid gap-4 md:grid-cols-3">
+            {stats.pending_by_source?.length > 0 && (
+              <div>
+                <p className="text-[11px] uppercase tracking-wider text-text-subtle">待翻译来源 (top)</p>
+                <ul className="mt-1.5 space-y-1 text-[12px]">
+                  {stats.pending_by_source.slice(0, 6).map((r) => (
+                    <li key={r.source} className="flex justify-between gap-2">
+                      <span className="truncate text-text-muted">{r.source}</span>
+                      <span className="tabular-nums font-semibold text-text">{r.c}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {stats.failures_by_error?.length > 0 && (
+              <div>
+                <p className="text-[11px] uppercase tracking-wider text-text-subtle">失败原因 (top)</p>
+                <ul className="mt-1.5 space-y-1 text-[12px]">
+                  {stats.failures_by_error.slice(0, 6).map((r, idx) => (
+                    <li key={idx} className="flex justify-between gap-2">
+                      <span className="truncate text-text-muted" title={r.reason}>{r.reason}</span>
+                      <span className="tabular-nums font-semibold text-danger">{r.c}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {stats.scraped_no_chinese > 0 && (
+              <div>
+                <p className="text-[11px] uppercase tracking-wider text-text-subtle">已抓取无中文</p>
+                <p className="mt-1.5 text-2xl font-extrabold tabular-nums text-text" title="scraped_content 非空但 title_zh 为空">
+                  {stats.scraped_no_chinese}
+                </p>
+                <p className="mt-0.5 text-[11px] text-text-subtle">原文已抓但翻译未跑或失败</p>
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
       {/* Per-source health */}
       <div className="grid gap-3">
         <div className="flex items-center gap-2">
@@ -1016,6 +1060,11 @@ function RecentArticleRow({ article }) {
           {article.title_zh && (
             <p className="mt-0.5 text-xs text-text-muted line-clamp-1">{article.title_zh}</p>
           )}
+          {article.summary_zh && (
+            <p className="mt-1 text-[11px] text-text-muted line-clamp-2" title={article.summary_zh}>
+              摘要：{article.summary_zh}
+            </p>
+          )}
           {article.enrichment_error && (
             <p className="mt-1 text-[11px] text-danger truncate" title={article.enrichment_error}>
               翻译错误：{article.enrichment_error}
@@ -1024,6 +1073,17 @@ function RecentArticleRow({ article }) {
           <div className="mt-1.5 flex gap-3 text-[10px] text-text-subtle flex-wrap">
             {article.author && <span>作者: {article.author}</span>}
             {article.tags_zh && <span style={{ color: '#ffb74d' }}>{article.tags_zh}</span>}
+            {typeof article.scraped_content_len === 'number' && (
+              <span title="scraped / 中文正文 / RSS 摘要字数">
+                原文 {article.scraped_content_len} · 中文 {article.content_zh_len || 0} · RSS {article.summary_len || 0}
+              </span>
+            )}
+            {article.enrichment_prompt_version && (
+              <span style={{ color: '#9ca3af' }}>{article.enrichment_prompt_version}</span>
+            )}
+            {article.enriched_at && (
+              <span title={article.enriched_at}>富集 {timeAgo(article.enriched_at)}</span>
+            )}
             <a
               href={article.link}
               target="_blank"

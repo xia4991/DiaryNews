@@ -18,7 +18,18 @@ def load_news() -> dict:
 
 
 def get_article_stats() -> dict:
-    """Aggregate counts for admin dashboards: total + by enrichment_status + per-source."""
+    """Aggregate counts for admin dashboards.
+
+    Returns:
+      - total / pending / done / failed counts
+      - by_source: per-source totals + status breakdown + with_image / with_author
+      - pending_by_source: just the pending counts ordered desc (admin needs to
+        know which sources have the biggest enrichment backlog)
+      - failures_by_error: top error reasons (truncated to first 80 chars so
+        rate-limit body text doesn't dominate)
+      - scraped_no_chinese: rows that have a scraped body but no title_zh — a
+        useful signal that scraping is working but enrichment isn't
+    """
     _ensure_db()
     with get_db() as conn:
         total_row = conn.execute("SELECT COUNT(*) AS c FROM articles").fetchone()
@@ -32,14 +43,36 @@ def get_article_stats() -> dict:
                  SUM(CASE WHEN enrichment_status = 'done'    THEN 1 ELSE 0 END) AS done,
                  SUM(CASE WHEN enrichment_status = 'pending' THEN 1 ELSE 0 END) AS pending,
                  SUM(CASE WHEN enrichment_status = 'failed'  THEN 1 ELSE 0 END) AS failed,
-                 SUM(CASE WHEN image_url != ''  THEN 1 ELSE 0 END) AS with_image,
-                 SUM(CASE WHEN author    != ''  THEN 1 ELSE 0 END) AS with_author,
+                 SUM(CASE WHEN COALESCE(image_url,'') != ''  THEN 1 ELSE 0 END) AS with_image,
+                 SUM(CASE WHEN COALESCE(author,'')    != ''  THEN 1 ELSE 0 END) AS with_author,
                  MAX(fetched_at) AS last_fetched_at
                FROM articles
                WHERE source IS NOT NULL AND source != ''
                GROUP BY source
                ORDER BY source ASC"""
         ).fetchall()
+        pending_by_source_rows = conn.execute(
+            """SELECT source, COUNT(*) AS c FROM articles
+               WHERE enrichment_status = 'pending'
+                 AND source IS NOT NULL AND source != ''
+               GROUP BY source
+               ORDER BY c DESC, source ASC"""
+        ).fetchall()
+        failure_rows = conn.execute(
+            """SELECT SUBSTR(COALESCE(enrichment_error, ''), 1, 80) AS reason,
+                      COUNT(*) AS c
+               FROM articles
+               WHERE enrichment_status = 'failed'
+                 AND COALESCE(enrichment_error, '') != ''
+               GROUP BY reason
+               ORDER BY c DESC
+               LIMIT 10"""
+        ).fetchall()
+        scraped_no_zh_row = conn.execute(
+            """SELECT COUNT(*) AS c FROM articles
+               WHERE COALESCE(scraped_content, '') != ''
+                 AND COALESCE(title_zh, '') = ''"""
+        ).fetchone()
 
     by_status = {r["s"] or "unknown": r["c"] for r in status_rows}
     return {
@@ -48,6 +81,9 @@ def get_article_stats() -> dict:
         "done": by_status.get("done", 0),
         "failed": by_status.get("failed", 0),
         "by_source": [dict(r) for r in source_rows],
+        "pending_by_source": [dict(r) for r in pending_by_source_rows],
+        "failures_by_error": [dict(r) for r in failure_rows],
+        "scraped_no_chinese": scraped_no_zh_row["c"] if scraped_no_zh_row else 0,
     }
 
 
@@ -156,13 +192,23 @@ def save_raw_articles(articles: list, last_updated: str) -> None:
 
 
 def list_recent_articles(limit: int = 20, status: Optional[str] = None) -> list:
-    """Recent articles for admin inspection. Optional enrichment_status filter."""
+    """Recent articles for admin inspection. Optional enrichment_status filter.
+
+    Returns enrichment metadata + content-length signals so the admin UI can
+    distinguish 'scraped but not translated' from 'never scraped' without
+    shipping the full bodies over the wire.
+    """
     _ensure_db()
     with get_db() as conn:
         sql = (
             "SELECT link, title, source, category, published, fetched_at, "
-            "image_url, author, rss_category, enrichment_status, enrichment_attempts, "
-            "enrichment_error, title_zh, tags_zh "
+            "image_url, author, rss_category, "
+            "enrichment_status, enrichment_attempts, enrichment_error, "
+            "enriched_at, enrichment_model, enrichment_prompt_version, "
+            "title_zh, summary_zh, tags_zh, relevance_reason, "
+            "LENGTH(COALESCE(summary, '')) AS summary_len, "
+            "LENGTH(COALESCE(scraped_content, '')) AS scraped_content_len, "
+            "LENGTH(COALESCE(content_zh, '')) AS content_zh_len "
             "FROM articles"
         )
         params: list = []
