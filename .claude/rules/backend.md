@@ -69,9 +69,9 @@ entries_count, articles_count, consecutive_failures, total_fetches
 **Stage A — collect** (fast, ~ a few hundred ms per adapter):
 1. `CrawlerRunner.run()` calls each adapter's `fetch()` in parallel (9 workers)
 2. Each adapter does HTTP GET (15s timeout, 2 retries with 1s/3s backoff), parses with `feedparser`, returns `FetchResult`
-3. Runner aggregates, filters out `existing_urls`, dedupes by fuzzy title+date, filters by `max_age_hours`, writes `source_health`
+3. Runner aggregates, filters out `existing_urls`, dedupes by fuzzy title+date, filters by `max_age_hours`, drops articles whose RSS summary has fewer than `MIN_SUMMARY_WORDS` tokens (env, default 30; 0 disables), writes `source_health`
 4. `storage.save_raw_articles()` upserts the new articles with `enrichment_status='pending'`
-5. Returns `(articles, results, stats)` where `stats = {raw_count, existing_skipped, dedupe_skipped, age_skipped, cap_skipped, returned_count}` — surfaces *why* a cycle returned fewer articles
+5. Returns `(articles, results, stats)` where `stats = {raw_count, existing_skipped, dedupe_skipped, age_skipped, short_skipped, cap_skipped, returned_count}` — surfaces *why* a cycle returned fewer articles
 
 **Stage B — enrich** (slow, MiniMax rate-limited):
 1. `storage.list_pending_enrichment(limit, max_attempts=MAX_ENRICHMENT_ATTEMPTS)` finds rows still missing `title_zh`/`content_zh`/`tags_zh` whose status is neither `done` nor `failed` and whose `enrichment_attempts < max_attempts`
