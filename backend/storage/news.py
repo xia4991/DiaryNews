@@ -61,28 +61,34 @@ def save_news(data: dict) -> None:
 
 
 def _bulk_upsert_articles(articles: list) -> None:
+    # Preserve-on-empty (NULLIF) protects enriched content from being clobbered when
+    # Stage A re-fetches an already-enriched article. Stage B passes the real values
+    # so its writes take effect normally; Stage A's empty defaults fall through to
+    # the existing row. enrichment_attempts uses MAX so the retry counter is monotonic.
     with get_db() as conn:
         conn.executemany(
             """INSERT INTO articles
                (link, title, summary, source, category, published, scraped_content, ai_summary,
                 title_zh, content_zh, tags_zh,
                 author, image_url, language, guid, rss_category, fetched_at,
-                enrichment_status, enrichment_attempts, enrichment_error)
+                enrichment_status, enrichment_attempts, enrichment_error,
+                enriched_at, enrichment_model, enrichment_prompt_version, enrichment_input_hash)
                VALUES (:link,:title,:summary,:source,:category,:published,:scraped_content,:ai_summary,
                 :title_zh,:content_zh,:tags_zh,
                 :author,:image_url,:language,:guid,:rss_category,:fetched_at,
-                :enrichment_status,:enrichment_attempts,:enrichment_error)
+                :enrichment_status,:enrichment_attempts,:enrichment_error,
+                :enriched_at,:enrichment_model,:enrichment_prompt_version,:enrichment_input_hash)
                ON CONFLICT(link) DO UPDATE SET
                  title = excluded.title,
                  summary = excluded.summary,
                  source = excluded.source,
                  category = excluded.category,
                  published = excluded.published,
-                 scraped_content = excluded.scraped_content,
-                 ai_summary = excluded.ai_summary,
-                 title_zh = excluded.title_zh,
-                 content_zh = excluded.content_zh,
-                 tags_zh = excluded.tags_zh,
+                 scraped_content = COALESCE(NULLIF(excluded.scraped_content, ''), scraped_content),
+                 ai_summary = COALESCE(NULLIF(excluded.ai_summary, ''), ai_summary),
+                 title_zh = COALESCE(NULLIF(excluded.title_zh, ''), title_zh),
+                 content_zh = COALESCE(NULLIF(excluded.content_zh, ''), content_zh),
+                 tags_zh = COALESCE(NULLIF(excluded.tags_zh, ''), tags_zh),
                  author = excluded.author,
                  image_url = excluded.image_url,
                  language = excluded.language,
@@ -90,8 +96,15 @@ def _bulk_upsert_articles(articles: list) -> None:
                  rss_category = excluded.rss_category,
                  fetched_at = excluded.fetched_at,
                  enrichment_status = excluded.enrichment_status,
-                 enrichment_attempts = excluded.enrichment_attempts,
-                 enrichment_error = excluded.enrichment_error""",
+                 enrichment_attempts = MAX(
+                   COALESCE(enrichment_attempts, 0),
+                   COALESCE(excluded.enrichment_attempts, 0)
+                 ),
+                 enrichment_error = excluded.enrichment_error,
+                 enriched_at = COALESCE(NULLIF(excluded.enriched_at, ''), enriched_at),
+                 enrichment_model = COALESCE(NULLIF(excluded.enrichment_model, ''), enrichment_model),
+                 enrichment_prompt_version = COALESCE(NULLIF(excluded.enrichment_prompt_version, ''), enrichment_prompt_version),
+                 enrichment_input_hash = COALESCE(NULLIF(excluded.enrichment_input_hash, ''), enrichment_input_hash)""",
             [
                 {
                     "link":                a.get("link", ""),
@@ -114,6 +127,10 @@ def _bulk_upsert_articles(articles: list) -> None:
                     "enrichment_status":   a.get("enrichment_status", "pending"),
                     "enrichment_attempts": a.get("enrichment_attempts", 0),
                     "enrichment_error":    a.get("enrichment_error", ""),
+                    "enriched_at":               a.get("enriched_at", ""),
+                    "enrichment_model":          a.get("enrichment_model", ""),
+                    "enrichment_prompt_version": a.get("enrichment_prompt_version", ""),
+                    "enrichment_input_hash":     a.get("enrichment_input_hash", ""),
                 }
                 for a in articles
             ],
@@ -155,21 +172,55 @@ def list_recent_articles(limit: int = 20, status: Optional[str] = None) -> list:
 
 
 def list_pending_enrichment(limit: int = 20, max_attempts: int = MAX_ENRICHMENT_ATTEMPTS) -> list:
-    """Return articles still missing Chinese enrichment that haven't hit the retry ceiling."""
+    """Return articles missing Chinese enrichment that haven't hit the retry ceiling.
+
+    Gates on actual content completeness (title_zh + content_zh) rather than
+    status alone, so a stale `pending` row that already has Chinese content is
+    never re-enriched. Rows explicitly marked `failed` are excluded; everything
+    else with empty title_zh OR content_zh is considered pending.
+    """
     _ensure_db()
     with get_db() as conn:
         rows = conn.execute(
             """SELECT * FROM articles
-               WHERE enrichment_status NOT IN ('done', 'failed')
+               WHERE enrichment_status != 'failed'
                  AND COALESCE(enrichment_attempts, 0) < ?
-                 AND (title_zh = '' OR title_zh IS NULL
-                      OR content_zh = '' OR content_zh IS NULL
-                      OR tags_zh IS NULL)
+                 AND (COALESCE(title_zh, '') = '' OR COALESCE(content_zh, '') = '')
                ORDER BY published DESC
                LIMIT ?""",
             (max_attempts, limit),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+def repair_enrichment_status() -> dict:
+    """Reconcile enrichment_status with actual stored content. Idempotent.
+
+    - Rows with non-empty title_zh AND content_zh → enrichment_status='done', error cleared.
+    - Rows with attempts >= MAX_ENRICHMENT_ATTEMPTS AND incomplete content → 'failed'.
+    - Never blanks out existing Chinese content (UPDATE only touches the status fields).
+
+    Returns counts of rows modified per branch.
+    """
+    _ensure_db()
+    with get_db() as conn:
+        cur_done = conn.execute(
+            """UPDATE articles
+               SET enrichment_status = 'done',
+                   enrichment_error = ''
+               WHERE enrichment_status != 'done'
+                 AND COALESCE(title_zh, '') != ''
+                 AND COALESCE(content_zh, '') != ''"""
+        )
+        cur_failed = conn.execute(
+            """UPDATE articles
+               SET enrichment_status = 'failed'
+               WHERE enrichment_status NOT IN ('done', 'failed')
+                 AND COALESCE(enrichment_attempts, 0) >= ?
+                 AND (COALESCE(title_zh, '') = '' OR COALESCE(content_zh, '') = '')""",
+            (MAX_ENRICHMENT_ATTEMPTS,),
+        )
+    return {"marked_done": cur_done.rowcount, "marked_failed": cur_failed.rowcount}
 
 
 def mark_enrichment_status(

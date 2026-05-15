@@ -19,6 +19,10 @@ def _migrate(conn) -> None:
         "enrichment_status TEXT DEFAULT 'pending'",
         "enrichment_attempts INTEGER NOT NULL DEFAULT 0",
         "enrichment_error TEXT DEFAULT ''",
+        "enriched_at TEXT DEFAULT ''",
+        "enrichment_model TEXT DEFAULT ''",
+        "enrichment_prompt_version TEXT DEFAULT ''",
+        "enrichment_input_hash TEXT DEFAULT ''",
     ]
     for col in article_cols:
         try:

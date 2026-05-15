@@ -9,6 +9,7 @@ from backend.storage.news import (  # noqa: F401
     save_raw_articles,
     list_pending_enrichment,
     mark_enrichment_status,
+    repair_enrichment_status,
     get_article_stats,
     list_recent_articles,
 )
