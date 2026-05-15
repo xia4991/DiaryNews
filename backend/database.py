@@ -23,6 +23,8 @@ def _migrate(conn) -> None:
         "enrichment_model TEXT DEFAULT ''",
         "enrichment_prompt_version TEXT DEFAULT ''",
         "enrichment_input_hash TEXT DEFAULT ''",
+        "summary_zh TEXT DEFAULT ''",
+        "relevance_reason TEXT DEFAULT ''",
     ]
     for col in article_cols:
         try:

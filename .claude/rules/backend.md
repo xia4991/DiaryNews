@@ -28,12 +28,16 @@ paths:
 
 ```
 link (PK), title, summary, source, category, published,
-scraped_content, ai_summary, title_zh, content_zh, tags_zh,
+scraped_content, ai_summary,
+title_zh, summary_zh, content_zh, tags_zh, relevance_reason,
 view_count,
 author, image_url, language, guid, rss_category, fetched_at,
 enrichment_status, enrichment_attempts, enrichment_error,
 enriched_at, enrichment_model, enrichment_prompt_version, enrichment_input_hash
 ```
+
+- `summary_zh` — short Chinese summary for card previews (v2 prompt). Distinct from `content_zh` which is the fuller refined body.
+- `relevance_reason` — short Chinese explanation of why the article matters to the Chinese-in-Portugal audience; empty when not relevant.
 
 - `category` — Portuguese keyword-matched topic (Politica, Desporto, etc.)
 - `tags_zh` — comma-separated Chinese-interest tags from LLM (or empty)

@@ -69,12 +69,12 @@ def _bulk_upsert_articles(articles: list) -> None:
         conn.executemany(
             """INSERT INTO articles
                (link, title, summary, source, category, published, scraped_content, ai_summary,
-                title_zh, content_zh, tags_zh,
+                title_zh, summary_zh, content_zh, tags_zh, relevance_reason,
                 author, image_url, language, guid, rss_category, fetched_at,
                 enrichment_status, enrichment_attempts, enrichment_error,
                 enriched_at, enrichment_model, enrichment_prompt_version, enrichment_input_hash)
                VALUES (:link,:title,:summary,:source,:category,:published,:scraped_content,:ai_summary,
-                :title_zh,:content_zh,:tags_zh,
+                :title_zh,:summary_zh,:content_zh,:tags_zh,:relevance_reason,
                 :author,:image_url,:language,:guid,:rss_category,:fetched_at,
                 :enrichment_status,:enrichment_attempts,:enrichment_error,
                 :enriched_at,:enrichment_model,:enrichment_prompt_version,:enrichment_input_hash)
@@ -87,8 +87,10 @@ def _bulk_upsert_articles(articles: list) -> None:
                  scraped_content = COALESCE(NULLIF(excluded.scraped_content, ''), scraped_content),
                  ai_summary = COALESCE(NULLIF(excluded.ai_summary, ''), ai_summary),
                  title_zh = COALESCE(NULLIF(excluded.title_zh, ''), title_zh),
+                 summary_zh = COALESCE(NULLIF(excluded.summary_zh, ''), summary_zh),
                  content_zh = COALESCE(NULLIF(excluded.content_zh, ''), content_zh),
                  tags_zh = COALESCE(NULLIF(excluded.tags_zh, ''), tags_zh),
+                 relevance_reason = COALESCE(NULLIF(excluded.relevance_reason, ''), relevance_reason),
                  author = excluded.author,
                  image_url = excluded.image_url,
                  language = excluded.language,
@@ -116,8 +118,10 @@ def _bulk_upsert_articles(articles: list) -> None:
                     "scraped_content":     a.get("scraped_content", ""),
                     "ai_summary":          a.get("ai_summary", ""),
                     "title_zh":            a.get("title_zh", ""),
+                    "summary_zh":          a.get("summary_zh", ""),
                     "content_zh":          a.get("content_zh", ""),
                     "tags_zh":             a.get("tags_zh", ""),
+                    "relevance_reason":    a.get("relevance_reason", ""),
                     "author":              a.get("author", ""),
                     "image_url":           a.get("image_url", ""),
                     "language":            a.get("language", "pt"),
