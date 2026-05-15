@@ -64,7 +64,7 @@ from backend.storage.listings import (  # noqa: F401
     create_job,
     update_job,
     list_jobs,
-    expire_stale_jobs,
+    expire_stale_listings,
     JOB_INDUSTRIES,
     create_realestate,
     update_realestate,

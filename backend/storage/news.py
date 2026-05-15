@@ -196,15 +196,19 @@ def mark_enrichment_status(
         conn.execute(sql, params)
 
 
-def increment_article_view(link: str) -> Optional[dict]:
+def increment_article_view(link: str, increment: bool = True) -> Optional[dict]:
+    """Return `{link, view_count}` for an article. When `increment=False`, only reads
+    the current count without writing — used by the rate-limit dedup path so a flood
+    of repeat views from one client stays out of the SQLite writer queue."""
     _ensure_db()
     with get_db() as conn:
-        conn.execute(
-            """UPDATE articles
-               SET view_count = COALESCE(view_count, 0) + 1
-               WHERE link = ?""",
-            (link,),
-        )
+        if increment:
+            conn.execute(
+                """UPDATE articles
+                   SET view_count = COALESCE(view_count, 0) + 1
+                   WHERE link = ?""",
+                (link,),
+            )
         row = conn.execute(
             "SELECT link, view_count FROM articles WHERE link = ?",
             (link,),
