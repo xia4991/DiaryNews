@@ -39,7 +39,7 @@ export default function ArticleCard({ article, onClick }) {
       </h3>
 
       <p className="text-[13px] text-text-muted line-clamp-2 mb-3 flex-1">
-        {article.content_zh || article.ai_summary || article.summary}
+        {article.summary_zh || article.content_zh || article.ai_summary || article.summary}
       </p>
 
       <div className="mt-auto flex items-center justify-between">

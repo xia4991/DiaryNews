@@ -43,7 +43,7 @@ export default function ArticleCardFeatured({ article, onClick }) {
       </h2>
 
       <p className="text-sm text-text-muted line-clamp-2 max-w-2xl">
-        {article.content_zh || article.ai_summary || article.summary}
+        {article.summary_zh || article.content_zh || article.ai_summary || article.summary}
       </p>
 
       <div className="mt-4 flex items-center justify-between gap-3">
