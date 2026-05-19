@@ -675,6 +675,18 @@ async def enrich_news(
     return result
 
 
+@app.post("/api/news/enrich/batch")
+async def batch_enrich_news(
+    limit: int = Query(20, ge=1, le=20),
+    _admin: dict = Depends(require_admin),
+):
+    """Stage B batch — run one compact LLM call for recent pending articles."""
+    result = await asyncio.to_thread(services.batch_enrich_pending_news, limit)
+    if result.get("status") == "already_running":
+        raise HTTPException(status_code=409, detail="Crawler already running")
+    return result
+
+
 @app.get("/api/admin/sources/health")
 def admin_sources_health(_admin: dict = Depends(require_admin)):
     return {

@@ -114,4 +114,5 @@ export const api = {
   getSourceHealth: () => http.get('/admin/sources/health').then(r => r.data),
   listRecentArticles: (params) => http.get('/admin/news/recent', { params }).then(r => r.data),
   enrichNews: (params) => http.post('/news/enrich', null, { params }).then(r => r.data),
+  batchEnrichNews: (params) => http.post('/news/enrich/batch', null, { params }).then(r => r.data),
 }

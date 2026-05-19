@@ -15,6 +15,7 @@ const LOG_TYPE_META = {
   news_fetch: { label: '新闻抓取', color: '#2B6CB0', icon: 'newspaper' },
   news_collect: { label: '新闻抓取', color: '#2B6CB0', icon: 'rss_feed' },
   news_llm: { label: 'LLM处理', color: '#8B5CF6', icon: 'translate' },
+  news_llm_batch: { label: '批量LLM', color: '#8B5CF6', icon: 'batch_prediction' },
   user_login: { label: '用户', color: '#10B981', icon: 'person' },
   brief_generate: { label: '简报', color: '#8B5CF6', icon: 'summarize' },
   listing_moderate: { label: '管理操作', color: '#F59E0B', icon: 'shield' },
@@ -26,6 +27,7 @@ const LOG_FILTERS = [
   { key: 'news_fetch', label: '新闻抓取' },
   { key: 'news_collect', label: '抓取' },
   { key: 'news_llm', label: 'LLM' },
+  { key: 'news_llm_batch', label: '批量LLM' },
   { key: 'user_login', label: '用户' },
   { key: 'brief_generate', label: '简报' },
   { key: 'listing_moderate', label: '管理操作' },
@@ -792,6 +794,28 @@ function CrawlerSection({ onNewsChanged }) {
     }
   }
 
+  const handleBatchEnrich = async () => {
+    setBusy('batch-enrich')
+    setToast(null)
+    try {
+      const r = await api.batchEnrichNews({ limit: 20 })
+      setToast({
+        type: 'ok',
+        msg: `批量LLM完成：选择 ${r.selected_count || 0} 条，成功 ${r.done_count || 0} 条，失败 ${r.failed_count || 0} 条`,
+      })
+      await reload()
+      await onNewsChanged?.()
+    } catch (e) {
+      if (e.response?.status === 409) {
+        setToast({ type: 'err', msg: '已有翻译任务正在运行' })
+      } else {
+        setToast({ type: 'err', msg: e.response?.data?.detail || '批量LLM失败' })
+      }
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const stats = data.stats || { total: 0, pending: 0, done: 0, failed: 0, by_source: [] }
   const today = data.today
   const todayTotal = today?.total || {}
@@ -816,6 +840,9 @@ function CrawlerSection({ onNewsChanged }) {
             </Button>
             <Button variant="subtle" size="sm" icon="translate" onClick={handleEnrich} loading={busy === 'enrich'}>
               运行 LLM
+            </Button>
+            <Button variant="subtle" size="sm" icon="batch_prediction" onClick={handleBatchEnrich} loading={busy === 'batch-enrich'}>
+              批量 LLM 20篇
             </Button>
             <Button variant="primary" size="sm" icon="cloud_download" onClick={handleFetch} loading={busy === 'fetch'}>
               抓取新闻

@@ -12,7 +12,12 @@ from io import BytesIO
 from backend import storage
 from backend.config import MAX_ENRICHMENT_ATTEMPTS, MINIMAX_RATE_LIMIT_SLEEP_SEC
 from backend.crawler import run_all
-from backend.llm import MiniMaxConfigError, MiniMaxError, enrich_news_article
+from backend.llm import (
+    MiniMaxConfigError,
+    MiniMaxError,
+    batch_enrich_news_articles,
+    enrich_news_article,
+)
 from backend.news import ensure_scraped_content
 from backend.storage_media import get_media_storage
 
@@ -186,6 +191,132 @@ def enrich_pending_news(max_retry: int = 20) -> dict:
         _enrich_lock.release()
 
 
+def _next_enrichment_status(article: dict) -> str:
+    attempts = (article.get("enrichment_attempts") or 0) + 1
+    return "failed" if attempts >= MAX_ENRICHMENT_ATTEMPTS else "pending"
+
+
+def _mark_batch_unresolved(article: dict, reason: str) -> None:
+    storage.mark_enrichment_status(
+        article["link"],
+        _next_enrichment_status(article),
+        increment_attempts=True,
+        error=reason,
+    )
+
+
+def batch_enrich_pending_news(limit: int = 20) -> dict:
+    """Run one compact LLM call for up to 20 pending articles."""
+    limit = max(1, min(int(limit or 20), 20))
+    if not _enrich_lock.acquire(blocking=False):
+        return {
+            "status": "already_running",
+            "selected_count": 0,
+            "done_count": 0,
+            "failed_count": 0,
+        }
+    try:
+        pending = storage.list_pending_enrichment(limit=limit)
+        if not pending:
+            return {"selected_count": 0, "done_count": 0, "failed_count": 0}
+
+        title_counts = {}
+        for article in pending:
+            title = article.get("title") or ""
+            title_counts[title] = title_counts.get(title, 0) + 1
+
+        safe_articles = [
+            article for article in pending
+            if article.get("title") and title_counts.get(article.get("title")) == 1
+        ]
+        duplicate_articles = [
+            article for article in pending
+            if not article.get("title") or title_counts.get(article.get("title")) != 1
+        ]
+
+        enriched = []
+        matched_titles = set()
+        invalid_rows = 0
+        unknown_titles: list[str] = []
+        aborted_reason = ""
+
+        if safe_articles:
+            try:
+                batch_result = batch_enrich_news_articles(safe_articles)
+                enriched = batch_result["enriched"]
+                matched_titles = batch_result["matched_titles"]
+                invalid_rows = batch_result["invalid_rows"]
+                unknown_titles = batch_result["unknown_titles"]
+            except MiniMaxConfigError as exc:
+                log.error("MiniMax config error during batch enrichment: %s", exc)
+                aborted_reason = "config"
+            except MiniMaxError as exc:
+                log.warning("MiniMax batch enrichment failed: %s: %s", type(exc).__name__, exc)
+                for article in pending:
+                    _mark_batch_unresolved(
+                        article,
+                        f"{type(exc).__name__}: {str(exc)[:300]}",
+                    )
+                result = {
+                    "selected_count": len(pending),
+                    "done_count": 0,
+                    "failed_count": len(pending),
+                    "invalid_rows": 0,
+                    "unknown_count": 0,
+                    "missing_count": len(pending),
+                }
+                storage.add_log("news_llm_batch", "批量LLM失败", result)
+                return result
+
+        if aborted_reason:
+            result = {
+                "selected_count": len(pending),
+                "done_count": 0,
+                "failed_count": 0,
+                "aborted": aborted_reason,
+            }
+            storage.add_log("news_llm_batch", "批量LLM配置错误，已中止", result)
+            return result
+
+        for updated in enriched:
+            new_attempts = (updated.get("enrichment_attempts") or 0) + 1
+            updated["enrichment_status"] = "done"
+            updated["enrichment_attempts"] = new_attempts
+            updated["enrichment_error"] = ""
+
+        if enriched:
+            now = datetime.now(timezone.utc).isoformat()
+            storage.save_news({"last_updated": now, "articles": enriched})
+            log.info("Batch enriched %d articles", len(enriched))
+
+        missing_articles = [
+            article for article in safe_articles
+            if article.get("title") not in matched_titles
+        ]
+        for article in missing_articles:
+            _mark_batch_unresolved(article, "批量LLM未返回匹配标题")
+        for article in duplicate_articles:
+            _mark_batch_unresolved(article, "批量LLM标题重复或为空，无法安全匹配")
+
+        missing_count = len(missing_articles) + len(duplicate_articles)
+        result = {
+            "selected_count": len(pending),
+            "done_count": len(enriched),
+            "failed_count": len(pending) - len(enriched),
+            "missing_count": missing_count,
+            "invalid_rows": invalid_rows,
+            "unknown_count": len(unknown_titles),
+        }
+        storage.add_log(
+            "news_llm_batch",
+            f"批量LLM完成: 选择{result['selected_count']}条, 成功{result['done_count']}条",
+            result,
+        )
+        return result
+    finally:
+        _enrich_lock.release()
+
+
 # ── Media upload ─────────────────────────────────────────────────────────────
 
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
@@ -256,4 +387,3 @@ def moderate_listing(listing_id: int, admin_id: int, status: str) -> dict:
         f"信息#{listing_id} 状态变更为 {status}",
         {"listing_id": listing_id, "admin_id": admin_id, "status": status})
     return {**listing, "reports_resolved": resolved}
-
