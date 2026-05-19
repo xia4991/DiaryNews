@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional
 
-from backend.database import get_db
+from backend.storage.database import get_db
 from backend.storage.base import _ensure_db
 
 log = logging.getLogger("diarynews.storage.users")

@@ -2,7 +2,7 @@
 
 Exposes `call_minimax()` which makes a chat completion request and either returns
 the model's content or raises a structured `MiniMaxError`. Callers decide what to
-do with each failure mode — config errors should usually stop a batch, while
+do with each failure mode: config errors should usually stop a batch, while
 rate-limit/timeout/HTTP-5xx have already been retried internally.
 """
 
@@ -24,9 +24,6 @@ log = logging.getLogger("diarynews.llm")
 
 _THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 _BACKOFF_SECONDS = (1, 3, 10)
-
-
-# ── Exception hierarchy ──────────────────────────────────────────────────────
 
 
 class MiniMaxError(Exception):
@@ -57,9 +54,6 @@ class MiniMaxResponseError(MiniMaxError):
     """Response shape invalid (missing fields, bad JSON) or content is empty."""
 
 
-# ── Public API ───────────────────────────────────────────────────────────────
-
-
 def call_minimax(
     prompt: str,
     *,
@@ -72,14 +66,11 @@ def call_minimax(
     """Call MiniMax. Returns the stripped content string on success.
 
     Raises:
-        MiniMaxConfigError  — MINIMAX_API_KEY not set
-        MiniMaxRateLimitError — HTTP 429 after retries exhausted
-        MiniMaxHTTPError    — other non-2xx after retries (for 5xx) or immediately (for 4xx)
-        MiniMaxTimeoutError — request timed out after retries exhausted
-        MiniMaxResponseError — JSON decode failed, missing fields, or empty content
-
-    Callers are responsible for pacing batch calls (rate-limit sleep is no longer
-    performed inside this function).
+        MiniMaxConfigError: MINIMAX_API_KEY is not set.
+        MiniMaxRateLimitError: HTTP 429 after retries are exhausted.
+        MiniMaxHTTPError: other non-2xx responses.
+        MiniMaxTimeoutError: request timeout after retries are exhausted.
+        MiniMaxResponseError: invalid JSON shape or empty model content.
     """
     api_key = os.environ.get("MINIMAX_API_KEY")
     if not api_key:
@@ -115,7 +106,6 @@ def call_minimax(
                 continue
             raise last_error
         except requests.RequestException as exc:
-            # Connection error, DNS, etc. Treat as transient HTTP error.
             last_error = MiniMaxHTTPError(f"network: {type(exc).__name__}: {exc}")
             log.warning(
                 "MiniMax network error (model=%s prompt_version=%s): %s",
@@ -161,18 +151,13 @@ def call_minimax(
                 time.sleep(_backoff(attempt))
                 continue
             raise last_error
-        # 4xx other than 429 — don't retry. Likely auth or bad payload.
         log.warning(
             "MiniMax HTTP %d non-retryable (model=%s) body=%s",
             status, model, body_preview,
         )
         raise MiniMaxHTTPError(f"HTTP {status}: {body_preview}", status_code=status)
 
-    # Should not reach here, but be defensive.
     raise last_error
-
-
-# ── Internals ────────────────────────────────────────────────────────────────
 
 
 def _should_retry(attempt: int, max_retries: int) -> bool:

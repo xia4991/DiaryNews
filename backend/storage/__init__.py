@@ -11,6 +11,7 @@ from backend.storage.news import (  # noqa: F401
     mark_enrichment_status,
     repair_enrichment_status,
     get_article_stats,
+    get_today_article_stats,
     list_recent_articles,
 )
 from backend.storage.health import upsert_source_health, load_source_health  # noqa: F401

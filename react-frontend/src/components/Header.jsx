@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../auth'
 import Button from './ui/Button'
 
-export default function Header({ activeTab, tabs, onTabChange, onFetchNews, fetching, user, onLoginClick }) {
+export default function Header({ activeTab, tabs, onTabChange, user, onLoginClick }) {
   const { logout } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef(null)
@@ -15,9 +15,6 @@ export default function Header({ activeTab, tabs, onTabChange, onFetchNews, fetc
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [menuOpen])
-
-  const showFetchButton = user?.is_admin && (activeTab === '葡萄牙新闻' || activeTab === '华人关注')
-  const fetchLabel = fetching ? '加载中' : `获取${activeTab}`
 
   return (
     <header
@@ -70,18 +67,6 @@ export default function Header({ activeTab, tabs, onTabChange, onFetchNews, fetc
             placeholder="搜索..."
           />
         </div>
-
-        {showFetchButton && (
-          <Button
-            variant="primary"
-            size="sm"
-            icon={fetching ? undefined : 'refresh'}
-            loading={fetching}
-            onClick={onFetchNews}
-          >
-            <span className="hidden sm:inline">{fetchLabel}</span>
-          </Button>
-        )}
 
         {user ? (
           <div className="relative" ref={menuRef}>

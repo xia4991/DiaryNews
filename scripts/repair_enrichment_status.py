@@ -16,7 +16,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.config import MAX_ENRICHMENT_ATTEMPTS
-from backend.database import get_db
+from backend.storage.database import get_db
 from backend.storage.base import _ensure_db
 from backend.storage.news import repair_enrichment_status
 

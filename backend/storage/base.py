@@ -2,7 +2,7 @@ import logging
 import os
 from typing import Optional
 
-from backend.database import get_db, init_db
+from backend.storage.database import get_db, init_db
 
 log = logging.getLogger("diarynews.storage")
 

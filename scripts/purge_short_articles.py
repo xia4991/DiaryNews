@@ -16,7 +16,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backend.config import MIN_SUMMARY_WORDS
-from backend.database import get_db
+from backend.storage.database import get_db
 
 
 def main() -> int:

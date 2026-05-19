@@ -22,10 +22,32 @@ import CookieConsent from './components/CookieConsent'
 import LegalModal from './components/LegalModal'
 import { api } from './api'
 
+const ACTIVE_TAB_STORAGE_KEY = 'diarynews.activeTab'
+const RESTORABLE_TABS = new Set([
+  '首页',
+  '华人关注',
+  '葡萄牙新闻',
+  '招聘',
+  '房产',
+  '二手',
+  '社区',
+  'AI 助手',
+  '管理',
+  '个人资料',
+])
+
+function getInitialActiveTab() {
+  try {
+    const stored = localStorage.getItem(ACTIVE_TAB_STORAGE_KEY)
+    return RESTORABLE_TABS.has(stored) ? stored : '首页'
+  } catch {
+    return '首页'
+  }
+}
+
 export default function App() {
   const { user, loading } = useAuth()
-  const [activeTab, setActiveTab] = useState('首页')
-  const [fetching, setFetching] = useState(false)
+  const [activeTab, setActiveTab] = useState(getInitialActiveTab)
   const [showLogin, setShowLogin] = useState(false)
   const [legalPage, setLegalPage] = useState(null)
 
@@ -86,6 +108,12 @@ export default function App() {
     api.listAnnouncements({ limit: 2 }).then(d => setAnnouncements(d.items || [])).catch(() => {})
   }, [activeTab])
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, activeTab)
+    } catch {}
+  }, [activeTab])
+
   // If user logs out while on a protected tab, switch to news
   useEffect(() => {
     if (!user && activeTab === '管理') {
@@ -105,17 +133,11 @@ export default function App() {
     return () => window.removeEventListener('open-legal', handler)
   }, [])
 
-  const handleFetchNews = async () => {
-    setFetching(true)
-    try {
-      await api.fetchNews()
-      const d = await api.getNews()
-      setArticles(d.articles || [])
-      setNewsLastUpdated(d.last_updated)
-    } finally {
-      setFetching(false)
-    }
-  }
+  const refreshNews = useCallback(async () => {
+    const d = await api.getNews()
+    setArticles(d.articles || [])
+    setNewsLastUpdated(d.last_updated)
+  }, [])
 
   const loadJobs = useCallback(async () => {
     const d = await api.listJobs({ limit: 12 })
@@ -335,8 +357,6 @@ export default function App() {
         tabs={tabs}
         mobileTabs={mobileTabs}
         onTabChange={handleTabChange}
-        onFetchNews={handleFetchNews}
-        fetching={fetching}
         user={user}
         onLoginClick={() => setShowLogin(true)}
         sidebar={sidebar}
@@ -423,7 +443,7 @@ export default function App() {
           />
         )}
         {activeTab === '管理' && user?.is_admin && (
-          <AdminModerationTab />
+          <AdminModerationTab onNewsChanged={refreshNews} />
         )}
       </AppShell>
       <CookieConsent />

@@ -6,8 +6,6 @@ export default function AppShell({
   tabs,
   mobileTabs,
   onTabChange,
-  onFetchNews,
-  fetching,
   user,
   onLoginClick,
   sidebar,
@@ -20,8 +18,6 @@ export default function AppShell({
         activeTab={activeTab}
         tabs={tabs}
         onTabChange={onTabChange}
-        onFetchNews={onFetchNews}
-        fetching={fetching}
         user={user}
         onLoginClick={onLoginClick}
       />

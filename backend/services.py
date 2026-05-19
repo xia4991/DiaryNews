@@ -12,8 +12,8 @@ from io import BytesIO
 from backend import storage
 from backend.config import MAX_ENRICHMENT_ATTEMPTS, MINIMAX_RATE_LIMIT_SLEEP_SEC
 from backend.crawler import run_all
-from backend.llm import MiniMaxConfigError, MiniMaxError
-from backend.news import re_enrich_article
+from backend.llm import MiniMaxConfigError, MiniMaxError, enrich_news_article
+from backend.news import ensure_scraped_content
 from backend.storage_media import get_media_storage
 
 log = logging.getLogger("diarynews.services")
@@ -67,12 +67,22 @@ def collect_news(max_new: int = 0, max_age_hours: int = 24) -> dict:
             }
             for r in results
         ]
-        return {
+        result = {
             "new_count": len(new_articles),
             "last_updated": now,
             "sources": health,
             "stats": stats,
         }
+        storage.add_log(
+            "news_collect",
+            f"新闻抓取完成: {result['new_count']}条新文章",
+            {
+                "new_count": result["new_count"],
+                "sources": result["sources"],
+                "stats": result.get("stats", {}),
+            },
+        )
+        return result
     finally:
         _collect_lock.release()
 
@@ -112,7 +122,8 @@ def enrich_pending_news(max_retry: int = 20) -> dict:
             link = article["link"]
             new_attempts = (article.get("enrichment_attempts") or 0) + 1
             try:
-                updated = re_enrich_article(article)
+                text_for_llm, scraped_content = ensure_scraped_content(article)
+                updated = enrich_news_article(article, text_for_llm, scraped_content)
                 if updated.get("title_zh") and updated.get("content_zh"):
                     updated["enrichment_status"] = "done"
                     updated["enrichment_attempts"] = new_attempts
@@ -165,36 +176,14 @@ def enrich_pending_news(max_retry: int = 20) -> dict:
         result = {"retried_count": len(enriched), "done_count": done}
         if aborted_reason:
             result["aborted"] = aborted_reason
+        storage.add_log(
+            "news_llm",
+            f"LLM处理完成: 处理{result['retried_count']}条, 成功{result['done_count']}条",
+            result,
+        )
         return result
     finally:
         _enrich_lock.release()
-
-
-def fetch_and_save_news(max_new: int = 0, max_retry: int = 20, max_age_hours: int = 24) -> dict:
-    """Stage A + Stage B inline — preserves the legacy /api/news/fetch behavior."""
-    collected = collect_news(max_new=max_new, max_age_hours=max_age_hours)
-    enriched = enrich_pending_news(max_retry=max_retry)
-
-    storage.add_log(
-        "news_fetch",
-        f"抓取完成: {collected['new_count']}条新文章, {enriched['retried_count']}条重试",
-        {
-            "new_count": collected["new_count"],
-            "retried_count": enriched["retried_count"],
-            "done_count": enriched["done_count"],
-            "sources": collected["sources"],
-            "stats": collected.get("stats", {}),
-        },
-    )
-
-    return {
-        "new_count": collected["new_count"],
-        "retried_count": enriched["retried_count"],
-        "done_count": enriched["done_count"],
-        "last_updated": collected["last_updated"],
-        "sources": collected["sources"],
-        "stats": collected.get("stats", {}),
-    }
 
 
 # ── Media upload ─────────────────────────────────────────────────────────────
@@ -267,5 +256,4 @@ def moderate_listing(listing_id: int, admin_id: int, status: str) -> dict:
         f"信息#{listing_id} 状态变更为 {status}",
         {"listing_id": listing_id, "admin_id": admin_id, "status": status})
     return {**listing, "reports_resolved": resolved}
-
 

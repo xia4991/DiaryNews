@@ -1,8 +1,12 @@
 from typing import Optional
+from datetime import datetime, time, timezone
+from zoneinfo import ZoneInfo
 
 from backend.config import MAX_ARTICLES, MAX_ENRICHMENT_ATTEMPTS
-from backend.database import get_db
+from backend.storage.database import get_db
 from backend.storage.base import _ensure_db, _get_meta, _set_meta
+
+PORTUGAL_TZ = ZoneInfo("Europe/Lisbon")
 
 
 def load_news() -> dict:
@@ -84,6 +88,82 @@ def get_article_stats() -> dict:
         "pending_by_source": [dict(r) for r in pending_by_source_rows],
         "failures_by_error": [dict(r) for r in failure_rows],
         "scraped_no_chinese": scraped_no_zh_row["c"] if scraped_no_zh_row else 0,
+    }
+
+
+def get_today_article_stats(reference_dt: Optional[datetime] = None) -> dict:
+    """Aggregate today's crawler/LLM counts by Europe/Lisbon fetched_at day."""
+    current = reference_dt or datetime.now(PORTUGAL_TZ)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=PORTUGAL_TZ)
+    local_day = current.astimezone(PORTUGAL_TZ).date()
+    start_local = datetime.combine(local_day, time.min, tzinfo=PORTUGAL_TZ)
+    end_local = datetime.combine(local_day, time.max, tzinfo=PORTUGAL_TZ)
+    start_utc = start_local.astimezone(timezone.utc)
+    end_utc = end_local.astimezone(timezone.utc)
+    start_iso = start_utc.isoformat()
+    end_iso = end_utc.isoformat()
+
+    _ensure_db()
+    with get_db() as conn:
+        known_source_rows = conn.execute(
+            """SELECT source FROM source_health
+               WHERE source IS NOT NULL AND source != ''
+               UNION
+               SELECT DISTINCT source FROM articles
+               WHERE source IS NOT NULL AND source != ''
+               ORDER BY source ASC"""
+        ).fetchall()
+        today_rows = conn.execute(
+            """SELECT
+                 source,
+                 COUNT(*) AS fetched,
+                 SUM(CASE WHEN enrichment_status = 'done' THEN 1 ELSE 0 END) AS llm_done,
+                 SUM(CASE WHEN enrichment_status = 'pending' THEN 1 ELSE 0 END) AS pending,
+                 SUM(CASE WHEN enrichment_status = 'failed' THEN 1 ELSE 0 END) AS failed
+               FROM articles
+               WHERE COALESCE(fetched_at, '') >= ?
+                 AND COALESCE(fetched_at, '') <= ?
+                 AND source IS NOT NULL
+                 AND source != ''
+               GROUP BY source""",
+            (start_iso, end_iso),
+        ).fetchall()
+
+    today_by_source = {row["source"]: dict(row) for row in today_rows}
+    sources = [row["source"] for row in known_source_rows]
+    for source in today_by_source:
+        if source not in sources:
+            sources.append(source)
+    sources.sort()
+
+    by_source = []
+    total = {"fetched": 0, "llm_done": 0, "pending": 0, "failed": 0}
+    for source in sources:
+        row = today_by_source.get(source, {})
+        fetched = int(row.get("fetched") or 0)
+        llm_done = int(row.get("llm_done") or 0)
+        pending = int(row.get("pending") or 0)
+        failed = int(row.get("failed") or 0)
+        total["fetched"] += fetched
+        total["llm_done"] += llm_done
+        total["pending"] += pending
+        total["failed"] += failed
+        by_source.append({
+            "source": source,
+            "fetched": fetched,
+            "llm_done": llm_done,
+            "pending": pending,
+            "failed": failed,
+            "success_rate": round((llm_done / fetched) * 100, 1) if fetched else 0,
+        })
+
+    return {
+        "date": local_day.isoformat(),
+        "timezone": "Europe/Lisbon",
+        "range_utc": {"start": start_iso, "end": end_iso},
+        "total": total,
+        "by_source": by_source,
     }
 
 

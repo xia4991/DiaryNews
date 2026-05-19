@@ -11,9 +11,10 @@ ARTICLE_ENRICHMENT_PROMPT_VERSION = "article_enrichment_v2"
 def article_chinese_prompt(title: str, content: str) -> str:
     """Article enrichment v2 — strict JSON output contract.
 
-    See `_parse_chinese_response_json` in backend/news.py for the parser. The
-    legacy line-prefix format is kept as a fallback parser to avoid clobbering
-    rows during rollout if a single response falls back to the old format.
+    See `_parse_chinese_response_json` in backend/llm/article_enrichment.py for
+    the parser. The legacy line-prefix format is kept as a fallback parser to
+    avoid clobbering rows during rollout if a single response falls back to the
+    old format.
     """
     return (
         f"Título: {title}\n\nConteúdo:\n{content}\n\n"

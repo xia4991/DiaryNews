@@ -28,7 +28,7 @@ from backend.config import (
 )
 from backend.sources import RSS_SOURCES
 from backend.chat.router import router as chat_router
-from backend.news_briefs import generate_and_store_daily_news_brief
+from backend.llm.news_briefs import generate_and_store_daily_news_brief
 
 JOB_EXPIRY_SWEEP_INTERVAL_SECONDS = 24 * 60 * 60
 
@@ -45,17 +45,17 @@ async def _listing_expiry_loop():
         await asyncio.sleep(JOB_EXPIRY_SWEEP_INTERVAL_SECONDS)
 
 
-async def _news_fetch_loop():
-    """Background task: auto-fetch news on a configurable interval."""
+async def _news_collect_loop():
+    """Background task: auto-collect news on a configurable interval."""
     await asyncio.sleep(30)
     while True:
         try:
             result = await asyncio.to_thread(
-                services.fetch_and_save_news, max_new=15, max_retry=5, max_age_hours=3
+                services.collect_news, max_new=15, max_age_hours=3
             )
-            log.info("Auto-fetch: %d new, %d retried", result["new_count"], result["retried_count"])
+            log.info("Auto-collect: %d new", result["new_count"])
         except Exception:
-            log.exception("Auto news fetch failed")
+            log.exception("Auto news collect failed")
         await asyncio.sleep(NEWS_FETCH_INTERVAL)
 
 
@@ -67,8 +67,8 @@ app.include_router(chat_router, prefix="/api/chat")
 async def _start_background_tasks():
     asyncio.create_task(_listing_expiry_loop())
     if NEWS_FETCH_INTERVAL > 0:
-        asyncio.create_task(_news_fetch_loop())
-        log.info("Auto-fetch enabled: every %ds", NEWS_FETCH_INTERVAL)
+        asyncio.create_task(_news_collect_loop())
+        log.info("Auto-collect enabled: every %ds", NEWS_FETCH_INTERVAL)
 
 
 if MEDIA_BACKEND == "local":
@@ -654,11 +654,6 @@ def generate_news_brief(
     }
 
 
-@app.post("/api/news/fetch")
-async def fetch_news(_admin: dict = Depends(require_admin)):
-    return await asyncio.to_thread(services.fetch_and_save_news)
-
-
 @app.post("/api/news/collect")
 async def collect_news(_admin: dict = Depends(require_admin)):
     """Stage A only — run RSS adapters, persist as pending. No LLM calls."""
@@ -685,6 +680,7 @@ def admin_sources_health(_admin: dict = Depends(require_admin)):
     return {
         "sources": storage.load_source_health(),
         "stats": storage.get_article_stats(),
+        "today": storage.get_today_article_stats(),
     }
 
 

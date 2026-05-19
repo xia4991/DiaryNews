@@ -13,6 +13,8 @@ const STATUS_COLORS = { active: '#10B981', hidden: '#F59E0B', removed: '#EF4444'
 
 const LOG_TYPE_META = {
   news_fetch: { label: '新闻抓取', color: '#2B6CB0', icon: 'newspaper' },
+  news_collect: { label: '新闻抓取', color: '#2B6CB0', icon: 'rss_feed' },
+  news_llm: { label: 'LLM处理', color: '#8B5CF6', icon: 'translate' },
   user_login: { label: '用户', color: '#10B981', icon: 'person' },
   brief_generate: { label: '简报', color: '#8B5CF6', icon: 'summarize' },
   listing_moderate: { label: '管理操作', color: '#F59E0B', icon: 'shield' },
@@ -22,6 +24,8 @@ const LOG_TYPE_META = {
 const LOG_FILTERS = [
   { key: null, label: '全部' },
   { key: 'news_fetch', label: '新闻抓取' },
+  { key: 'news_collect', label: '抓取' },
+  { key: 'news_llm', label: 'LLM' },
   { key: 'user_login', label: '用户' },
   { key: 'brief_generate', label: '简报' },
   { key: 'listing_moderate', label: '管理操作' },
@@ -40,7 +44,18 @@ function timeAgo(isoStr) {
   return `${days}天前`
 }
 
-export default function AdminModerationTab() {
+function formatLogDetailValue(value) {
+  if (typeof value === 'boolean') return value ? '是' : '否'
+  if (value == null) return '—'
+  if (Array.isArray(value)) return `${value.length} 项`
+  if (typeof value === 'object') {
+    const text = JSON.stringify(value)
+    return text.length > 120 ? `${text.slice(0, 120)}...` : text
+  }
+  return String(value)
+}
+
+export default function AdminModerationTab({ onNewsChanged }) {
   const [tab, setTab] = useState('reports')
   const [reports, setReports] = useState([])
   const [listings, setListings] = useState([])
@@ -167,7 +182,7 @@ export default function AdminModerationTab() {
           onDelete={handleDeleteAnnouncement}
         />
       ) : tab === 'crawler' ? (
-        <CrawlerSection />
+        <CrawlerSection onNewsChanged={onNewsChanged} />
       ) : (
         <LogsSection />
       )}
@@ -710,9 +725,10 @@ const SOURCE_STATUS_META = {
   parse_error: { label: '解析错误',  color: '#F59E0B', icon: 'broken_image' },
 }
 
-function CrawlerSection() {
-  const [data, setData] = useState({ sources: [], stats: null })
+function CrawlerSection({ onNewsChanged }) {
+  const [data, setData] = useState({ sources: [], stats: null, today: null })
   const [recent, setRecent] = useState([])
+  const [fetchRuns, setFetchRuns] = useState([])
   const [statusFilter, setStatusFilter] = useState('')
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(null)
@@ -721,12 +737,16 @@ function CrawlerSection() {
   const reload = useCallback(async () => {
     setLoading(true)
     try {
-      const [health, recentResp] = await Promise.all([
+      const [health, recentResp, logsResp] = await Promise.all([
         api.getSourceHealth(),
         api.listRecentArticles({ limit: 20, ...(statusFilter ? { status: statusFilter } : {}) }),
+        api.listAdminLogs({ limit: 30 }),
       ])
-      setData({ sources: health.sources || [], stats: health.stats })
+      setData({ sources: health.sources || [], stats: health.stats, today: health.today })
       setRecent(recentResp.items || [])
+      setFetchRuns((logsResp.items || [])
+        .filter((item) => item.event_type === 'news_fetch' || item.event_type === 'news_collect')
+        .slice(0, 6))
     } finally {
       setLoading(false)
     }
@@ -741,6 +761,7 @@ function CrawlerSection() {
       const r = await api.collectNews()
       setToast({ type: 'ok', msg: `抓取完成：新增 ${r.new_count} 条` })
       await reload()
+      await onNewsChanged?.()
     } catch (e) {
       if (e.response?.status === 409) {
         setToast({ type: 'err', msg: '已有抓取任务正在运行' })
@@ -757,8 +778,9 @@ function CrawlerSection() {
     setToast(null)
     try {
       const r = await api.enrichNews({ max_retry: 20 })
-      setToast({ type: 'ok', msg: `翻译完成：处理 ${r.retried_count} 条，成功 ${r.done_count} 条` })
+      setToast({ type: 'ok', msg: `LLM完成：处理 ${r.retried_count} 条，成功 ${r.done_count} 条` })
       await reload()
+      await onNewsChanged?.()
     } catch (e) {
       if (e.response?.status === 409) {
         setToast({ type: 'err', msg: '已有翻译任务正在运行' })
@@ -771,6 +793,8 @@ function CrawlerSection() {
   }
 
   const stats = data.stats || { total: 0, pending: 0, done: 0, failed: 0, by_source: [] }
+  const today = data.today
+  const todayTotal = today?.total || {}
   const sourcesByName = useMemo(() => {
     const map = new Map()
     for (const s of data.sources || []) map.set(s.source, s)
@@ -791,10 +815,10 @@ function CrawlerSection() {
               刷新
             </Button>
             <Button variant="subtle" size="sm" icon="translate" onClick={handleEnrich} loading={busy === 'enrich'}>
-              重试翻译
+              运行 LLM
             </Button>
             <Button variant="primary" size="sm" icon="cloud_download" onClick={handleFetch} loading={busy === 'fetch'}>
-              立即抓取
+              抓取新闻
             </Button>
           </div>
         </div>
@@ -811,7 +835,38 @@ function CrawlerSection() {
         )}
       </Card>
 
-      {/* Stats summary */}
+      {/* Today summary */}
+      <div className="grid gap-3">
+        <div className="flex items-end gap-2 flex-wrap">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <Badge color="#2B6CB0">今日抓取</Badge>
+              <h3 className="text-base font-bold text-text">今日 feed 新闻</h3>
+            </div>
+            <p className="mt-1 text-[11px] text-text-subtle">
+              {today?.date || '等待后端数据'} · Lisbon time · 按 fetched_at 统计
+            </p>
+          </div>
+        </div>
+        {!today && (
+          <Card className="rounded-2xl" padding="sm">
+            <div className="flex items-center gap-2 text-xs text-text-muted">
+              <span className="material-symbols-outlined text-text-subtle" style={{ fontSize: 18 }}>sync_problem</span>
+              今日统计暂未从后端返回。请确认后端已重启并加载最新代码。
+            </div>
+          </Card>
+        )}
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <StatTile label="今日抓取" value={today ? (todayTotal.fetched || 0) : null} color="#2B6CB0" icon="rss_feed" />
+          <StatTile label="LLM已处理" value={today ? (todayTotal.llm_done || 0) : null} color="#10B981" icon="check_circle" />
+          <StatTile label="待LLM" value={today ? (todayTotal.pending || 0) : null} color="#F59E0B" icon="hourglass_top" />
+          <StatTile label="今日失败" value={today ? (todayTotal.failed || 0) : null} color="#EF4444" icon="error" />
+        </div>
+        <TodaySourceTable rows={today?.by_source || []} />
+        <RecentFetchRuns runs={fetchRuns} />
+      </div>
+
+      {/* All-time stats summary */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatTile label="文章总数" value={stats.total} color="#5E6478" icon="article" />
         <StatTile label="待翻译" value={stats.pending} color="#F59E0B" icon="hourglass_top" />
@@ -930,6 +985,103 @@ function CrawlerSection() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function TodaySourceTable({ rows }) {
+  const sortedRows = [...rows].sort((a, b) => (
+    (b.fetched || 0) - (a.fetched || 0) || String(a.source).localeCompare(String(b.source))
+  ))
+
+  return (
+    <Card className="rounded-2xl">
+      <div className="hidden md:grid grid-cols-[minmax(0,1.4fr)_repeat(5,minmax(76px,0.6fr))] gap-3 border-b border-border pb-2 text-[11px] font-semibold uppercase tracking-wider text-text-subtle">
+        <span>来源</span>
+        <span className="text-right">抓取</span>
+        <span className="text-right">LLM</span>
+        <span className="text-right">待处理</span>
+        <span className="text-right">失败</span>
+        <span className="text-right">完成率</span>
+      </div>
+      <div className="divide-y divide-border/70">
+        {sortedRows.length === 0 ? (
+          <div className="py-6 text-center text-xs text-text-muted">今日还没有抓取记录。</div>
+        ) : (
+          sortedRows.map((row) => (
+            <div
+              key={row.source}
+              className="grid gap-2 py-3 text-xs md:grid-cols-[minmax(0,1.4fr)_repeat(5,minmax(76px,0.6fr))] md:gap-3 md:items-center"
+            >
+              <div className="min-w-0 font-semibold text-text truncate">{row.source}</div>
+              <TodayCell label="抓取" value={row.fetched || 0} />
+              <TodayCell label="LLM" value={row.llm_done || 0} color="#10B981" />
+              <TodayCell label="待处理" value={row.pending || 0} color={(row.pending || 0) > 0 ? '#F59E0B' : undefined} />
+              <TodayCell label="失败" value={row.failed || 0} color={(row.failed || 0) > 0 ? '#EF4444' : undefined} />
+              <TodayCell label="完成率" value={`${row.success_rate || 0}%`} color={(row.success_rate || 0) >= 80 ? '#10B981' : undefined} />
+            </div>
+          ))
+        )}
+      </div>
+    </Card>
+  )
+}
+
+function TodayCell({ label, value, color }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg bg-bg-subtle px-2 py-1.5 md:block md:bg-transparent md:px-0 md:py-0 md:text-right">
+      <span className="text-[11px] text-text-subtle md:hidden">{label}</span>
+      <span className="font-semibold tabular-nums" style={{ color: color || 'var(--color-text)' }}>
+        {value}
+      </span>
+    </div>
+  )
+}
+
+function RecentFetchRuns({ runs }) {
+  return (
+    <Card className="rounded-2xl">
+      <div className="flex items-center gap-2">
+        <Badge color="#5E6478">抓取记录</Badge>
+        <h3 className="text-sm font-bold text-text">最近 fetch 数据</h3>
+      </div>
+      {runs.length === 0 ? (
+        <div className="py-6 text-center text-xs text-text-muted">暂无抓取日志。</div>
+      ) : (
+        <div className="mt-3 divide-y divide-border/70">
+          {runs.map((run) => {
+            const details = run.details || {}
+            const stats = details.stats || {}
+            const sourceCount = Array.isArray(details.sources) ? details.sources.length : 0
+            const newCount = details.new_count ?? stats.returned_count ?? 0
+            return (
+              <div key={run.id} className="grid gap-2 py-3 text-xs lg:grid-cols-[minmax(0,1.4fr)_repeat(5,minmax(72px,0.6fr))] lg:items-center">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-text">{run.event_type === 'news_collect' ? '抓取' : '旧抓取'}</span>
+                    <span className="text-[11px] text-text-subtle">{timeAgo(run.created_at)}</span>
+                  </div>
+                  <p className="mt-0.5 truncate text-text-muted" title={run.message}>{run.message}</p>
+                </div>
+                <FetchRunCell label="新增" value={newCount} color="#2B6CB0" />
+                <FetchRunCell label="原始" value={stats.raw_count ?? '—'} />
+                <FetchRunCell label="已有" value={stats.existing_skipped ?? '—'} />
+                <FetchRunCell label="过短" value={stats.short_skipped ?? '—'} />
+                <FetchRunCell label="源" value={sourceCount || '—'} />
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </Card>
+  )
+}
+
+function FetchRunCell({ label, value, color }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg bg-bg-subtle px-2 py-1.5 lg:block lg:bg-transparent lg:px-0 lg:py-0 lg:text-right">
+      <span className="text-[11px] text-text-subtle lg:hidden">{label}</span>
+      <span className="font-semibold tabular-nums" style={{ color: color || 'var(--color-text)' }}>{value}</span>
     </div>
   )
 }
@@ -1198,8 +1350,9 @@ function LogsSection() {
                             key={k}
                             className="rounded-md px-2 py-0.5 text-[11px] font-medium"
                             style={{ background: 'rgba(255,255,255,0.06)', color: 'var(--color-text-muted)' }}
+                            title={typeof v === 'object' && v !== null ? JSON.stringify(v) : undefined}
                           >
-                            {k}: {typeof v === 'boolean' ? (v ? '是' : '否') : v}
+                            {k}: {formatLogDetailValue(v)}
                           </span>
                         ))}
                       </div>

@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Callable, Optional
 
-from backend.database import get_db
+from backend.storage.database import get_db
 from backend.storage.base import _ensure_db
 from backend.storage_media import get_media_storage
 

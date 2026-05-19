@@ -5,7 +5,7 @@ from typing import Optional
 from zoneinfo import ZoneInfo
 
 from backend.llm import MiniMaxConfigError, MiniMaxError, call_minimax
-from backend.prompts import daily_news_brief_prompt
+from backend.llm.prompts import daily_news_brief_prompt
 from backend.storage.news import load_news
 from backend.storage.news_briefs import upsert_daily_news_brief
 
