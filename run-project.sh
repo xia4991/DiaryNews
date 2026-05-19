@@ -9,6 +9,7 @@ FRONTEND_HOST="${FRONTEND_HOST:-0.0.0.0}"
 INSTALL_DEPS=false
 PID_DIR="${DIARYNEWS_PID_DIR:-${TMPDIR:-/tmp}/diarynews}"
 PID_FILE="$PID_DIR/project.pids"
+LOG_DIR="${DIARYNEWS_LOG_DIR:-$PID_DIR/logs}"
 
 usage() {
   cat <<'EOF'
@@ -154,23 +155,27 @@ if port_is_busy "$FRONTEND_PORT"; then
   exit 1
 fi
 
+mkdir -p "$LOG_DIR"
+
 echo "Starting DiaryNews..."
-echo "Backend:  http://localhost:$BACKEND_PORT"
-echo "Frontend: $FRONTEND_SCHEME://localhost:$FRONTEND_PORT"
+echo "Backend:  http://localhost:$BACKEND_PORT  (log: $LOG_DIR/backend.log)"
+echo "Frontend: $FRONTEND_SCHEME://localhost:$FRONTEND_PORT  (log: $LOG_DIR/frontend.log)"
 echo "Press Ctrl+C to stop both processes."
 echo "Stop from another terminal with: ./stop-project.sh"
 echo
 
+# Per-component log redirects so children survive any closure of the script's
+# own stdout (IDE task runners, run_in_background harnesses, nohup pipelines).
 (
   cd "$ROOT_DIR"
   PORT="$BACKEND_PORT" "$ROOT_DIR/.venv/bin/python" main.py
-) &
+) >"$LOG_DIR/backend.log" 2>&1 &
 PIDS+=("$!")
 
 (
   cd "$FRONTEND_DIR"
   npm run dev -- --host "$FRONTEND_HOST" --port "$FRONTEND_PORT"
-) &
+) >"$LOG_DIR/frontend.log" 2>&1 &
 PIDS+=("$!")
 
 write_pid_file
