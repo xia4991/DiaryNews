@@ -6,7 +6,7 @@ rows produced by an earlier prompt.
 """
 
 ARTICLE_ENRICHMENT_PROMPT_VERSION = "article_enrichment_v2"
-BATCH_ARTICLE_ENRICHMENT_PROMPT_VERSION = "article_batch_enrichment_v1"
+BATCH_ARTICLE_ENRICHMENT_PROMPT_VERSION = "article_batch_enrichment_v2"
 
 
 def article_chinese_prompt(title: str, content: str) -> str:
@@ -61,20 +61,19 @@ def batch_article_chinese_prompt(articles: list[dict]) -> str:
         f"新闻列表:\n{json.dumps(payload, ensure_ascii=False)}\n\n"
         "严格输出一个 JSON 数组，不要任何 Markdown 代码围栏或解释文字。\n"
         "每条新闻输出一个数组，固定顺序如下：\n"
-        "[title, title_zh, summary_zh, content_zh, tags_zh, category, relevance_reason]\n\n"
+        "[title_zh, summary_zh, content_zh, tags_zh, category]\n\n"
         "示例：\n"
         "[\n"
-        '  ["原文标题", "中文标题", "中文摘要", "中文正文", ["标签1"], "Sociedade", "相关原因"]\n'
+        '  ["中文标题", "中文摘要", "中文正文", ["标签1"], "Sociedade"]\n'
         "]\n\n"
         "约束：\n"
-        "- 第一列 title 必须逐字使用输入中的原文 title，用于系统匹配，不要翻译或改写。\n"
+        "- 输出数组的条数和顺序必须与输入新闻列表完全一致，第 1 行对应第 1 条输入新闻。\n"
         "- summary_zh 必须简短，用于卡片，不超过 120 字。\n"
         "- content_zh 是更完整但精炼的中文正文，基于 title、summary 和 content；不要编造原文未出现的事实。\n"
         "- tags_zh 必须是数组，且仅可使用以下标签；若与在葡华人无关，必须为 []：\n"
         "  移民签证, 房产租房, 法律法规, 工作就业, 教育留学, 税务财务, 华人社区, 安全治安, 医疗社保, 中葡关系\n"
         "- category 仅可使用以下之一：\n"
         "  Política, Desporto, Economia, Saúde, Tecnologia, Internacional, Cultura, Ambiente, Crime/Justiça, Sociedade, Geral\n"
-        "- relevance_reason: 为什么与在葡华人有关；如不相关则为空字符串。\n"
         "- 输出必须是合法 JSON，使用双引号，无尾随逗号，无注释。"
     )
 

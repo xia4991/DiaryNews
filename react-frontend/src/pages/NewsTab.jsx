@@ -449,8 +449,8 @@ export default function NewsTab({
           />
         )}
         <div className="grid gap-5 sm:gap-6">
-          <Card className="overflow-hidden rounded-[30px] border-[#D8E2EF] bg-[linear-gradient(135deg,#f7fbff_0%,#eef4fb_100%)] p-0 shadow-[0_24px_56px_rgba(43,108,176,0.10)]">
-            <div className="grid gap-5 px-5 py-5 sm:px-7 sm:py-7 xl:grid-cols-[minmax(0,1.2fr)_320px]">
+          <Card className="overflow-hidden rounded-[22px] border-[#D8E2EF] bg-[linear-gradient(135deg,#f7fbff_0%,#eef4fb_100%)] p-0 shadow-[0_16px_34px_rgba(43,108,176,0.08)]">
+            <div className="grid gap-4 px-4 py-4 sm:px-5 sm:py-5 xl:grid-cols-[minmax(0,1.35fr)_280px]">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <Badge color="#2B6CB0">Portugal Desk</Badge>
@@ -461,19 +461,19 @@ export default function NewsTab({
                   )}
                 </div>
                 <h1
-                  className="mt-4 text-[1.9rem] font-black tracking-tight text-text sm:text-4xl"
+                  className="mt-3 text-[1.55rem] font-black tracking-tight text-text sm:text-[2rem]"
                   style={{ fontFamily: 'var(--font-headline)' }}
                 >
                   {tabTitle}
                 </h1>
-                <p className="mt-3 max-w-2xl text-sm leading-7 text-text-muted sm:text-[15px]">
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted sm:text-[14px]">
                   {tabSubtitle}
                 </p>
 
                 {featured && (
                   <button
                     onClick={() => handleOpenArticle(featured)}
-                    className="mt-6 block w-full rounded-[24px] border border-white/80 bg-white/82 px-4 py-4 text-left transition-all hover:-translate-y-0.5 hover:bg-white sm:px-5 sm:py-5"
+                    className="mt-4 block w-full rounded-[18px] border border-white/80 bg-white/82 px-4 py-3 text-left transition-all hover:-translate-y-0.5 hover:bg-white sm:px-4 sm:py-4"
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge color={categoryColor(featured.category)}>
@@ -484,15 +484,15 @@ export default function NewsTab({
                       </span>
                     </div>
                     <h2
-                      className="mt-4 text-[1.55rem] font-black leading-tight tracking-tight text-text sm:text-[2rem]"
+                      className="mt-3 text-[1.2rem] font-black leading-tight tracking-tight text-text sm:text-[1.55rem]"
                       style={{ fontFamily: 'var(--font-headline)' }}
                     >
                       {featured.title_zh || featured.title}
                     </h2>
-                    <p className="mt-4 line-clamp-4 text-sm leading-7 text-text-muted">
+                    <p className="mt-2 line-clamp-2 text-sm leading-6 text-text-muted">
                       {featured.summary_zh || featured.content_zh || featured.ai_summary || featured.summary}
                     </p>
-                    <div className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-accent">
+                    <div className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-accent">
                       打开头条
                       <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_outward</span>
                     </div>
@@ -500,48 +500,48 @@ export default function NewsTab({
                 )}
               </div>
 
-              <div className="grid gap-4">
-                <div className="rounded-[24px] border border-white/80 bg-white/88 px-5 py-5">
+              <div className="grid gap-3">
+                <div className="rounded-[18px] border border-white/80 bg-white/88 px-4 py-4">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-[11px] uppercase tracking-[0.16em] text-text-subtle">新闻台概览</p>
                     <span className="text-xs font-semibold text-text-subtle">{articles.length} 条</span>
                   </div>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-                    <div className="rounded-2xl bg-surface-muted px-4 py-4">
+                  <div className="mt-3 grid grid-cols-2 gap-3">
+                    <div className="rounded-2xl bg-surface-muted px-3 py-3">
                       <p className="text-[11px] uppercase tracking-[0.14em] text-text-subtle">媒体来源</p>
-                      <p className="mt-2 text-3xl font-black tracking-tight text-text" style={{ fontFamily: 'var(--font-headline)' }}>
+                      <p className="mt-1 text-2xl font-black tracking-tight text-text" style={{ fontFamily: 'var(--font-headline)' }}>
                         {new Set(articles.map((article) => article.source)).size}
                       </p>
                     </div>
-                    <div className="rounded-2xl bg-surface-muted px-4 py-4">
+                    <div className="rounded-2xl bg-surface-muted px-3 py-3">
                       <p className="text-[11px] uppercase tracking-[0.14em] text-text-subtle">首要分类</p>
-                      <p className="mt-2 text-lg font-black tracking-tight text-text" style={{ fontFamily: 'var(--font-headline)' }}>
+                      <p className="mt-1 line-clamp-1 text-base font-black tracking-tight text-text" style={{ fontFamily: 'var(--font-headline)' }}>
                         {topCategories[0] ? (CATEGORY_ZH[topCategories[0][0]] || topCategories[0][0]) : '综合'}
                       </p>
                     </div>
                   </div>
                 </div>
 
-                <div className="rounded-[24px] border border-white/80 bg-white/88 px-5 py-5">
+                <div className="rounded-[18px] border border-white/80 bg-white/88 px-4 py-4">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-[11px] uppercase tracking-[0.16em] text-text-subtle">热门新闻</p>
                     <HotWindowToggle value={hotWindow} onChange={setHotWindow} />
                   </div>
-                  <div className="mt-4 grid gap-3">
+                  <div className="mt-3 grid gap-2">
                     {hotArticles.length > 0 ? hotArticles.map((article, index) => (
                       <button
                         key={article.link}
                         onClick={() => handleOpenArticle(article)}
-                        className="flex items-start gap-3 rounded-2xl bg-surface-muted px-4 py-3 text-left transition-colors hover:bg-surface"
+                        className="flex items-start gap-3 rounded-2xl bg-surface-muted px-3 py-2.5 text-left transition-colors hover:bg-surface"
                       >
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-sm font-black text-accent">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-xs font-black text-accent">
                           {index + 1}
                         </span>
                         <div className="min-w-0">
                           <p className="text-[11px] uppercase tracking-[0.14em] text-text-subtle">
                             {article.source} · {formatViews(article.view_count)}
                           </p>
-                          <p className="mt-1 line-clamp-2 text-sm font-bold leading-6 text-text">
+                          <p className="mt-1 line-clamp-2 text-[13px] font-bold leading-5 text-text">
                             {article.title_zh || article.title}
                           </p>
                         </div>

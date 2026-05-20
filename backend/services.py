@@ -220,33 +220,19 @@ def batch_enrich_pending_news(limit: int = 20) -> dict:
         if not pending:
             return {"selected_count": 0, "done_count": 0, "failed_count": 0}
 
-        title_counts = {}
-        for article in pending:
-            title = article.get("title") or ""
-            title_counts[title] = title_counts.get(title, 0) + 1
-
-        safe_articles = [
-            article for article in pending
-            if article.get("title") and title_counts.get(article.get("title")) == 1
-        ]
-        duplicate_articles = [
-            article for article in pending
-            if not article.get("title") or title_counts.get(article.get("title")) != 1
-        ]
-
         enriched = []
-        matched_titles = set()
+        matched_indexes = set()
         invalid_rows = 0
-        unknown_titles: list[str] = []
+        extra_rows = 0
         aborted_reason = ""
 
-        if safe_articles:
+        if pending:
             try:
-                batch_result = batch_enrich_news_articles(safe_articles)
+                batch_result = batch_enrich_news_articles(pending)
                 enriched = batch_result["enriched"]
-                matched_titles = batch_result["matched_titles"]
+                matched_indexes = batch_result["matched_indexes"]
                 invalid_rows = batch_result["invalid_rows"]
-                unknown_titles = batch_result["unknown_titles"]
+                extra_rows = batch_result["extra_rows"]
             except MiniMaxConfigError as exc:
                 log.error("MiniMax config error during batch enrichment: %s", exc)
                 aborted_reason = "config"
@@ -262,7 +248,7 @@ def batch_enrich_pending_news(limit: int = 20) -> dict:
                     "done_count": 0,
                     "failed_count": len(pending),
                     "invalid_rows": 0,
-                    "unknown_count": 0,
+                    "extra_rows": 0,
                     "missing_count": len(pending),
                 }
                 storage.add_log("news_llm_batch", "批量LLM失败", result)
@@ -290,22 +276,20 @@ def batch_enrich_pending_news(limit: int = 20) -> dict:
             log.info("Batch enriched %d articles", len(enriched))
 
         missing_articles = [
-            article for article in safe_articles
-            if article.get("title") not in matched_titles
+            article for index, article in enumerate(pending)
+            if index not in matched_indexes
         ]
         for article in missing_articles:
-            _mark_batch_unresolved(article, "批量LLM未返回匹配标题")
-        for article in duplicate_articles:
-            _mark_batch_unresolved(article, "批量LLM标题重复或为空，无法安全匹配")
+            _mark_batch_unresolved(article, "批量LLM未返回对应序号或返回内容无效")
 
-        missing_count = len(missing_articles) + len(duplicate_articles)
+        missing_count = len(missing_articles)
         result = {
             "selected_count": len(pending),
             "done_count": len(enriched),
             "failed_count": len(pending) - len(enriched),
             "missing_count": missing_count,
             "invalid_rows": invalid_rows,
-            "unknown_count": len(unknown_titles),
+            "extra_rows": extra_rows,
         }
         storage.add_log(
             "news_llm_batch",

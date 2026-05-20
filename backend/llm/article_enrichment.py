@@ -77,14 +77,17 @@ def enrich_news_article(
 
 
 def batch_enrich_news_articles(articles: list[dict]) -> dict:
-    """Run one MiniMax call for multiple articles and map rows back by exact title.
+    """Run one MiniMax call for multiple articles and map rows back by order.
 
-    Returns a dict with valid `enriched` articles plus diagnostics for missing,
-    invalid, and unknown rows. Raises MiniMaxError subclasses on call/parse
-    failure so services can apply batch-level retry policy.
+    The batch prompt returns compact value rows:
+    [title_zh, summary_zh, content_zh, tags_zh, category].
+
+    Returns valid `enriched` articles plus diagnostics for missing or invalid
+    rows. Raises MiniMaxError subclasses on call/parse failure so services can
+    apply batch-level retry policy.
     """
     if not articles:
-        return {"enriched": [], "matched_titles": set(), "invalid_rows": 0, "unknown_titles": []}
+        return {"enriched": [], "matched_indexes": set(), "invalid_rows": 0, "extra_rows": 0}
 
     prompt = batch_article_chinese_prompt(articles)
     raw = call_minimax(
@@ -94,38 +97,29 @@ def batch_enrich_news_articles(articles: list[dict]) -> dict:
     )
     rows = _parse_batch_response(raw)
 
-    by_title = {article.get("title", ""): article for article in articles}
     enriched = []
-    matched_titles = set()
-    unknown_titles = []
+    matched_indexes = set()
     invalid_rows = 0
+    extra_rows = max(0, len(rows) - len(articles))
 
-    for row in rows:
+    for index, row in enumerate(rows[:len(articles)]):
         fields = _parse_batch_row(row)
         if not fields:
             invalid_rows += 1
             continue
 
-        title = fields["title"]
-        article = by_title.get(title)
-        if not article:
-            unknown_titles.append(title)
-            continue
-        if title in matched_titles:
-            invalid_rows += 1
-            continue
         if not fields["title_zh"] or not fields["content_zh"]:
             invalid_rows += 1
             continue
 
-        matched_titles.add(title)
-        enriched.append(_build_enriched_article_from_fields(article, fields))
+        matched_indexes.add(index)
+        enriched.append(_build_enriched_article_from_fields(articles[index], fields))
 
     return {
         "enriched": enriched,
-        "matched_titles": matched_titles,
+        "matched_indexes": matched_indexes,
         "invalid_rows": invalid_rows,
-        "unknown_titles": unknown_titles,
+        "extra_rows": extra_rows,
     }
 
 
@@ -234,16 +228,15 @@ def _parse_batch_response(text: str) -> list:
 
 
 def _parse_batch_row(row) -> dict:
-    if not isinstance(row, list) or len(row) < 7:
+    if not isinstance(row, list) or len(row) < 5:
         return {}
     return {
-        "title": str(row[0]).strip(),
-        "title_zh": str(row[1]).strip(),
-        "summary_zh": str(row[2]).strip(),
-        "content_zh": str(row[3]).strip(),
-        "tags_zh": _normalize_tags(row[4]),
-        "category": str(row[5]).strip(),
-        "relevance_reason": str(row[6]).strip(),
+        "title_zh": str(row[0]).strip(),
+        "summary_zh": str(row[1]).strip(),
+        "content_zh": str(row[2]).strip(),
+        "tags_zh": _normalize_tags(row[3]),
+        "category": str(row[4]).strip(),
+        "relevance_reason": "",
     }
 
 

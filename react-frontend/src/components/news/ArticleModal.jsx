@@ -21,8 +21,9 @@ export default function ArticleModal({ article, onClose, onBack }) {
   const tags = article.tags_zh
     ? article.tags_zh.split(',').map(t => t.trim()).filter(Boolean)
     : []
-  // Modal prefers the fuller content_zh; falls back to summary_zh, then legacy fields.
-  const bodyText = article.content_zh || article.summary_zh || article.ai_summary || article.summary
+  const summaryText = article.summary_zh || article.ai_summary || article.summary
+  // Modal prefers the fuller content_zh; falls back only when no summary exists.
+  const bodyText = article.content_zh || (!summaryText ? article.summary : '')
   const originalText = article.scraped_content || article.summary || ''
   const readMinutes = estimateReadMinutes(originalText || bodyText)
 
@@ -85,6 +86,27 @@ export default function ArticleModal({ article, onClose, onBack }) {
           </div>
         </div>
 
+        {summaryText && (
+          <section>
+            <div className="rounded-[22px] border border-[rgba(43,108,176,0.12)] bg-[#F4F8FC] px-4 py-4 sm:rounded-[24px] sm:px-6 sm:py-5">
+              <div className="mb-3 flex items-center gap-2">
+                <span
+                  className="material-symbols-outlined text-[#2B6CB0]"
+                  style={{ fontSize: 18, fontVariationSettings: "'FILL' 1" }}
+                >
+                  subject
+                </span>
+                <span className="text-xs font-bold uppercase tracking-[0.18em] text-[#2B6CB0]">
+                  摘要
+                </span>
+              </div>
+              <div className="[&_div]:text-[15px] [&_div]:leading-7 sm:[&_div]:text-[16px] sm:[&_div]:leading-8 [&_p]:text-text">
+                <SummaryText text={summaryText} />
+              </div>
+            </div>
+          </section>
+        )}
+
         {bodyText && (
           <section>
             <div className="rounded-[22px] border border-[rgba(157,61,51,0.10)] bg-accent-subtle/72 px-4 py-4 sm:rounded-[24px] sm:px-6 sm:py-6">
@@ -96,7 +118,7 @@ export default function ArticleModal({ article, onClose, onBack }) {
                   auto_awesome
                 </span>
                 <span className="text-xs font-bold uppercase tracking-[0.18em] text-accent">
-                  {article.content_zh ? '中文内容' : '中文摘要'}
+                  中文内容
                 </span>
               </div>
               <p className="mb-4 text-sm leading-7 text-text-muted">
