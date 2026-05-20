@@ -71,6 +71,24 @@ function sortChinaFeedArticles(articles, sortBy) {
   return sorted.sort((a, b) => (b.published || '').localeCompare(a.published || ''))
 }
 
+function hasDetailedArticleContent(article) {
+  const content = (article.content_zh || '').trim()
+  const summary = (article.summary_zh || article.ai_summary || article.summary || '').trim()
+  if (!content) return false
+  return content.length >= 180 && content.length > summary.length + 40
+}
+
+function briefCardText(article) {
+  return (
+    article.content_zh ||
+    article.summary_zh ||
+    article.ai_summary ||
+    article.summary ||
+    article.title_zh ||
+    article.title
+  )
+}
+
 export default function NewsTab({
   articles,
   tabTitle = '葡萄牙新闻',
@@ -185,8 +203,20 @@ export default function NewsTab({
   const featured = articles[0] || null
   const rest = articles.slice(1)
   const feed = rest.slice(3)
-  const chinaSortedFeed = useMemo(
-    () => sortChinaFeedArticles(feed, chinaFeedSort),
+  const portugalDetailedFeed = useMemo(
+    () => feed.filter(hasDetailedArticleContent),
+    [feed]
+  )
+  const portugalSummaryFeed = useMemo(
+    () => feed.filter((article) => !hasDetailedArticleContent(article)),
+    [feed]
+  )
+  const chinaDetailedFeed = useMemo(
+    () => sortChinaFeedArticles(feed.filter(hasDetailedArticleContent), chinaFeedSort),
+    [feed, chinaFeedSort]
+  )
+  const chinaSummaryFeed = useMemo(
+    () => sortChinaFeedArticles(feed.filter((article) => !hasDetailedArticleContent(article)), chinaFeedSort),
     [feed, chinaFeedSort]
   )
 
@@ -201,10 +231,10 @@ export default function NewsTab({
     )
   }
 
-  const visibleFeed = feed.slice(0, visibleCount)
-  const hasMoreFeed = feed.length > visibleFeed.length
-  const chinaVisibleFeed = chinaSortedFeed.slice(0, visibleCount)
-  const chinaHasMoreFeed = chinaSortedFeed.length > chinaVisibleFeed.length
+  const visibleFeed = portugalDetailedFeed.slice(0, visibleCount)
+  const hasMoreFeed = portugalDetailedFeed.length > visibleFeed.length
+  const chinaVisibleFeed = chinaDetailedFeed.slice(0, visibleCount)
+  const chinaHasMoreFeed = chinaDetailedFeed.length > chinaVisibleFeed.length
 
   if (layout === 'china') {
     return (
@@ -228,7 +258,7 @@ export default function NewsTab({
         )}
         <div className="grid gap-5 sm:gap-6">
           <Card className="overflow-hidden rounded-[22px] border-[#E2D2BF] bg-[linear-gradient(135deg,#fff8ef_0%,#f5ead9_100%)] p-0 shadow-[0_16px_34px_rgba(86,60,33,0.08)]">
-            <div className="grid gap-4 px-4 py-4 sm:px-5 sm:py-5 xl:grid-cols-[minmax(0,1.32fr)_280px]">
+            <div className="grid gap-4 px-4 py-4 sm:px-5 sm:py-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(520px,1.05fr)]">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <Badge color="#9D3D33">Chinese Focus</Badge>
@@ -276,7 +306,7 @@ export default function NewsTab({
                 )}
               </div>
 
-              <div className="grid gap-3">
+              <div className="grid items-start gap-3 lg:grid-cols-2 xl:grid-cols-2">
                 <div className="rounded-[18px] border border-white/70 bg-white/85 px-4 py-4">
                   <div className="flex items-center justify-between gap-3">
                     <p className="text-[11px] uppercase tracking-[0.16em] text-text-subtle">热门关注</p>
@@ -308,6 +338,15 @@ export default function NewsTab({
                     )}
                   </div>
                 </div>
+                <DailyBriefsSection
+                  briefType="china"
+                  briefs={briefs}
+                  loading={briefsLoading}
+                  isAdmin={isAdmin}
+                  onSelectBrief={handleOpenBrief}
+                  onGenerateClick={() => setBriefModalOpen(true)}
+                  compact
+                />
               </div>
             </div>
           </Card>
@@ -345,11 +384,17 @@ export default function NewsTab({
                 </div>
               </div>
 
-              <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {chinaVisibleFeed.map(article => (
-                  <ArticleCard key={article.link} article={article} onClick={handleOpenArticle} />
-                ))}
-              </section>
+              {chinaVisibleFeed.length === 0 ? (
+                <div className="rounded-2xl border border-border bg-surface-muted px-5 py-8 text-center text-sm text-text-muted">
+                  暂无带完整正文的关注内容，右侧可先浏览标题摘要。
+                </div>
+              ) : (
+                <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  {chinaVisibleFeed.map(article => (
+                    <ArticleCard key={article.link} article={article} onClick={handleOpenArticle} />
+                  ))}
+                </section>
+              )}
 
               {chinaHasMoreFeed && (
                 <div className="mt-6 flex justify-center">
@@ -361,40 +406,44 @@ export default function NewsTab({
             </div>
 
             <div className="grid gap-5">
-              <DailyBriefsSection
-                briefType="china"
-                briefs={briefs}
-                loading={briefsLoading}
-                isAdmin={isAdmin}
-                onSelectBrief={handleOpenBrief}
-                onGenerateClick={() => setBriefModalOpen(true)}
-                compact
-              />
-
               <Card className="rounded-[28px] border-white/80 bg-white/92 shadow-[0_20px_46px_rgba(58,44,31,0.08)]">
-                <Badge color="#B8843C">专题卡片</Badge>
+                <Badge color="#B8843C">简讯</Badge>
                 <h2
                   className="mt-3 text-xl font-black tracking-tight text-text"
                   style={{ fontFamily: 'var(--font-headline)' }}
                 >
-                  今日信号
+                  简讯内容
                 </h2>
-                <div className="mt-4 grid gap-3">
-                  {articles.slice(0, 4).map((article) => (
-                    <button
-                      key={`signal-${article.link}`}
-                      onClick={() => handleOpenArticle(article)}
-                      className="rounded-2xl border border-border bg-surface-muted px-4 py-4 text-left transition-colors hover:bg-surface"
-                    >
-                      <p className="text-[11px] uppercase tracking-[0.14em] text-text-subtle">
-                        {(article.tags_zh?.split(',')[0]?.trim() || article.source)} · {formatViews(article.view_count)}
+                <p className="mt-2 text-xs leading-5 text-text-muted">
+                  这些关注内容较短，直接显示中文正文，适合快速扫读。
+                </p>
+                {chinaSummaryFeed.length === 0 ? (
+                  <p className="mt-4 rounded-2xl bg-surface-muted px-4 py-4 text-sm text-text-muted">
+                    当前没有摘要简讯。
+                  </p>
+                ) : (
+                  <div className="mt-4 grid gap-3">
+                    {chinaSummaryFeed.slice(0, 8).map((article) => (
+                      <button
+                        key={`china-summary-${article.link}`}
+                        onClick={() => handleOpenArticle(article)}
+                        className="rounded-2xl border border-border bg-surface-muted px-4 py-3 text-left transition-colors hover:bg-surface"
+                      >
+                        <p className="text-[11px] uppercase tracking-[0.14em] text-text-subtle">
+                          {(article.tags_zh?.split(',')[0]?.trim() || article.source)} · {formatViews(article.view_count)}
+                        </p>
+                        <p className="mt-2 line-clamp-4 text-sm font-semibold leading-6 text-text">
+                          {briefCardText(article)}
+                        </p>
+                      </button>
+                    ))}
+                    {chinaSummaryFeed.length > 8 && (
+                      <p className="text-center text-[11px] text-text-subtle">
+                        还有 {chinaSummaryFeed.length - 8} 条摘要简讯
                       </p>
-                      <p className="mt-2 line-clamp-2 text-sm font-bold leading-6 text-text">
-                        {article.title_zh || article.title}
-                      </p>
-                    </button>
-                  ))}
-                </div>
+                    )}
+                  </div>
+                )}
               </Card>
             </div>
           </div>
@@ -554,11 +603,17 @@ export default function NewsTab({
                 </div>
               </div>
 
-              <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {visibleFeed.map(article => (
-                  <ArticleCard key={article.link} article={article} onClick={handleOpenArticle} />
-                ))}
-              </section>
+              {visibleFeed.length === 0 ? (
+                <div className="rounded-2xl border border-border bg-surface-muted px-5 py-8 text-center text-sm text-text-muted">
+                  暂无带完整正文的新闻，右侧可先浏览标题摘要。
+                </div>
+              ) : (
+                <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  {visibleFeed.map(article => (
+                    <ArticleCard key={article.link} article={article} onClick={handleOpenArticle} />
+                  ))}
+                </section>
+              )}
 
               {hasMoreFeed && (
                 <div className="mt-6 flex justify-center">
@@ -571,29 +626,48 @@ export default function NewsTab({
 
             <div className="grid gap-5">
               <Card className="rounded-[28px] border-white/80 bg-white/92 shadow-[0_20px_46px_rgba(58,44,31,0.08)]">
-                <Badge color="#2B6CB0">分类观察</Badge>
+                <Badge color="#2B6CB0">简讯</Badge>
                 <h2
                   className="mt-3 text-xl font-black tracking-tight text-text"
                   style={{ fontFamily: 'var(--font-headline)' }}
                 >
-                  今日版面
+                  简讯内容
                 </h2>
-                <div className="mt-4 grid gap-3">
-                  {topCategories.map(([category, count]) => (
-                    <div key={category} className="flex items-center justify-between rounded-2xl border border-border bg-surface-muted px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <span
-                          className="inline-block h-3 w-3 rounded-full"
-                          style={{ background: categoryColor(category) }}
-                        />
-                        <span className="text-sm font-semibold text-text">
-                          {CATEGORY_ZH[category] || category}
-                        </span>
-                      </div>
-                      <span className="text-sm font-black text-text">{count}</span>
-                    </div>
-                  ))}
-                </div>
+                <p className="mt-2 text-xs leading-5 text-text-muted">
+                  这些新闻内容较短，直接显示中文正文，适合快速扫读。
+                </p>
+                {portugalSummaryFeed.length === 0 ? (
+                  <p className="mt-4 rounded-2xl bg-surface-muted px-4 py-4 text-sm text-text-muted">
+                    当前没有摘要简讯。
+                  </p>
+                ) : (
+                  <div className="mt-4 grid gap-3">
+                    {portugalSummaryFeed.slice(0, 8).map((article) => (
+                      <button
+                        key={`summary-${article.link}`}
+                        onClick={() => handleOpenArticle(article)}
+                        className="rounded-2xl border border-border bg-surface-muted px-4 py-3 text-left transition-colors hover:bg-surface"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Badge color={categoryColor(article.category)}>
+                            {CATEGORY_ZH[article.category] || article.category}
+                          </Badge>
+                          <span className="min-w-0 truncate text-[11px] text-text-subtle">
+                            {article.source} · {formatViews(article.view_count)}
+                          </span>
+                        </div>
+                        <p className="mt-2 line-clamp-4 text-sm font-semibold leading-6 text-text">
+                          {briefCardText(article)}
+                        </p>
+                      </button>
+                    ))}
+                    {portugalSummaryFeed.length > 8 && (
+                      <p className="text-center text-[11px] text-text-subtle">
+                        还有 {portugalSummaryFeed.length - 8} 条摘要简讯
+                      </p>
+                    )}
+                  </div>
+                )}
               </Card>
 
               <DailyBriefsSection

@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from 'react'
 import Card from '../ui/Card'
 import Badge from '../ui/Badge'
 import Button from '../ui/Button'
@@ -28,6 +29,22 @@ function formatDateLabel(value) {
   return value || '未标注日期'
 }
 
+function localDateKey(offsetDays = 0) {
+  const date = new Date()
+  date.setDate(date.getDate() + offsetDays)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function compactDateLabel(value) {
+  if (!value) return '未标注'
+  if (value === localDateKey(0)) return '今日'
+  if (value === localDateKey(-1)) return '昨日'
+  return value.slice(5)
+}
+
 export default function DailyBriefsSection({
   briefType,
   briefs,
@@ -39,6 +56,22 @@ export default function DailyBriefsSection({
 }) {
   const tone = toneForType(briefType)
   const [leadBrief, ...history] = briefs
+  const compactBriefs = useMemo(() => briefs.slice(0, 7), [briefs])
+  const [selectedCompactKey, setSelectedCompactKey] = useState(null)
+  const selectedCompactBrief = useMemo(
+    () => compactBriefs.find((brief) => brief.brief_date === selectedCompactKey) || compactBriefs[0],
+    [compactBriefs, selectedCompactKey]
+  )
+
+  useEffect(() => {
+    if (!compactBriefs.length) {
+      setSelectedCompactKey(null)
+      return
+    }
+    if (!compactBriefs.some((brief) => brief.brief_date === selectedCompactKey)) {
+      setSelectedCompactKey(compactBriefs[0].brief_date)
+    }
+  }, [compactBriefs, selectedCompactKey])
 
   if (loading) {
     return (
@@ -79,47 +112,46 @@ export default function DailyBriefsSection({
             </Button>
           )}
         </div>
-        <h2
-          className="mt-3 text-xl font-black tracking-tight text-text"
-          style={{ fontFamily: 'var(--font-headline)' }}
-        >
-          最近几天回顾
-        </h2>
 
-        <button
-          onClick={() => onSelectBrief(leadBrief)}
-          className="mt-4 block w-full rounded-2xl border border-border bg-surface-muted px-4 py-4 text-left transition-colors hover:bg-surface"
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] uppercase tracking-[0.14em] text-text-subtle">
-              {formatDateLabel(leadBrief.brief_date)}
-            </span>
-            <span className="text-[11px] text-text-subtle">·</span>
-            <span className="text-[11px] text-text-subtle">{leadBrief.article_count} 条新闻</span>
-          </div>
-          <p className="mt-2 text-sm font-bold leading-6 text-text">{presentBriefTitle(leadBrief)}</p>
-          <p className="mt-2 line-clamp-3 text-sm leading-6 text-text-muted">{presentBriefSummary(leadBrief)}</p>
-        </button>
-
-        {history.length > 0 && (
-          <div className="mt-4 grid gap-3">
-            {history.slice(0, 4).map((brief) => (
+        <div className="mt-3 flex gap-1 overflow-x-auto rounded-full border border-border bg-surface-muted p-1">
+          {compactBriefs.map((brief) => {
+            const active = brief.brief_date === selectedCompactBrief?.brief_date
+            return (
               <button
                 key={`${brief.brief_type}-${brief.brief_date}`}
-                onClick={() => onSelectBrief(brief)}
-                className="rounded-2xl border border-border bg-surface px-4 py-3 text-left transition-colors hover:bg-bg-subtle"
+                type="button"
+                onClick={() => setSelectedCompactKey(brief.brief_date)}
+                className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold transition-colors ${
+                  active
+                    ? 'bg-white text-text shadow-[0_4px_14px_rgba(58,44,31,0.08)]'
+                    : 'text-text-subtle hover:text-text'
+                }`}
               >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] uppercase tracking-[0.14em] text-text-subtle">
-                    {formatDateLabel(brief.brief_date)}
-                  </span>
-                  <span className="text-[11px] text-text-subtle">·</span>
-                  <span className="text-[11px] text-text-subtle">{brief.article_count} 条</span>
-                </div>
-                <p className="mt-1 text-sm font-bold leading-6 text-text">{presentBriefTitle(brief)}</p>
+                {compactDateLabel(brief.brief_date)}
               </button>
-            ))}
-          </div>
+            )
+          })}
+        </div>
+
+        {selectedCompactBrief && (
+          <button
+            onClick={() => onSelectBrief(selectedCompactBrief)}
+            className="mt-3 block w-full rounded-2xl border border-border bg-surface-muted px-4 py-3 text-left transition-colors hover:bg-surface"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[11px] uppercase tracking-[0.14em] text-text-subtle">
+                {formatDateLabel(selectedCompactBrief.brief_date)}
+              </span>
+              <span className="text-[11px] text-text-subtle">·</span>
+              <span className="text-[11px] text-text-subtle">{selectedCompactBrief.article_count} 条新闻</span>
+            </div>
+            <p className="mt-2 line-clamp-2 text-sm font-bold leading-6 text-text">
+              {presentBriefTitle(selectedCompactBrief)}
+            </p>
+            <p className="mt-2 line-clamp-3 text-sm leading-6 text-text-muted">
+              {presentBriefSummary(selectedCompactBrief)}
+            </p>
+          </button>
         )}
       </Card>
     )

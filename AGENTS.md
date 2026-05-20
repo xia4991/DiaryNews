@@ -39,7 +39,7 @@ React SPA frontend (`react-frontend/`) + FastAPI backend (`backend/`), connected
 - `collect_news` and `enrich_pending_news` are guarded by process-local `threading.Lock`s; concurrent invocations return HTTP 409 `Crawler already running`
 - Data stored in SQLite at `data/diarynews.db` (auto-created)
 
-## Workflow
+## Workflow on backend
 
 - **Plan first**: Before starting a multi-step feature, write the development plan to `dev-log/` as a markdown file
 - **Sequential tasks**: Break plans into discrete tasks. Complete one task at a time, show the result, and wait for user confirmation before starting the next
