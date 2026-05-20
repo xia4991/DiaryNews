@@ -56,7 +56,7 @@ If dependencies need to be installed or refreshed:
 ./run-project.sh --install
 ```
 
-**Public website stack** (`https://app.huarenpt.com` via Caddy + Cloudflare Tunnel):
+**Public website stack** (`https://huarenpt.com` via Caddy + Cloudflare Tunnel):
 ```bash
 ./run-public.sh
 ```

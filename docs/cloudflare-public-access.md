@@ -6,7 +6,7 @@ Recommended architecture:
 
 1. FastAPI backend on `localhost:8000`
 2. Built React frontend served by Caddy on `localhost:8080`
-3. Cloudflare Tunnel maps `app.your-domain.com` to `http://localhost:8080`
+3. Cloudflare Tunnel maps `your-domain.com` to `http://localhost:8080`
 
 ## Why this setup
 
@@ -35,7 +35,7 @@ In your project root `.env`, change `CORS_ORIGINS` so it includes your public ap
 Example:
 
 ```env
-CORS_ORIGINS=http://localhost:5173,https://app.your-domain.com
+CORS_ORIGINS=http://localhost:5173,https://your-domain.com
 ```
 
 Keep `JWT_SECRET`, `GOOGLE_CLIENT_ID`, and `ADMIN_EMAILS` set.
@@ -113,11 +113,11 @@ cp /Users/yongbinjiang/Desktop/XAB/projects/DiaryNews/deploy/cloudflare/cloudfla
 Then edit `~/.cloudflared/config.yml`:
 
 - replace `YOUR_TUNNEL_ID`
-- replace `app.example.com` with your real hostname, for example `app.your-domain.com`
+- replace `example.com` with your real hostname, for example `your-domain.com`
 
 For your current domain, the recommended hostname is:
 
-- `app.huarenpt.com`
+- `huarenpt.com`
 
 Make sure the Cloudflare account has the `huarenpt.com` zone.
 
@@ -128,7 +128,7 @@ tunnel: 12345678-1234-1234-1234-123456789abc
 credentials-file: /Users/yongbinjiang/.cloudflared/12345678-1234-1234-1234-123456789abc.json
 
 ingress:
-  - hostname: app.huarenpt.com
+  - hostname: huarenpt.com
     service: http://localhost:8080
   - service: http_status:404
 ```
@@ -138,7 +138,7 @@ ingress:
 Create the DNS route from your hostname to the tunnel:
 
 ```bash
-cloudflared tunnel route dns diarynews app.huarenpt.com
+cloudflared tunnel route dns diarynews huarenpt.com
 ```
 
 ## 8. Start the tunnel
@@ -149,14 +149,14 @@ cloudflared tunnel run diarynews
 
 After this, your site should be reachable at:
 
-- `https://app.huarenpt.com`
+- `https://huarenpt.com`
 
 ## 9. Update Google OAuth
 
 Because this project uses Google login, go to your Google Cloud Console and add:
 
 - Authorized JavaScript origin:
-  - `https://app.huarenpt.com`
+  - `https://huarenpt.com`
 
 If needed, also add the same domain in any allowed origin or redirect settings used by your OAuth app.
 
@@ -199,7 +199,7 @@ For the backend, you can later add a `launchd` plist or another process manager.
 
 1. `http://localhost:8000/api/status` responds locally
 2. `http://localhost:8080` loads the built frontend
-3. `https://app.your-domain.com` loads publicly
+3. `https://your-domain.com` loads publicly
 4. Login works on the public domain
 5. `/api` requests succeed from the public domain
 

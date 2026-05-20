@@ -282,7 +282,7 @@ def list_recent_articles(limit: int = 20, status: Optional[str] = None) -> list:
     with get_db() as conn:
         sql = (
             "SELECT link, title, source, category, published, fetched_at, "
-            "image_url, author, rss_category, "
+            "image_url, author, rss_category, summary, scraped_content, content_zh, view_count, "
             "enrichment_status, enrichment_attempts, enrichment_error, "
             "enriched_at, enrichment_model, enrichment_prompt_version, "
             "title_zh, summary_zh, tags_zh, relevance_reason, "

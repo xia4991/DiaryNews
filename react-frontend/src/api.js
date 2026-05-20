@@ -5,6 +5,8 @@ const http = axios.create({
   timeout: 15000,
 })
 
+const LONG_TASK_TIMEOUT = 300000
+
 // Attach JWT token to requests
 http.interceptors.request.use(config => {
   const token = localStorage.getItem('token')
@@ -48,8 +50,8 @@ export const api = {
   listAnnouncements: (params) => http.get('/announcements', { params }).then(r => r.data),
   recordNewsView: (link) => http.post('/news/view', { link }).then(r => r.data),
   listNewsBriefs: (params) => http.get('/news/briefs', { params }).then(r => r.data),
-  generateNewsBrief: (params) => http.post('/news/briefs/generate', null, { params }).then(r => r.data),
-  collectNews: () => http.post('/news/collect').then(r => r.data),
+  generateNewsBrief: (params) => http.post('/news/briefs/generate', null, { params, timeout: LONG_TASK_TIMEOUT }).then(r => r.data),
+  collectNews: () => http.post('/news/collect', null, { timeout: LONG_TASK_TIMEOUT }).then(r => r.data),
 
   // Media
   uploadMedia: (file) => {
@@ -113,6 +115,6 @@ export const api = {
   // Admin / Crawler
   getSourceHealth: () => http.get('/admin/sources/health').then(r => r.data),
   listRecentArticles: (params) => http.get('/admin/news/recent', { params }).then(r => r.data),
-  enrichNews: (params) => http.post('/news/enrich', null, { params }).then(r => r.data),
-  batchEnrichNews: (params) => http.post('/news/enrich/batch', null, { params }).then(r => r.data),
+  enrichNews: (params) => http.post('/news/enrich', null, { params, timeout: LONG_TASK_TIMEOUT }).then(r => r.data),
+  batchEnrichNews: (params) => http.post('/news/enrich/batch', null, { params, timeout: LONG_TASK_TIMEOUT }).then(r => r.data),
 }

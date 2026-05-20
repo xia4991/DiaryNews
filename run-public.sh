@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FRONTEND_DIR="$ROOT_DIR/react-frontend"
 CADDY_CONFIG="${CADDY_CONFIG:-$ROOT_DIR/deploy/cloudflare/Caddyfile}"
 CLOUDFLARED_CONFIG="${CLOUDFLARED_CONFIG:-$HOME/.cloudflared/config.yml}"
-PUBLIC_HOSTNAME="${PUBLIC_HOSTNAME:-app.huarenpt.com}"
+PUBLIC_HOSTNAME="${PUBLIC_HOSTNAME:-huarenpt.com}"
 BACKEND_PORT="${PORT:-8000}"
 CADDY_PORT="${CADDY_PORT:-8080}"
 INSTALL_DEPS=false
@@ -18,7 +18,7 @@ usage() {
 Usage: ./run-public.sh [--install] [--skip-build]
 
 Builds the React app, starts FastAPI, serves the build with Caddy, and starts
-Cloudflare Tunnel so the site is available at https://app.huarenpt.com.
+Cloudflare Tunnel so the site is available at https://huarenpt.com.
 
 Options:
   --install     Install/update Python and frontend dependencies first.
@@ -26,7 +26,7 @@ Options:
   -h, --help    Show this help.
 
 Environment overrides:
-  PUBLIC_HOSTNAME     Public hostname, default: app.huarenpt.com
+  PUBLIC_HOSTNAME     Public hostname, default: huarenpt.com
   PORT                Backend port, default: 8000
   CADDY_PORT          Expected Caddy port, default: 8080
   CADDY_CONFIG        Caddy config path
@@ -139,6 +139,7 @@ write_pid_file() {
   mkdir -p "$PID_DIR"
   {
     echo "mode public"
+    echo "runner $$"
     echo "backend ${PIDS[0]}"
     echo "caddy ${PIDS[1]}"
     echo "cloudflared ${PIDS[2]}"

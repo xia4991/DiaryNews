@@ -47,4 +47,4 @@ MEDIA_LOCAL_ROOT = os.environ.get("MEDIA_LOCAL_ROOT", "data/uploads")
 MEDIA_PUBLIC_URL = os.environ.get("MEDIA_PUBLIC_URL", "/uploads")
 
 # ── Site ─────────────────────────────────────────────────────────────────────
-SITE_URL = os.environ.get("SITE_URL", "https://app.huarenpt.com")
+SITE_URL = os.environ.get("SITE_URL", "https://huarenpt.com")

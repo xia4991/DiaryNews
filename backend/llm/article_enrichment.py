@@ -100,6 +100,7 @@ def batch_enrich_news_articles(articles: list[dict]) -> dict:
     enriched = []
     matched_indexes = set()
     invalid_rows = 0
+    row_count = len(rows)
     extra_rows = max(0, len(rows) - len(articles))
 
     for index, row in enumerate(rows[:len(articles)]):
@@ -108,7 +109,7 @@ def batch_enrich_news_articles(articles: list[dict]) -> dict:
             invalid_rows += 1
             continue
 
-        if not fields["title_zh"] or not fields["content_zh"]:
+        if not fields["title_zh"] or not (fields["summary_zh"] or fields["content_zh"]):
             invalid_rows += 1
             continue
 
@@ -119,6 +120,7 @@ def batch_enrich_news_articles(articles: list[dict]) -> dict:
         "enriched": enriched,
         "matched_indexes": matched_indexes,
         "invalid_rows": invalid_rows,
+        "row_count": row_count,
         "extra_rows": extra_rows,
     }
 
@@ -137,9 +139,10 @@ def _build_enriched_article_from_fields(article: dict, fields: dict) -> dict:
     input_hash = hashlib.sha256(
         f"{article['title']}\n{text_for_hash}".encode("utf-8")
     ).hexdigest()[:16]
+    resolved_content_zh = fields["content_zh"] or fields.get("summary_zh", "") or article.get("content_zh", "")
     enriched_at = (
         datetime.now(timezone.utc).isoformat()
-        if fields["title_zh"] and fields["content_zh"] else article.get("enriched_at", "")
+        if fields["title_zh"] and resolved_content_zh else article.get("enriched_at", "")
     )
 
     return {
@@ -149,7 +152,7 @@ def _build_enriched_article_from_fields(article: dict, fields: dict) -> dict:
         "title_zh": fields["title_zh"],
         "summary_zh": fields.get("summary_zh", "") or article.get("summary_zh", ""),
         "tags_zh": tags_zh,
-        "content_zh": fields["content_zh"],
+        "content_zh": resolved_content_zh,
         "relevance_reason": fields.get("relevance_reason", "") or article.get("relevance_reason", ""),
         "enriched_at": enriched_at,
         "enrichment_model": MINIMAX_MODEL,

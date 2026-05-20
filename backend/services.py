@@ -219,10 +219,16 @@ def batch_enrich_pending_news(limit: int = 20) -> dict:
         pending = storage.list_pending_enrichment(limit=limit)
         if not pending:
             return {"selected_count": 0, "done_count": 0, "failed_count": 0}
+        storage.add_log(
+            "news_llm_batch",
+            f"批量LLM开始: 选择{len(pending)}条",
+            {"selected_count": len(pending)},
+        )
 
         enriched = []
         matched_indexes = set()
         invalid_rows = 0
+        row_count = 0
         extra_rows = 0
         aborted_reason = ""
 
@@ -232,6 +238,7 @@ def batch_enrich_pending_news(limit: int = 20) -> dict:
                 enriched = batch_result["enriched"]
                 matched_indexes = batch_result["matched_indexes"]
                 invalid_rows = batch_result["invalid_rows"]
+                row_count = batch_result["row_count"]
                 extra_rows = batch_result["extra_rows"]
             except MiniMaxConfigError as exc:
                 log.error("MiniMax config error during batch enrichment: %s", exc)
@@ -248,8 +255,11 @@ def batch_enrich_pending_news(limit: int = 20) -> dict:
                     "done_count": 0,
                     "failed_count": len(pending),
                     "invalid_rows": 0,
+                    "row_count": 0,
                     "extra_rows": 0,
                     "missing_count": len(pending),
+                    "error_type": type(exc).__name__,
+                    "error": str(exc)[:300],
                 }
                 storage.add_log("news_llm_batch", "批量LLM失败", result)
                 return result
@@ -289,6 +299,7 @@ def batch_enrich_pending_news(limit: int = 20) -> dict:
             "failed_count": len(pending) - len(enriched),
             "missing_count": missing_count,
             "invalid_rows": invalid_rows,
+            "row_count": row_count,
             "extra_rows": extra_rows,
         }
         storage.add_log(

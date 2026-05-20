@@ -4,6 +4,7 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FRONTEND_DIR="$ROOT_DIR/react-frontend"
 CADDY_CONFIG="$ROOT_DIR/deploy/cloudflare/Caddyfile"
+CLOUDFLARED_CONFIG="${CLOUDFLARED_CONFIG:-$HOME/.cloudflared/config.yml}"
 PID_DIR="${DIARYNEWS_PID_DIR:-${TMPDIR:-/tmp}/diarynews}"
 STOP_MODE="all"
 
@@ -156,9 +157,14 @@ matching_dev_pids() {
 matching_public_pids() {
   ps -axo pid=,command= | awk \
     -v backend="$ROOT_DIR/.venv/bin/python main.py" \
+    -v backend_fallback="Python main.py" \
+    -v runner_bash="bash ./run-public.sh" \
+    -v runner_sh="sh run-public.sh" \
     -v caddy="caddy run --config " \
     -v caddy_config="$CADDY_CONFIG" \
-    'index($0, backend) || (index($0, caddy) && index($0, caddy_config)) {print $1}'
+    -v cloudflared="cloudflared tunnel --config " \
+    -v cloudflared_config="$CLOUDFLARED_CONFIG" \
+    'index($0, runner_bash) || index($0, runner_sh) || index($0, backend) || index($0, backend_fallback) || (index($0, caddy) && index($0, caddy_config)) || (index($0, cloudflared) && index($0, cloudflared_config)) {print $1}'
 }
 
 stop_matching_pids() {

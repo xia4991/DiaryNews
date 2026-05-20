@@ -5,7 +5,7 @@ const PRIVACY_CONTENT = `
 
 **最后更新：2026年4月20日**
 
-葡萄牙华人信息中心（"HuarenPT"，网址 app.huarenpt.com）致力于保护你的个人数据。本政策适用于欧盟《通用数据保护条例》(GDPR)。
+葡萄牙华人信息中心（"HuarenPT"，网址 huarenpt.com）致力于保护你的个人数据。本政策适用于欧盟《通用数据保护条例》(GDPR)。
 
 ### 我们收集的数据
 

@@ -5,6 +5,7 @@ import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import Field from '../components/ui/Field'
+import ArticleModal from '../components/news/ArticleModal'
 
 const KIND_ZH = { job: '招聘', realestate: '房产', secondhand: '二手' }
 const KIND_COLORS = { job: '#2E7D5A', realestate: '#2B6CB0', secondhand: '#8B5CF6' }
@@ -731,6 +732,7 @@ function CrawlerSection({ onNewsChanged }) {
   const [data, setData] = useState({ sources: [], stats: null, today: null })
   const [recent, setRecent] = useState([])
   const [fetchRuns, setFetchRuns] = useState([])
+  const [selectedArticle, setSelectedArticle] = useState(null)
   const [statusFilter, setStatusFilter] = useState('')
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(null)
@@ -747,7 +749,7 @@ function CrawlerSection({ onNewsChanged }) {
       setData({ sources: health.sources || [], stats: health.stats, today: health.today })
       setRecent(recentResp.items || [])
       setFetchRuns((logsResp.items || [])
-        .filter((item) => item.event_type === 'news_fetch' || item.event_type === 'news_collect')
+        .filter((item) => ['news_fetch', 'news_collect', 'news_llm', 'news_llm_batch'].includes(item.event_type))
         .slice(0, 6))
     } finally {
       setLoading(false)
@@ -755,6 +757,23 @@ function CrawlerSection({ onNewsChanged }) {
   }, [statusFilter])
 
   useEffect(() => { reload() }, [reload])
+
+  const handleOpenRecentArticle = async (article) => {
+    setSelectedArticle(article)
+    try {
+      const updated = await api.recordNewsView(article.link)
+      if (updated?.view_count !== undefined) {
+        setSelectedArticle(prev => (
+          prev?.link === article.link ? { ...prev, view_count: updated.view_count } : prev
+        ))
+        setRecent(prev => prev.map(item => (
+          item.link === article.link ? { ...item, view_count: updated.view_count } : item
+        )))
+      }
+    } catch {
+      // Admin inspection should still open even if view counting fails.
+    }
+  }
 
   const handleFetch = async () => {
     setBusy('fetch')
@@ -1008,10 +1027,23 @@ function CrawlerSection({ onNewsChanged }) {
           </div>
         ) : (
           <div className="grid gap-2">
-            {recent.map((a) => <RecentArticleRow key={a.link} article={a} />)}
+            {recent.map((a) => (
+              <RecentArticleRow
+                key={a.link}
+                article={a}
+                onOpen={handleOpenRecentArticle}
+              />
+            ))}
           </div>
         )}
       </div>
+
+      {selectedArticle && (
+        <ArticleModal
+          article={selectedArticle}
+          onClose={() => setSelectedArticle(null)}
+        />
+      )}
     </div>
   )
 }
@@ -1069,11 +1101,11 @@ function RecentFetchRuns({ runs }) {
   return (
     <Card className="rounded-2xl">
       <div className="flex items-center gap-2">
-        <Badge color="#5E6478">抓取记录</Badge>
-        <h3 className="text-sm font-bold text-text">最近 fetch 数据</h3>
+        <Badge color="#5E6478">任务记录</Badge>
+        <h3 className="text-sm font-bold text-text">最近抓取 / LLM 数据</h3>
       </div>
       {runs.length === 0 ? (
-        <div className="py-6 text-center text-xs text-text-muted">暂无抓取日志。</div>
+        <div className="py-6 text-center text-xs text-text-muted">暂无任务日志。</div>
       ) : (
         <div className="mt-3 divide-y divide-border/70">
           {runs.map((run) => {
@@ -1081,20 +1113,39 @@ function RecentFetchRuns({ runs }) {
             const stats = details.stats || {}
             const sourceCount = Array.isArray(details.sources) ? details.sources.length : 0
             const newCount = details.new_count ?? stats.returned_count ?? 0
+            const isBatch = run.event_type === 'news_llm_batch'
+            const isLlm = run.event_type === 'news_llm'
+            const label = isBatch
+              ? '批量LLM'
+              : isLlm
+                ? 'LLM'
+                : run.event_type === 'news_collect' ? '抓取' : '旧抓取'
             return (
               <div key={run.id} className="grid gap-2 py-3 text-xs lg:grid-cols-[minmax(0,1.4fr)_repeat(5,minmax(72px,0.6fr))] lg:items-center">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-text">{run.event_type === 'news_collect' ? '抓取' : '旧抓取'}</span>
+                    <span className="font-semibold text-text">{label}</span>
                     <span className="text-[11px] text-text-subtle">{timeAgo(run.created_at)}</span>
                   </div>
                   <p className="mt-0.5 truncate text-text-muted" title={run.message}>{run.message}</p>
                 </div>
-                <FetchRunCell label="新增" value={newCount} color="#2B6CB0" />
-                <FetchRunCell label="原始" value={stats.raw_count ?? '—'} />
-                <FetchRunCell label="已有" value={stats.existing_skipped ?? '—'} />
-                <FetchRunCell label="过短" value={stats.short_skipped ?? '—'} />
-                <FetchRunCell label="源" value={sourceCount || '—'} />
+                {isBatch || isLlm ? (
+                  <>
+                    <FetchRunCell label="选择" value={details.selected_count ?? details.processed_count ?? '—'} color="#8B5CF6" />
+                    <FetchRunCell label="成功" value={details.done_count ?? '—'} color="#10B981" />
+                    <FetchRunCell label="失败" value={details.failed_count ?? '—'} color={(details.failed_count || 0) > 0 ? '#EF4444' : undefined} />
+                    <FetchRunCell label="无效" value={details.invalid_rows ?? details.missing_count ?? '—'} />
+                    <FetchRunCell label="返回" value={details.row_count ?? details.extra_rows ?? '—'} />
+                  </>
+                ) : (
+                  <>
+                    <FetchRunCell label="新增" value={newCount} color="#2B6CB0" />
+                    <FetchRunCell label="原始" value={stats.raw_count ?? '—'} />
+                    <FetchRunCell label="已有" value={stats.existing_skipped ?? '—'} />
+                    <FetchRunCell label="过短" value={stats.short_skipped ?? '—'} />
+                    <FetchRunCell label="源" value={sourceCount || '—'} />
+                  </>
+                )}
               </div>
             )
           })}
@@ -1197,12 +1248,17 @@ function Stat({ k, v, highlight }) {
   )
 }
 
-function RecentArticleRow({ article }) {
+function RecentArticleRow({ article, onOpen }) {
   const status = article.enrichment_status || 'pending'
   const statusColor = status === 'done' ? '#10B981' : status === 'failed' ? '#EF4444' : '#F59E0B'
   const statusLabel = status === 'done' ? '已译' : status === 'failed' ? '失败' : '待译'
   return (
-    <Card className="rounded-2xl">
+    <Card
+      as="article"
+      interactive
+      className="rounded-2xl"
+      onClick={() => onOpen?.(article)}
+    >
       <div className="flex items-start gap-3">
         {article.image_url ? (
           <img
@@ -1267,6 +1323,7 @@ function RecentArticleRow({ article }) {
               href={article.link}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
               className="ml-auto inline-flex items-center gap-0.5 text-accent hover:underline"
             >
               原文
