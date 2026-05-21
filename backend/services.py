@@ -103,6 +103,15 @@ def _enrichment_failure_reason(updated: dict) -> str:
     return "LLM 响应缺失 CONTENT_ZH"
 
 
+def _is_minimax_sensitive_error(exc: BaseException) -> bool:
+    message = str(exc).lower()
+    return "new_sensitive" in message or "output new_sensitive" in message
+
+
+def _sensitive_error_text(exc: BaseException) -> str:
+    return f"MiniMaxSensitiveOutput: {str(exc)[:260]}"
+
+
 def enrich_pending_news(max_retry: int = 20) -> dict:
     """Stage B — run MiniMax enrichment on articles still missing Chinese fields.
 
@@ -156,6 +165,18 @@ def enrich_pending_news(max_retry: int = 20) -> dict:
             except MiniMaxError as exc:
                 # Transient (rate-limit, timeout, 5xx) already retried inside call_minimax.
                 # Only flip to failed once the per-row retry ceiling is hit.
+                if _is_minimax_sensitive_error(exc):
+                    log.warning(
+                        "MiniMax sensitive output for '%s'; marking failed permanently: %s",
+                        link, exc,
+                    )
+                    storage.mark_enrichment_status(
+                        link,
+                        "failed",
+                        increment_attempts=True,
+                        error=_sensitive_error_text(exc),
+                    )
+                    continue
                 log.warning(
                     "MiniMax %s for '%s' (attempt %d/%d): %s",
                     type(exc).__name__, link, new_attempts, MAX_ENRICHMENT_ATTEMPTS, exc,
@@ -245,6 +266,27 @@ def batch_enrich_pending_news(limit: int = 20) -> dict:
                 aborted_reason = "config"
             except MiniMaxError as exc:
                 log.warning("MiniMax batch enrichment failed: %s: %s", type(exc).__name__, exc)
+                if _is_minimax_sensitive_error(exc) and len(pending) == 1:
+                    storage.mark_enrichment_status(
+                        pending[0]["link"],
+                        "failed",
+                        increment_attempts=True,
+                        error=_sensitive_error_text(exc),
+                    )
+                    result = {
+                        "selected_count": len(pending),
+                        "done_count": 0,
+                        "failed_count": 1,
+                        "invalid_rows": 0,
+                        "row_count": 0,
+                        "extra_rows": 0,
+                        "missing_count": 1,
+                        "error_type": type(exc).__name__,
+                        "error": str(exc)[:300],
+                        "permanent_failed": 1,
+                    }
+                    storage.add_log("news_llm_batch", "批量LLM敏感内容失败，已永久跳过", result)
+                    return result
                 for article in pending:
                     _mark_batch_unresolved(
                         article,

@@ -21,6 +21,11 @@ const CHINA_FEED_SORT_OPTIONS = [
   { value: 'date', label: '按日期' },
   { value: 'views', label: '按浏览' },
 ]
+const DATE_FILTER_OPTIONS = [
+  { value: 'all', label: '全部' },
+  { value: 'today', label: '今天' },
+  { value: 'yesterday', label: '昨天' },
+]
 
 function buildTopTags(articles) {
   return Object.entries(
@@ -49,6 +54,35 @@ function buildTopCategories(articles) {
 
 function formatViews(value) {
   return `${Number(value || 0)} 次阅读`
+}
+
+function localDateKey(offsetDays = 0) {
+  const date = new Date()
+  date.setDate(date.getDate() + offsetDays)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function articleDateKey(article) {
+  return (article.published || '').slice(0, 10)
+}
+
+function resolveDateFilterKey(value) {
+  if (value === 'today') return localDateKey(0)
+  if (value === 'yesterday') return localDateKey(-1)
+  return value
+}
+
+function isPresetDateFilter(value) {
+  return DATE_FILTER_OPTIONS.some((option) => option.value === value)
+}
+
+function filterArticlesByDate(articles, selectedDateFilter) {
+  if (!selectedDateFilter || selectedDateFilter === 'all') return articles
+  const targetDate = resolveDateFilterKey(selectedDateFilter)
+  return articles.filter((article) => articleDateKey(article) === targetDate)
 }
 
 function hotWindowEmptyLabel(window) {
@@ -89,6 +123,45 @@ function briefCardText(article) {
   )
 }
 
+function NewsDateFilter({ value, onChange }) {
+  const customValue = value && !isPresetDateFilter(value) ? value : ''
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="inline-flex rounded-full border border-border bg-white/78 p-1 shadow-[0_10px_24px_rgba(62,45,24,0.08)]">
+        {DATE_FILTER_OPTIONS.map((option) => {
+          const active = value === option.value
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onChange(option.value)}
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors sm:px-4 ${
+                active
+                  ? 'bg-accent text-white shadow-[0_8px_18px_rgba(157,61,51,0.18)]'
+                  : 'text-text-muted hover:bg-surface hover:text-text'
+              }`}
+            >
+              {option.label}
+            </button>
+          )
+        })}
+      </div>
+      <input
+        type="date"
+        value={customValue}
+        onChange={(event) => onChange(event.target.value || 'all')}
+        aria-label="选择新闻日期"
+        className={`h-9 rounded-full border px-3 text-xs font-semibold outline-none transition-colors ${
+          customValue
+            ? 'border-accent bg-accent text-white [color-scheme:dark]'
+            : 'border-border bg-white/78 text-text-muted hover:bg-surface'
+        }`}
+      />
+    </div>
+  )
+}
+
 export default function NewsTab({
   articles,
   tabTitle = '葡萄牙新闻',
@@ -103,6 +176,7 @@ export default function NewsTab({
   const [briefInitialScrollTop, setBriefInitialScrollTop] = useState(0)
   const [visibleCount, setVisibleCount] = useState(INITIAL_FEED_COUNT)
   const [chinaFeedSort, setChinaFeedSort] = useState('date')
+  const [selectedDateFilter, setSelectedDateFilter] = useState('all')
   const [hotWindow, setHotWindow] = useState('week')
   const [briefModalOpen, setBriefModalOpen] = useState(false)
   const [selectedBrief, setSelectedBrief] = useState(null)
@@ -200,24 +274,34 @@ export default function NewsTab({
     setBriefInitialScrollTop(0)
   }, [])
 
+  const handleDateFilterChange = useCallback((value) => {
+    setSelectedDateFilter(value || 'all')
+    setVisibleCount(INITIAL_FEED_COUNT)
+  }, [])
+
   const featured = articles[0] || null
   const rest = articles.slice(1)
   const feed = rest.slice(3)
+  const dateFilteredFeed = useMemo(
+    () => filterArticlesByDate(feed, selectedDateFilter),
+    [feed, selectedDateFilter]
+  )
+  const isDateFiltered = selectedDateFilter !== 'all'
   const portugalDetailedFeed = useMemo(
-    () => feed.filter(hasDetailedArticleContent),
-    [feed]
+    () => dateFilteredFeed.filter(hasDetailedArticleContent),
+    [dateFilteredFeed]
   )
   const portugalSummaryFeed = useMemo(
-    () => feed.filter((article) => !hasDetailedArticleContent(article)),
-    [feed]
+    () => dateFilteredFeed.filter((article) => !hasDetailedArticleContent(article)),
+    [dateFilteredFeed]
   )
   const chinaDetailedFeed = useMemo(
-    () => sortChinaFeedArticles(feed.filter(hasDetailedArticleContent), chinaFeedSort),
-    [feed, chinaFeedSort]
+    () => sortChinaFeedArticles(dateFilteredFeed.filter(hasDetailedArticleContent), chinaFeedSort),
+    [dateFilteredFeed, chinaFeedSort]
   )
   const chinaSummaryFeed = useMemo(
-    () => sortChinaFeedArticles(feed.filter((article) => !hasDetailedArticleContent(article)), chinaFeedSort),
-    [feed, chinaFeedSort]
+    () => sortChinaFeedArticles(dateFilteredFeed.filter((article) => !hasDetailedArticleContent(article)), chinaFeedSort),
+    [dateFilteredFeed, chinaFeedSort]
   )
 
   if (!articles.length) {
@@ -353,7 +437,7 @@ export default function NewsTab({
 
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)]">
             <div>
-              <div className="mb-4 flex items-start justify-between gap-4">
+              <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <Badge color="#9D3D33">精选内容</Badge>
                   <h2
@@ -363,30 +447,33 @@ export default function NewsTab({
                     持续关注
                   </h2>
                 </div>
-                <div className="inline-flex rounded-full border border-border bg-white/78 p-1 shadow-[0_10px_24px_rgba(62,45,24,0.08)]">
-                  {CHINA_FEED_SORT_OPTIONS.map((option) => {
-                    const active = chinaFeedSort === option.value
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => setChinaFeedSort(option.value)}
-                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors sm:px-4 ${
-                          active
-                            ? 'bg-accent text-white shadow-[0_8px_18px_rgba(157,61,51,0.22)]'
-                            : 'text-text-muted hover:bg-surface hover:text-text'
-                        }`}
-                      >
-                        {option.label}
-                      </button>
-                    )
-                  })}
+                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                  <NewsDateFilter value={selectedDateFilter} onChange={handleDateFilterChange} />
+                  <div className="inline-flex rounded-full border border-border bg-white/78 p-1 shadow-[0_10px_24px_rgba(62,45,24,0.08)]">
+                    {CHINA_FEED_SORT_OPTIONS.map((option) => {
+                      const active = chinaFeedSort === option.value
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setChinaFeedSort(option.value)}
+                          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors sm:px-4 ${
+                            active
+                              ? 'bg-accent text-white shadow-[0_8px_18px_rgba(157,61,51,0.22)]'
+                              : 'text-text-muted hover:bg-surface hover:text-text'
+                          }`}
+                        >
+                          {option.label}
+                        </button>
+                      )
+                    })}
+                  </div>
                 </div>
               </div>
 
               {chinaVisibleFeed.length === 0 ? (
                 <div className="rounded-2xl border border-border bg-surface-muted px-5 py-8 text-center text-sm text-text-muted">
-                  暂无带完整正文的关注内容，右侧可先浏览标题摘要。
+                  {isDateFiltered ? '该日期暂无带完整正文的关注内容。' : '暂无带完整正文的关注内容，右侧可先浏览简讯。'}
                 </div>
               ) : (
                 <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -419,7 +506,7 @@ export default function NewsTab({
                 </p>
                 {chinaSummaryFeed.length === 0 ? (
                   <p className="mt-4 rounded-2xl bg-surface-muted px-4 py-4 text-sm text-text-muted">
-                    当前没有摘要简讯。
+                    {isDateFiltered ? '该日期暂无摘要简讯。' : '当前没有摘要简讯。'}
                   </p>
                 ) : (
                   <div className="mt-4 grid gap-3">
@@ -591,7 +678,7 @@ export default function NewsTab({
 
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)]">
             <div>
-              <div className="mb-5 flex items-start justify-between gap-4">
+              <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <Badge color="#2B6CB0">最新报道</Badge>
                   <h2
@@ -601,11 +688,12 @@ export default function NewsTab({
                     持续更新
                   </h2>
                 </div>
+                <NewsDateFilter value={selectedDateFilter} onChange={handleDateFilterChange} />
               </div>
 
               {visibleFeed.length === 0 ? (
                 <div className="rounded-2xl border border-border bg-surface-muted px-5 py-8 text-center text-sm text-text-muted">
-                  暂无带完整正文的新闻，右侧可先浏览标题摘要。
+                  {isDateFiltered ? '该日期暂无带完整正文的新闻。' : '暂无带完整正文的新闻，右侧可先浏览简讯。'}
                 </div>
               ) : (
                 <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -638,7 +726,7 @@ export default function NewsTab({
                 </p>
                 {portugalSummaryFeed.length === 0 ? (
                   <p className="mt-4 rounded-2xl bg-surface-muted px-4 py-4 text-sm text-text-muted">
-                    当前没有摘要简讯。
+                    {isDateFiltered ? '该日期暂无摘要简讯。' : '当前没有摘要简讯。'}
                   </p>
                 ) : (
                   <div className="mt-4 grid gap-3">
