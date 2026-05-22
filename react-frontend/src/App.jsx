@@ -5,6 +5,7 @@ import Sidebar from './components/Sidebar'
 import CnSidebar from './components/CnSidebar'
 import Toast from './components/Toast'
 import HomePage from './pages/HomePage'
+import PracticalGuideTab from './pages/PracticalGuideTab'
 import NewsTab from './pages/NewsTab'
 import NewsTabSkeleton from './components/news/NewsTabSkeleton'
 import CommunityTab from './pages/CommunityTab'
@@ -25,6 +26,7 @@ import { api } from './api'
 const ACTIVE_TAB_STORAGE_KEY = 'diarynews.activeTab'
 const RESTORABLE_TABS = new Set([
   '首页',
+  '实用指南',
   '华人关注',
   '葡萄牙新闻',
   '招聘',
@@ -224,7 +226,7 @@ export default function App() {
   ), [cnTagFiltered, activeCategory])
 
   // Available tabs based on auth (招聘 is public)
-  const baseTabs = ['首页', '华人关注', '葡萄牙新闻', '招聘', '房产', '二手', '社区', 'AI 助手']
+  const baseTabs = ['首页', '实用指南', '华人关注', '葡萄牙新闻', '招聘', '房产', '二手', '社区', 'AI 助手']
   const tabs = user
     ? [...baseTabs, ...(user.is_admin ? ['管理'] : [])]
     : baseTabs
@@ -232,6 +234,7 @@ export default function App() {
   const mobileTabs = user
     ? [
         { label: '首页',    icon: 'home',          tab: '首页' },
+        { label: '指南',    icon: 'menu_book',     tab: '实用指南' },
         { label: '华人',    icon: 'diversity_3',   tab: '华人关注' },
         { label: '新闻',    icon: 'newspaper',     tab: '葡萄牙新闻' },
         { label: '招聘',    icon: 'work',          tab: '招聘' },
@@ -243,6 +246,7 @@ export default function App() {
       ]
     : [
         { label: '首页',    icon: 'home',          tab: '首页' },
+        { label: '指南',    icon: 'menu_book',     tab: '实用指南' },
         { label: '华人',    icon: 'diversity_3',   tab: '华人关注' },
         { label: '新闻',    icon: 'newspaper',     tab: '葡萄牙新闻' },
         { label: '招聘',    icon: 'work',          tab: '招聘' },
@@ -360,7 +364,7 @@ export default function App() {
         user={user}
         onLoginClick={() => setShowLogin(true)}
         sidebar={sidebar}
-        fullWidth={activeTab === '首页' || activeTab === '管理' || activeTab === 'AI 助手' || activeTab === '个人资料'}
+        fullWidth={activeTab === '首页' || activeTab === '实用指南' || activeTab === '管理' || activeTab === 'AI 助手' || activeTab === '个人资料'}
       >
         {activeTab === '首页' && (
           <HomePage
@@ -374,6 +378,9 @@ export default function App() {
             onLoginClick={() => setShowLogin(true)}
             onArticleOpen={handleArticleOpen}
           />
+        )}
+        {activeTab === '实用指南' && (
+          <PracticalGuideTab />
         )}
         {activeTab === '葡萄牙新闻' && (
           showNewsSkeleton ? (

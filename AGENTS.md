@@ -44,3 +44,8 @@ React SPA frontend (`react-frontend/`) + FastAPI backend (`backend/`), connected
 - **Plan first**: Before starting a multi-step feature, write the development plan to `dev-log/` as a markdown file
 - **Sequential tasks**: Break plans into discrete tasks. Complete one task at a time, show the result, and wait for user confirmation before starting the next
 - **Dev logs**: Record session summaries and development plans in `dev-log/` with date-stamped filenames (e.g. `plan-auth-2026-04-15.md`)
+
+<!-- SPECKIT START -->
+For additional context about technologies to be used, project structure,
+shell commands, and other important information, read the current plan
+<!-- SPECKIT END -->

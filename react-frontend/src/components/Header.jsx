@@ -35,14 +35,14 @@ export default function Header({ activeTab, tabs, onTabChange, user, onLoginClic
             Portugal Chinese Hub
           </span>
         </button>
-        <nav className="hidden md:flex items-center gap-6">
+        <nav className="hidden md:flex items-center gap-4 lg:gap-6">
           {tabs.map(tab => {
             const active = activeTab === tab
             return (
               <button
                 key={tab}
                 onClick={() => onTabChange(tab)}
-                className={`relative text-sm font-semibold py-1 transition-colors ${
+                className={`relative py-1 text-xs font-semibold transition-colors lg:text-sm ${
                   active ? 'text-text' : 'text-text-muted hover:text-text'
                 }`}
               >
