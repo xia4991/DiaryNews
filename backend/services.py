@@ -226,6 +226,135 @@ def _mark_batch_unresolved(article: dict, reason: str) -> None:
     )
 
 
+def _run_batch_enrichment(
+    pending: list[dict],
+    *,
+    log_event: str,
+    start_label: str,
+    success_label: str,
+    failure_label: str,
+    config_error_label: str,
+    sensitive_label: str,
+    auto: bool = False,
+) -> dict:
+    if not pending:
+        return {"selected_count": 0, "done_count": 0, "failed_count": 0}
+
+    storage.add_log(
+        log_event,
+        f"{start_label}: 选择{len(pending)}条",
+        {"selected_count": len(pending), "auto": auto},
+    )
+
+    enriched = []
+    matched_indexes = set()
+    invalid_rows = 0
+    row_count = 0
+    extra_rows = 0
+    aborted_reason = ""
+
+    try:
+        batch_result = batch_enrich_news_articles(pending)
+        enriched = batch_result["enriched"]
+        matched_indexes = batch_result["matched_indexes"]
+        invalid_rows = batch_result["invalid_rows"]
+        row_count = batch_result["row_count"]
+        extra_rows = batch_result["extra_rows"]
+    except MiniMaxConfigError as exc:
+        log.error("MiniMax config error during batch enrichment: %s", exc)
+        aborted_reason = "config"
+    except MiniMaxError as exc:
+        log.warning("MiniMax batch enrichment failed: %s: %s", type(exc).__name__, exc)
+        if _is_minimax_sensitive_error(exc) and len(pending) == 1:
+            storage.mark_enrichment_status(
+                pending[0]["link"],
+                "failed",
+                increment_attempts=True,
+                error=_sensitive_error_text(exc),
+            )
+            result = {
+                "selected_count": len(pending),
+                "done_count": 0,
+                "failed_count": 1,
+                "invalid_rows": 0,
+                "row_count": 0,
+                "extra_rows": 0,
+                "missing_count": 1,
+                "error_type": type(exc).__name__,
+                "error": str(exc)[:300],
+                "permanent_failed": 1,
+                "auto": auto,
+            }
+            storage.add_log(log_event, sensitive_label, result)
+            return result
+        for article in pending:
+            _mark_batch_unresolved(
+                article,
+                f"{type(exc).__name__}: {str(exc)[:300]}",
+            )
+        result = {
+            "selected_count": len(pending),
+            "done_count": 0,
+            "failed_count": len(pending),
+            "invalid_rows": 0,
+            "row_count": 0,
+            "extra_rows": 0,
+            "missing_count": len(pending),
+            "error_type": type(exc).__name__,
+            "error": str(exc)[:300],
+            "auto": auto,
+        }
+        storage.add_log(log_event, failure_label, result)
+        return result
+
+    if aborted_reason:
+        result = {
+            "selected_count": len(pending),
+            "done_count": 0,
+            "failed_count": 0,
+            "aborted": aborted_reason,
+            "auto": auto,
+        }
+        storage.add_log(log_event, config_error_label, result)
+        return result
+
+    for updated in enriched:
+        new_attempts = (updated.get("enrichment_attempts") or 0) + 1
+        updated["enrichment_status"] = "done"
+        updated["enrichment_attempts"] = new_attempts
+        updated["enrichment_error"] = ""
+
+    if enriched:
+        now = datetime.now(timezone.utc).isoformat()
+        storage.save_news({"last_updated": now, "articles": enriched})
+        log.info("Batch enriched %d articles", len(enriched))
+
+    missing_articles = [
+        article for index, article in enumerate(pending)
+        if index not in matched_indexes
+    ]
+    for article in missing_articles:
+        _mark_batch_unresolved(article, "批量LLM未返回对应序号或返回内容无效")
+
+    missing_count = len(missing_articles)
+    result = {
+        "selected_count": len(pending),
+        "done_count": len(enriched),
+        "failed_count": len(pending) - len(enriched),
+        "missing_count": missing_count,
+        "invalid_rows": invalid_rows,
+        "row_count": row_count,
+        "extra_rows": extra_rows,
+        "auto": auto,
+    }
+    storage.add_log(
+        log_event,
+        f"{success_label}: 选择{result['selected_count']}条, 成功{result['done_count']}条",
+        result,
+    )
+    return result
+
+
 def batch_enrich_pending_news(limit: int = 20) -> dict:
     """Run one compact LLM call for up to 20 pending articles."""
     limit = max(1, min(int(limit or 20), 20))
@@ -238,118 +367,41 @@ def batch_enrich_pending_news(limit: int = 20) -> dict:
         }
     try:
         pending = storage.list_pending_enrichment(limit=limit)
-        if not pending:
-            return {"selected_count": 0, "done_count": 0, "failed_count": 0}
-        storage.add_log(
-            "news_llm_batch",
-            f"批量LLM开始: 选择{len(pending)}条",
-            {"selected_count": len(pending)},
+        return _run_batch_enrichment(
+            pending,
+            log_event="news_llm_batch",
+            start_label="批量LLM开始",
+            success_label="批量LLM完成",
+            failure_label="批量LLM失败",
+            config_error_label="批量LLM配置错误，已中止",
+            sensitive_label="批量LLM敏感内容失败，已永久跳过",
         )
+    finally:
+        _enrich_lock.release()
 
-        enriched = []
-        matched_indexes = set()
-        invalid_rows = 0
-        row_count = 0
-        extra_rows = 0
-        aborted_reason = ""
 
-        if pending:
-            try:
-                batch_result = batch_enrich_news_articles(pending)
-                enriched = batch_result["enriched"]
-                matched_indexes = batch_result["matched_indexes"]
-                invalid_rows = batch_result["invalid_rows"]
-                row_count = batch_result["row_count"]
-                extra_rows = batch_result["extra_rows"]
-            except MiniMaxConfigError as exc:
-                log.error("MiniMax config error during batch enrichment: %s", exc)
-                aborted_reason = "config"
-            except MiniMaxError as exc:
-                log.warning("MiniMax batch enrichment failed: %s: %s", type(exc).__name__, exc)
-                if _is_minimax_sensitive_error(exc) and len(pending) == 1:
-                    storage.mark_enrichment_status(
-                        pending[0]["link"],
-                        "failed",
-                        increment_attempts=True,
-                        error=_sensitive_error_text(exc),
-                    )
-                    result = {
-                        "selected_count": len(pending),
-                        "done_count": 0,
-                        "failed_count": 1,
-                        "invalid_rows": 0,
-                        "row_count": 0,
-                        "extra_rows": 0,
-                        "missing_count": 1,
-                        "error_type": type(exc).__name__,
-                        "error": str(exc)[:300],
-                        "permanent_failed": 1,
-                    }
-                    storage.add_log("news_llm_batch", "批量LLM敏感内容失败，已永久跳过", result)
-                    return result
-                for article in pending:
-                    _mark_batch_unresolved(
-                        article,
-                        f"{type(exc).__name__}: {str(exc)[:300]}",
-                    )
-                result = {
-                    "selected_count": len(pending),
-                    "done_count": 0,
-                    "failed_count": len(pending),
-                    "invalid_rows": 0,
-                    "row_count": 0,
-                    "extra_rows": 0,
-                    "missing_count": len(pending),
-                    "error_type": type(exc).__name__,
-                    "error": str(exc)[:300],
-                }
-                storage.add_log("news_llm_batch", "批量LLM失败", result)
-                return result
-
-        if aborted_reason:
-            result = {
-                "selected_count": len(pending),
-                "done_count": 0,
-                "failed_count": 0,
-                "aborted": aborted_reason,
-            }
-            storage.add_log("news_llm_batch", "批量LLM配置错误，已中止", result)
-            return result
-
-        for updated in enriched:
-            new_attempts = (updated.get("enrichment_attempts") or 0) + 1
-            updated["enrichment_status"] = "done"
-            updated["enrichment_attempts"] = new_attempts
-            updated["enrichment_error"] = ""
-
-        if enriched:
-            now = datetime.now(timezone.utc).isoformat()
-            storage.save_news({"last_updated": now, "articles": enriched})
-            log.info("Batch enriched %d articles", len(enriched))
-
-        missing_articles = [
-            article for index, article in enumerate(pending)
-            if index not in matched_indexes
-        ]
-        for article in missing_articles:
-            _mark_batch_unresolved(article, "批量LLM未返回对应序号或返回内容无效")
-
-        missing_count = len(missing_articles)
-        result = {
-            "selected_count": len(pending),
-            "done_count": len(enriched),
-            "failed_count": len(pending) - len(enriched),
-            "missing_count": missing_count,
-            "invalid_rows": invalid_rows,
-            "row_count": row_count,
-            "extra_rows": extra_rows,
+def auto_batch_enrich_missing_content_news(limit: int = 20) -> dict:
+    """Run automatic batch LLM only for articles missing Chinese content."""
+    limit = max(1, min(int(limit or 20), 20))
+    if not _enrich_lock.acquire(blocking=False):
+        return {
+            "status": "already_running",
+            "selected_count": 0,
+            "done_count": 0,
+            "failed_count": 0,
         }
-        storage.add_log(
-            "news_llm_batch",
-            f"批量LLM完成: 选择{result['selected_count']}条, 成功{result['done_count']}条",
-            result,
+    try:
+        pending = storage.list_pending_enrichment_missing_content(limit=limit)
+        return _run_batch_enrichment(
+            pending,
+            log_event="news_llm_auto_batch",
+            start_label="自动批量LLM开始",
+            success_label="自动批量LLM完成",
+            failure_label="自动批量LLM失败",
+            config_error_label="自动批量LLM配置错误，已中止",
+            sensitive_label="自动批量LLM敏感内容失败，已永久跳过",
+            auto=True,
         )
-        return result
     finally:
         _enrich_lock.release()
 

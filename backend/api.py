@@ -24,6 +24,8 @@ from backend.auth import (
 from backend.config import (
     ADMIN_EMAILS, CORS_ORIGINS,
     MEDIA_BACKEND, MEDIA_LOCAL_ROOT, MEDIA_PUBLIC_URL,
+    NEWS_AUTO_BATCH_LLM_INTERVAL,
+    NEWS_AUTO_BATCH_LLM_LIMIT,
     NEWS_FETCH_INTERVAL,
 )
 from backend.sources import RSS_SOURCES
@@ -59,6 +61,27 @@ async def _news_collect_loop():
         await asyncio.sleep(NEWS_FETCH_INTERVAL)
 
 
+async def _news_auto_batch_llm_loop():
+    """Background task: auto-enrich missing-content news with batch LLM."""
+    await asyncio.sleep(90)
+    while True:
+        try:
+            result = await asyncio.to_thread(
+                services.auto_batch_enrich_missing_content_news,
+                NEWS_AUTO_BATCH_LLM_LIMIT,
+            )
+            log.info(
+                "Auto batch LLM: selected=%d done=%d failed=%d status=%s",
+                result.get("selected_count", 0),
+                result.get("done_count", 0),
+                result.get("failed_count", 0),
+                result.get("status", "ok"),
+            )
+        except Exception:
+            log.exception("Auto batch LLM failed")
+        await asyncio.sleep(NEWS_AUTO_BATCH_LLM_INTERVAL)
+
+
 app = FastAPI(title="葡萄牙华人信息中心 API", version="2.0.0")
 app.include_router(chat_router, prefix="/api/chat")
 
@@ -69,6 +92,13 @@ async def _start_background_tasks():
     if NEWS_FETCH_INTERVAL > 0:
         asyncio.create_task(_news_collect_loop())
         log.info("Auto-collect enabled: every %ds", NEWS_FETCH_INTERVAL)
+    if NEWS_AUTO_BATCH_LLM_INTERVAL > 0:
+        asyncio.create_task(_news_auto_batch_llm_loop())
+        log.info(
+            "Auto batch LLM enabled: every %ds, limit=%d",
+            NEWS_AUTO_BATCH_LLM_INTERVAL,
+            NEWS_AUTO_BATCH_LLM_LIMIT,
+        )
 
 
 if MEDIA_BACKEND == "local":

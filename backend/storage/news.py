@@ -323,6 +323,25 @@ def list_pending_enrichment(limit: int = 20, max_attempts: int = MAX_ENRICHMENT_
     return [dict(r) for r in rows]
 
 
+def list_pending_enrichment_missing_content(
+    limit: int = 20,
+    max_attempts: int = MAX_ENRICHMENT_ATTEMPTS,
+) -> list:
+    """Return pending enrichment rows that still have no Chinese content body."""
+    _ensure_db()
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT * FROM articles
+               WHERE enrichment_status != 'failed'
+                 AND COALESCE(enrichment_attempts, 0) < ?
+                 AND COALESCE(content_zh, '') = ''
+               ORDER BY published DESC
+               LIMIT ?""",
+            (max_attempts, limit),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def repair_enrichment_status() -> dict:
     """Reconcile enrichment_status with actual stored content. Idempotent.
 
