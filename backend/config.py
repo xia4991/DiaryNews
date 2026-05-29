@@ -36,12 +36,14 @@ CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "http://localh
 # ── Media storage ────────────────────────────────────────────────────────────
 # ── News fetch ───────────────────────────────────────────────────────────────
 NEWS_FETCH_INTERVAL = int(os.environ.get("NEWS_FETCH_INTERVAL", "3600"))  # 0 to disable
+NEWS_AUTO_COLLECT_MAX_NEW = int(os.environ.get("NEWS_AUTO_COLLECT_MAX_NEW", "60"))
+NEWS_AUTO_COLLECT_MAX_AGE_HOURS = int(os.environ.get("NEWS_AUTO_COLLECT_MAX_AGE_HOURS", "12"))
 NEWS_AUTO_BATCH_LLM_INTERVAL = int(os.environ.get("NEWS_AUTO_BATCH_LLM_INTERVAL", "900"))  # 0 to disable
 NEWS_AUTO_BATCH_LLM_LIMIT = int(os.environ.get("NEWS_AUTO_BATCH_LLM_LIMIT", "20"))
 MAX_ENRICHMENT_ATTEMPTS = int(os.environ.get("MAX_ENRICHMENT_ATTEMPTS", "3"))
 # Stage A drops articles whose RSS summary has fewer than this many whitespace-split tokens.
 # Set to 0 to disable the filter.
-MIN_SUMMARY_WORDS = int(os.environ.get("MIN_SUMMARY_WORDS", "30"))
+MIN_SUMMARY_WORDS = int(os.environ.get("MIN_SUMMARY_WORDS", "0"))
 
 # ── Media storage ────────────────────────────────────────────────────────────
 MEDIA_BACKEND    = os.environ.get("MEDIA_BACKEND", "local")      # local | s3

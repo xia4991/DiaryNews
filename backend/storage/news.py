@@ -396,6 +396,21 @@ def mark_enrichment_status(
         conn.execute(sql, params)
 
 
+def update_scraped_content(link: str, scraped_content: str) -> None:
+    """Persist a freshly scraped article body without touching enrichment fields."""
+    if not scraped_content:
+        return
+    _ensure_db()
+    with get_db() as conn:
+        conn.execute(
+            """UPDATE articles
+               SET scraped_content = ?
+               WHERE link = ?
+                 AND COALESCE(scraped_content, '') = ''""",
+            (scraped_content, link),
+        )
+
+
 def increment_article_view(link: str, increment: bool = True) -> Optional[dict]:
     """Return `{link, view_count}` for an article. When `increment=False`, only reads
     the current count without writing — used by the rate-limit dedup path so a flood

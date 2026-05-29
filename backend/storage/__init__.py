@@ -10,6 +10,7 @@ from backend.storage.news import (  # noqa: F401
     list_pending_enrichment,
     list_pending_enrichment_missing_content,
     mark_enrichment_status,
+    update_scraped_content,
     repair_enrichment_status,
     get_article_stats,
     get_today_article_stats,

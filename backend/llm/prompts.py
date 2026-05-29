@@ -48,7 +48,11 @@ def batch_article_chinese_prompt(articles: list[dict]) -> str:
         {
             "title": str(article.get("title", "")),
             "summary": str(article.get("summary", "")),
-            "content": str(article.get("scraped_content", "") or article.get("content", "")),
+            "content": str(
+                article.get("_llm_content", "")
+                or article.get("scraped_content", "")
+                or article.get("content", "")
+            ),
         }
         for article in articles
     ]

@@ -24,6 +24,8 @@ from backend.auth import (
 from backend.config import (
     ADMIN_EMAILS, CORS_ORIGINS,
     MEDIA_BACKEND, MEDIA_LOCAL_ROOT, MEDIA_PUBLIC_URL,
+    NEWS_AUTO_COLLECT_MAX_AGE_HOURS,
+    NEWS_AUTO_COLLECT_MAX_NEW,
     NEWS_AUTO_BATCH_LLM_INTERVAL,
     NEWS_AUTO_BATCH_LLM_LIMIT,
     NEWS_FETCH_INTERVAL,
@@ -53,7 +55,9 @@ async def _news_collect_loop():
     while True:
         try:
             result = await asyncio.to_thread(
-                services.collect_news, max_new=15, max_age_hours=3
+                services.collect_news,
+                max_new=NEWS_AUTO_COLLECT_MAX_NEW,
+                max_age_hours=NEWS_AUTO_COLLECT_MAX_AGE_HOURS,
             )
             log.info("Auto-collect: %d new", result["new_count"])
         except Exception:
@@ -91,7 +95,12 @@ async def _start_background_tasks():
     asyncio.create_task(_listing_expiry_loop())
     if NEWS_FETCH_INTERVAL > 0:
         asyncio.create_task(_news_collect_loop())
-        log.info("Auto-collect enabled: every %ds", NEWS_FETCH_INTERVAL)
+        log.info(
+            "Auto-collect enabled: every %ds, max_new=%d, max_age_hours=%d",
+            NEWS_FETCH_INTERVAL,
+            NEWS_AUTO_COLLECT_MAX_NEW,
+            NEWS_AUTO_COLLECT_MAX_AGE_HOURS,
+        )
     if NEWS_AUTO_BATCH_LLM_INTERVAL > 0:
         asyncio.create_task(_news_auto_batch_llm_loop())
         log.info(

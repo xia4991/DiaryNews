@@ -4,17 +4,17 @@ RSS_SOURCES = {
     "RTP":                "https://www.rtp.pt/noticias/rss",
     "Observador":         "https://observador.pt/feed/",
     "SIC Notícias":       "https://rss.impresa.pt/feed/latest/sicnot.rss?type=ARTICLE,VIDEO,GALLERY,STREAM,PLAYLIST,EVENT,NEWSLETTER&limit=20&pubsubhub=true",
-    "TVI24":              "https://tvi24.iol.pt/rss/ultimas",
-    "Jornal de Notícias": "https://www.jn.pt/rss/",
     "Público":            "https://feeds.feedburner.com/PublicoRSS",
     "Diário de Notícias": "https://www.dn.pt/feed/",
     "Expresso":           "https://rss.impresa.pt/feed/latest/expresso.rss?type=ARTICLE,VIDEO,GALLERY,STREAM,PLAYLIST,EVENT,NEWSLETTER&limit=20&pubsubhub=true",
     "ECO":                "https://eco.sapo.pt/feed/",
+    "SAPO24":             "https://24noticias.sapo.pt/rss",
 }
 
 SOURCE_PRIORITY = {
     "Público": 1, "Expresso": 2, "Observador": 3, "Diário de Notícias": 4,
-    "RTP": 5, "ECO": 6, "SIC Notícias": 7, "Jornal de Notícias": 8, "TVI24": 9,
+    "RTP": 5, "ECO": 6, "SIC Notícias": 7, "SAPO24": 8,
+    "Jornal de Notícias": 9, "TVI24": 10,
 }
 
 # Keyword fallback for Chinese-interest tags when LLM returns empty tags_zh

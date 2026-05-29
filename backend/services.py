@@ -226,6 +226,26 @@ def _mark_batch_unresolved(article: dict, reason: str) -> None:
     )
 
 
+def _prepare_batch_enrichment_articles(pending: list[dict]) -> list[dict]:
+    """Scrape article bodies before compact batch LLM enrichment.
+
+    The automatic batch path used to send only RSS title/summary, which made
+    many `content_zh` rows look like title-only summaries. Keep the full scrape
+    in `scraped_content` for storage, and pass the trimmed LLM input through a
+    private key that the prompt builder understands but storage ignores.
+    """
+    prepared = []
+    for article in pending:
+        text_for_llm, scraped_content = ensure_scraped_content(article)
+        updated = {**article, "_llm_content": text_for_llm}
+        if scraped_content:
+            updated["scraped_content"] = scraped_content
+            if not article.get("scraped_content"):
+                storage.update_scraped_content(article["link"], scraped_content)
+        prepared.append(updated)
+    return prepared
+
+
 def _run_batch_enrichment(
     pending: list[dict],
     *,
@@ -239,6 +259,8 @@ def _run_batch_enrichment(
 ) -> dict:
     if not pending:
         return {"selected_count": 0, "done_count": 0, "failed_count": 0}
+
+    pending = _prepare_batch_enrichment_articles(pending)
 
     storage.add_log(
         log_event,
