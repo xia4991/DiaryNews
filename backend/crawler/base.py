@@ -40,6 +40,10 @@ class RawArticle:
     guid: str = ""
     rss_category: str = ""
     fetched_at: str = ""
+    # Raw <content:encoded> HTML when the feed ships the full body. Carried only
+    # in-memory through Stage A; services.collect_news cleans it into
+    # scraped_content and drops it before persistence (not a DB column).
+    rss_full_html: str = ""
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -110,7 +114,21 @@ class BaseAdapter(ABC):
             language=self.language,
             guid=entry.get("id", "") or entry.get("guid", ""),
             rss_category=self.extract_rss_category(entry),
+            rss_full_html=self.extract_full_html(entry),
         )
+
+    def extract_full_html(self, entry) -> str:
+        """Return the feed's full-body HTML from <content:encoded>, if present.
+
+        feedparser maps content:encoded to entry.content[0].value. Many feeds ship
+        only a teaser here (or nothing); callers must length-gate the cleaned text.
+        """
+        content = entry.get("content")
+        if content and isinstance(content, list):
+            first = content[0]
+            if isinstance(first, dict):
+                return first.get("value", "") or ""
+        return ""
 
     def fetch(self) -> FetchResult:
         start = time.monotonic()

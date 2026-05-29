@@ -49,6 +49,10 @@ MAX_ENRICHMENT_ATTEMPTS = int(os.environ.get("MAX_ENRICHMENT_ATTEMPTS", "3"))
 # Stage A drops articles whose RSS summary has fewer than this many whitespace-split tokens.
 # Set to 0 to disable the filter.
 MIN_SUMMARY_WORDS = int(os.environ.get("MIN_SUMMARY_WORDS", "0"))
+# When a feed ships the full article body in <content:encoded>, Stage A cleans it and
+# stores it as scraped_content if it has at least this many words — so Stage B reuses
+# it instead of scraping the page. Guards against teaser-in-content feeds. 0 disables.
+RSS_FULLTEXT_MIN_WORDS = int(os.environ.get("RSS_FULLTEXT_MIN_WORDS", "250"))
 
 # ── Media storage ────────────────────────────────────────────────────────────
 MEDIA_BACKEND    = os.environ.get("MEDIA_BACKEND", "local")      # local | s3

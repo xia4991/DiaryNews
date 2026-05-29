@@ -10,7 +10,11 @@ from datetime import datetime, timezone
 from io import BytesIO
 
 from backend import storage
-from backend.config import MAX_ENRICHMENT_ATTEMPTS, MINIMAX_RATE_LIMIT_SLEEP_SEC
+from backend.config import (
+    MAX_ENRICHMENT_ATTEMPTS,
+    MINIMAX_RATE_LIMIT_SLEEP_SEC,
+    RSS_FULLTEXT_MIN_WORDS,
+)
 from backend.crawler import run_all
 from backend.llm import (
     MiniMaxConfigError,
@@ -18,7 +22,7 @@ from backend.llm import (
     batch_enrich_news_articles,
     enrich_news_article,
 )
-from backend.news import ensure_scraped_content
+from backend.news import ensure_scraped_content, extract_rss_fulltext, reset_scrape_caches
 from backend.storage_media import get_media_storage
 
 log = logging.getLogger("diarynews.services")
@@ -28,6 +32,29 @@ log = logging.getLogger("diarynews.services")
 
 _collect_lock = threading.Lock()
 _enrich_lock = threading.Lock()
+
+
+def _adopt_rss_fulltext(articles: list[dict]) -> int:
+    """Use feed-provided full bodies (content:encoded) as scraped_content.
+
+    Mutates each article dict in place: drops the in-memory `rss_full_html` key and,
+    when the feed shipped a full body, cleans it via trafilatura and (if it clears
+    RSS_FULLTEXT_MIN_WORDS) stores it as `scraped_content`. This lets Stage B reuse the
+    body and skip scraping the page entirely for sources like DN and ECO. Returns the
+    number of articles whose scraped_content was populated from the feed.
+    """
+    adopted = 0
+    for a in articles:
+        html = a.pop("rss_full_html", "") or ""
+        if a.get("scraped_content") or not html:
+            continue
+        text = extract_rss_fulltext(html)
+        if text and (RSS_FULLTEXT_MIN_WORDS <= 0 or len(text.split()) >= RSS_FULLTEXT_MIN_WORDS):
+            a["scraped_content"] = text
+            adopted += 1
+    if adopted:
+        log.info("RSS full-text: populated scraped_content for %d/%d new articles", adopted, len(articles))
+    return adopted
 
 
 def collect_news(max_new: int = 0, max_age_hours: int = 24) -> dict:
@@ -55,6 +82,7 @@ def collect_news(max_new: int = 0, max_age_hours: int = 24) -> dict:
             max_age_hours=max_age_hours,
             max_articles=max_new,
         )
+        stats["rss_fulltext_count"] = _adopt_rss_fulltext(new_articles)
         now = datetime.now(timezone.utc).isoformat()
         if new_articles:
             storage.save_raw_articles(new_articles, last_updated=now)
@@ -193,6 +221,9 @@ def enrich_pending_news(max_retry: int = 20) -> dict:
                     link, "failed", increment_attempts=True,
                     error=f"{type(exc).__name__}: {str(exc)[:300]}",
                 )
+
+        # Bound trafilatura's cache growth across this on-demand-scraping cycle.
+        reset_scrape_caches()
 
         if enriched:
             now = datetime.now(timezone.utc).isoformat()
