@@ -7,7 +7,12 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DB_PATH = os.environ.get("DB_PATH", "data/diarynews.db")
-MAX_ARTICLES = 2000
+# How many recent articles GET /api/news serves in one (un-paginated) response.
+# This only bounds the feed payload; article storage itself is uncapped.
+NEWS_FEED_LIMIT = int(os.environ.get("NEWS_FEED_LIMIT", "3000"))
+# Hard cap on stored article rows. 0 = unlimited (never delete old articles).
+# When > 0, the oldest rows past the cap are trimmed on each save.
+MAX_STORED_ARTICLES = int(os.environ.get("MAX_STORED_ARTICLES", "0"))
 MAX_VIDEOS = 1000
 
 MINIMAX_API_URL = "https://api.minimaxi.com/v1/chat/completions"

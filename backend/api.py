@@ -65,24 +65,32 @@ async def _news_collect_loop():
         await asyncio.sleep(NEWS_FETCH_INTERVAL)
 
 
-async def _news_auto_batch_llm_loop():
-    """Background task: auto-enrich missing-content news with batch LLM."""
+async def _news_auto_enrich_loop():
+    """Background task: auto-enrich pending news one article at a time.
+
+    Per-article enrichment scrapes the full body and uses the single-article
+    prompt (1024+ tokens, long `content_zh` allowed), so the feed gets genuinely
+    detailed articles instead of the title-sized blurbs the batch path produced.
+    Env var names keep the `NEWS_AUTO_BATCH_LLM_*` prefix for deployment
+    back-compat — they now drive this per-article loop's cadence and per-cycle
+    limit. `enrich_pending_news` sleeps `MINIMAX_RATE_LIMIT_SLEEP_SEC` between
+    articles internally to respect MiniMax rate limits.
+    """
     await asyncio.sleep(90)
     while True:
         try:
             result = await asyncio.to_thread(
-                services.auto_batch_enrich_missing_content_news,
+                services.enrich_pending_news,
                 NEWS_AUTO_BATCH_LLM_LIMIT,
             )
             log.info(
-                "Auto batch LLM: selected=%d done=%d failed=%d status=%s",
-                result.get("selected_count", 0),
+                "Auto enrich: retried=%d done=%d status=%s",
+                result.get("retried_count", 0),
                 result.get("done_count", 0),
-                result.get("failed_count", 0),
                 result.get("status", "ok"),
             )
         except Exception:
-            log.exception("Auto batch LLM failed")
+            log.exception("Auto enrich failed")
         await asyncio.sleep(NEWS_AUTO_BATCH_LLM_INTERVAL)
 
 
@@ -102,9 +110,9 @@ async def _start_background_tasks():
             NEWS_AUTO_COLLECT_MAX_AGE_HOURS,
         )
     if NEWS_AUTO_BATCH_LLM_INTERVAL > 0:
-        asyncio.create_task(_news_auto_batch_llm_loop())
+        asyncio.create_task(_news_auto_enrich_loop())
         log.info(
-            "Auto batch LLM enabled: every %ds, limit=%d",
+            "Auto enrich enabled: every %ds, limit=%d (per-article)",
             NEWS_AUTO_BATCH_LLM_INTERVAL,
             NEWS_AUTO_BATCH_LLM_LIMIT,
         )

@@ -2,7 +2,7 @@ from typing import Optional
 from datetime import datetime, time, timezone
 from zoneinfo import ZoneInfo
 
-from backend.config import MAX_ARTICLES, MAX_ENRICHMENT_ATTEMPTS
+from backend.config import MAX_STORED_ARTICLES, MAX_ENRICHMENT_ATTEMPTS, NEWS_FEED_LIMIT
 from backend.storage.database import get_db
 from backend.storage.base import _ensure_db, _get_meta, _set_meta
 
@@ -13,7 +13,7 @@ def load_news() -> dict:
     _ensure_db()
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT * FROM articles ORDER BY published DESC LIMIT ?", (MAX_ARTICLES,)
+            "SELECT * FROM articles ORDER BY published DESC LIMIT ?", (NEWS_FEED_LIMIT,)
         ).fetchall()
     return {
         "last_updated": _get_meta("news_last_updated"),
@@ -432,12 +432,15 @@ def increment_article_view(link: str, increment: bool = True) -> Optional[dict]:
 
 
 def _trim_articles() -> None:
+    """Delete oldest articles past MAX_STORED_ARTICLES. No-op when unlimited (0)."""
+    if MAX_STORED_ARTICLES <= 0:
+        return
     with get_db() as conn:
         conn.execute(
             """DELETE FROM articles WHERE link NOT IN (
                 SELECT link FROM articles ORDER BY published DESC LIMIT ?
             )""",
-            (MAX_ARTICLES,),
+            (MAX_STORED_ARTICLES,),
         )
 
 
@@ -449,4 +452,4 @@ def merge_articles(existing: list, new_articles: list) -> list:
             merged.append(a)
             seen.add(a["link"])
     merged.sort(key=lambda a: a["published"], reverse=True)
-    return merged[:MAX_ARTICLES]
+    return merged[:NEWS_FEED_LIMIT]

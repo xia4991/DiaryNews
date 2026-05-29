@@ -37,7 +37,7 @@ def enrich_news_article(
     zh_prompt = article_chinese_prompt(article["title"], text_for_llm)
     zh_raw = call_minimax(
         zh_prompt,
-        max_tokens=1024,
+        max_tokens=1536,
         prompt_version=ARTICLE_ENRICHMENT_PROMPT_VERSION,
     )
     zh_fields = _parse_chinese_response(zh_raw)
