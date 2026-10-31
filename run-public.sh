@@ -12,6 +12,7 @@ INSTALL_DEPS=false
 SKIP_BUILD=false
 PID_DIR="${DIARYNEWS_PID_DIR:-${TMPDIR:-/tmp}/diarynews}"
 PID_FILE="$PID_DIR/public.pids"
+LOG_DIR="${DIARYNEWS_LOG_DIR:-$PID_DIR/logs}"
 
 usage() {
   cat <<'EOF'
@@ -189,28 +190,33 @@ if [[ ! -d "$FRONTEND_DIR/dist" ]]; then
   exit 1
 fi
 
+mkdir -p "$LOG_DIR"
+
 echo "Starting DiaryNews public stack..."
-echo "Backend:  http://localhost:$BACKEND_PORT"
-echo "Caddy:    http://localhost:$CADDY_PORT"
-echo "Public:   https://$PUBLIC_HOSTNAME"
+echo "Backend:  http://localhost:$BACKEND_PORT   (log: $LOG_DIR/backend.log)"
+echo "Caddy:    http://localhost:$CADDY_PORT     (log: $LOG_DIR/caddy.log)"
+echo "Public:   https://$PUBLIC_HOSTNAME         (log: $LOG_DIR/cloudflared.log)"
 echo "Press Ctrl+C to stop all processes."
 echo "Stop from another terminal with: ./stop-project.sh"
 echo
 
+# Each child's stdout/stderr goes to its own log file. This decouples them from
+# the script's stdout so cloudflared (a Go binary) does not die from SIGPIPE
+# when this script itself is backgrounded with stdout captured / closed.
 (
   cd "$ROOT_DIR"
   ENV=production PORT="$BACKEND_PORT" SITE_URL="https://$PUBLIC_HOSTNAME" "$ROOT_DIR/.venv/bin/python" main.py
-) &
+) >"$LOG_DIR/backend.log" 2>&1 &
 PIDS+=("$!")
 
 (
   caddy run --config "$CADDY_CONFIG"
-) &
+) >"$LOG_DIR/caddy.log" 2>&1 &
 PIDS+=("$!")
 
 (
   cloudflared tunnel --config "$CLOUDFLARED_CONFIG" run
-) &
+) >"$LOG_DIR/cloudflared.log" 2>&1 &
 PIDS+=("$!")
 
 write_pid_file
