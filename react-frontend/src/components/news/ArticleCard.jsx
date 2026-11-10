@@ -1,5 +1,7 @@
+import { memo } from 'react'
 import Card from '../ui/Card'
 import Badge from '../ui/Badge'
+import StoryGroupBadge from './StoryGroupBadge'
 import { CATEGORY_ZH } from '../../constants/categories'
 import { categoryColor, TAG_COLOR } from '../../constants/colors'
 
@@ -7,7 +9,7 @@ function formatViews(value) {
   return `${Number(value || 0)} 次阅读`
 }
 
-export default function ArticleCard({ article, onClick }) {
+function ArticleCard({ article, onClick }) {
   const pub = article.published?.slice(0, 10)
   const tags = article.tags_zh
     ? article.tags_zh.split(',').map(t => t.trim()).filter(Boolean)
@@ -28,6 +30,7 @@ export default function ArticleCard({ article, onClick }) {
         {tags.map(tag => (
           <Badge key={tag} color={TAG_COLOR}>{tag}</Badge>
         ))}
+        <StoryGroupBadge size={article.story_group_size} />
         <span className="text-[11px] text-text-subtle ml-auto tabular-nums">{pub}</span>
       </div>
 
@@ -42,6 +45,13 @@ export default function ArticleCard({ article, onClick }) {
         {article.summary_zh || article.content_zh || article.ai_summary || article.summary}
       </p>
 
+      {article.relevance_reason && (
+        <p className="mb-3 flex items-start gap-1 text-[12px] leading-5 text-accent line-clamp-2">
+          <span className="material-symbols-outlined shrink-0" style={{ fontSize: 14, marginTop: 1 }}>push_pin</span>
+          <span>{article.relevance_reason}</span>
+        </p>
+      )}
+
       <div className="mt-auto flex items-center justify-between">
         <span className="text-[11px] text-text-subtle">{article.source}</span>
         <div className="flex items-center gap-3">
@@ -55,3 +65,5 @@ export default function ArticleCard({ article, onClick }) {
     </Card>
   )
 }
+
+export default memo(ArticleCard)

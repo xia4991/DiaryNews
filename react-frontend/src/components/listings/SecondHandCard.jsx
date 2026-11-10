@@ -1,9 +1,10 @@
+import { memo } from 'react'
 import Badge from '../ui/Badge'
 import Card from '../ui/Card'
 import AdminBadge from '../ui/AdminBadge'
 import { CATEGORY_ZH, CATEGORY_COLORS, CONDITION_ZH, CONDITION_COLORS, formatPrice } from '../../constants/secondhand'
 
-export default function SecondHandCard({ listing, onClick }) {
+function SecondHandCard({ listing, onClick }) {
   const catColor = CATEGORY_COLORS[listing.category] || '#6B7280'
   const condColor = CONDITION_COLORS[listing.condition] || '#6B7280'
   const thumb = listing.images?.[0]?.thumb_url
@@ -58,3 +59,5 @@ export default function SecondHandCard({ listing, onClick }) {
     </Card>
   )
 }
+
+export default memo(SecondHandCard)

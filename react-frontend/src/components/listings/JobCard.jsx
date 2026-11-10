@@ -1,10 +1,11 @@
+import { memo } from 'react'
 import Card from '../ui/Card'
 import Badge from '../ui/Badge'
 import AdminBadge from '../ui/AdminBadge'
 import { INDUSTRY_ZH, INDUSTRY_ICONS } from '../../constants/industries'
 import { INDUSTRY_COLORS } from '../../constants/colors'
 
-export default function JobCard({ job, onClick }) {
+function JobCard({ job, onClick }) {
   const color = INDUSTRY_COLORS[job.industry] || INDUSTRY_COLORS.Other
   return (
     <Card interactive padding="md" onClick={onClick} className="flex flex-col gap-2.5 group">
@@ -53,3 +54,5 @@ export default function JobCard({ job, onClick }) {
     </Card>
   )
 }
+
+export default memo(JobCard)

@@ -1,9 +1,10 @@
+import { memo } from 'react'
 import Badge from '../ui/Badge'
 import Card from '../ui/Card'
 import AdminBadge from '../ui/AdminBadge'
 import { DEAL_TYPE_ZH, DEAL_TYPE_COLORS, formatPrice } from '../../constants/realestate'
 
-export default function RealEstateCard({ listing, onClick }) {
+function RealEstateCard({ listing, onClick }) {
   const color = DEAL_TYPE_COLORS[listing.deal_type] || '#5E6478'
   const thumb = listing.images?.[0]?.thumb_url
 
@@ -57,3 +58,5 @@ export default function RealEstateCard({ listing, onClick }) {
     </Card>
   )
 }
+
+export default memo(RealEstateCard)

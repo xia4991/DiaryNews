@@ -162,6 +162,27 @@ function NewsDateFilter({ value, onChange }) {
   )
 }
 
+function NewsSearchInput({ value, onChange }) {
+  return (
+    <div className="relative">
+      <span
+        className="material-symbols-outlined pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-subtle"
+        style={{ fontSize: 16 }}
+      >
+        search
+      </span>
+      <input
+        type="search"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="搜索新闻…"
+        aria-label="搜索新闻"
+        className="h-9 w-full rounded-full border border-border bg-white/78 pl-9 pr-3 text-xs font-semibold text-text outline-none transition-colors placeholder:text-text-subtle hover:bg-surface focus:border-accent sm:w-48"
+      />
+    </div>
+  )
+}
+
 export default function NewsTab({
   articles,
   tabTitle = '葡萄牙新闻',
@@ -182,14 +203,29 @@ export default function NewsTab({
   const [selectedBrief, setSelectedBrief] = useState(null)
   const [briefs, setBriefs] = useState([])
   const [briefsLoading, setBriefsLoading] = useState(true)
-  const topTags = useMemo(() => buildTopTags(articles), [articles])
-  const topCategories = useMemo(() => buildTopCategories(articles), [articles])
+  const [searchQuery, setSearchQuery] = useState('')
+  // Client-side search over the in-memory feed (no backend search endpoint exists).
+  const viewArticles = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return articles
+    return articles.filter((a) =>
+      `${a.title_zh || ''} ${a.title || ''} ${a.summary_zh || ''} ${a.content_zh || ''} ${a.tags_zh || ''} ${a.source || ''}`
+        .toLowerCase()
+        .includes(q)
+    )
+  }, [articles, searchQuery])
+  const handleSearchChange = useCallback((value) => {
+    setSearchQuery(value)
+    setVisibleCount(INITIAL_FEED_COUNT)
+  }, [])
+  const topTags = useMemo(() => buildTopTags(viewArticles), [viewArticles])
+  const topCategories = useMemo(() => buildTopCategories(viewArticles), [viewArticles])
   const briefType = layout === 'china' ? 'china' : 'portugal'
   const briefLabel = layout === 'china' ? '华人关注' : '葡萄牙新闻'
   const hotArticles = useMemo(() => {
-    const featuredLink = articles[0]?.link || null
-    return sortArticlesByHotness(articles, { limit: 3, excludeLink: featuredLink, window: hotWindow })
-  }, [articles, hotWindow])
+    const featuredLink = viewArticles[0]?.link || null
+    return sortArticlesByHotness(viewArticles, { limit: 3, excludeLink: featuredLink, window: hotWindow })
+  }, [viewArticles, hotWindow])
 
   const loadBriefs = useCallback(async () => {
     setBriefsLoading(true)
@@ -279,8 +315,8 @@ export default function NewsTab({
     setVisibleCount(INITIAL_FEED_COUNT)
   }, [])
 
-  const featured = articles[0] || null
-  const rest = articles.slice(1)
+  const featured = viewArticles[0] || null
+  const rest = viewArticles.slice(1)
   const feed = rest.slice(3)
   const dateFilteredFeed = useMemo(
     () => filterArticlesByDate(feed, selectedDateFilter),
@@ -448,6 +484,7 @@ export default function NewsTab({
                   </h2>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                  <NewsSearchInput value={searchQuery} onChange={handleSearchChange} />
                   <NewsDateFilter value={selectedDateFilter} onChange={handleDateFilterChange} />
                   <div className="inline-flex rounded-full border border-border bg-white/78 p-1 shadow-[0_10px_24px_rgba(62,45,24,0.08)]">
                     {CHINA_FEED_SORT_OPTIONS.map((option) => {
@@ -688,7 +725,10 @@ export default function NewsTab({
                     持续更新
                   </h2>
                 </div>
-                <NewsDateFilter value={selectedDateFilter} onChange={handleDateFilterChange} />
+                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                  <NewsSearchInput value={searchQuery} onChange={handleSearchChange} />
+                  <NewsDateFilter value={selectedDateFilter} onChange={handleDateFilterChange} />
+                </div>
               </div>
 
               {visibleFeed.length === 0 ? (

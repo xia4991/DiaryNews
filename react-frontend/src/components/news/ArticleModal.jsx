@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import Modal from '../ui/Modal'
 import Badge from '../ui/Badge'
 import Button from '../ui/Button'
+import StoryGroupBadge from './StoryGroupBadge'
 import SummaryText from '../SummaryText'
 import { CATEGORY_ZH } from '../../constants/categories'
 import { categoryColor, TAG_COLOR } from '../../constants/colors'
@@ -10,6 +12,7 @@ function formatViews(value) {
 }
 
 export default function ArticleModal({ article, onClose, onBack }) {
+  const [showOriginal, setShowOriginal] = useState(false)
   if (!article) return null
   const pub = article.published?.slice(0, 16).replace('T', ' ')
   const tags = article.tags_zh
@@ -40,6 +43,7 @@ export default function ArticleModal({ article, onClose, onBack }) {
             {tags.map(tag => (
               <Badge key={tag} color={TAG_COLOR}>{tag}</Badge>
             ))}
+            <StoryGroupBadge size={article.story_group_size} />
           </div>
 
           <div className="min-w-0">
@@ -55,6 +59,13 @@ export default function ArticleModal({ article, onClose, onBack }) {
                 {article.title}
               </p>
             )}
+
+            {article.story_group_size > 1 && article.story_group_sources?.length > 0 && (
+              <p className="mt-3 text-[12px] leading-5 text-text-subtle sm:text-[13px]">
+                <span className="font-semibold text-text-muted">也被报道：</span>
+                {article.story_group_sources.join(' · ')}
+              </p>
+            )}
           </div>
 
           <div className="absolute bottom-3 right-3 max-w-[calc(100%-1.5rem)] rounded-full border border-white/75 bg-white/68 px-2.5 py-1 text-[10px] font-semibold leading-4 text-text-subtle sm:bottom-4 sm:right-5 sm:px-3 sm:text-[11px]">
@@ -62,6 +73,12 @@ export default function ArticleModal({ article, onClose, onBack }) {
               <span className="max-w-[120px] truncate sm:max-w-[180px]">
                 {article.source || '未标注'}
               </span>
+              {article.author && (
+                <>
+                  <span>-</span>
+                  <span className="max-w-[100px] truncate sm:max-w-[140px]">{article.author}</span>
+                </>
+              )}
               <span>-</span>
               <span>{pub || '暂无时间'}</span>
               <span>-</span>
@@ -69,6 +86,27 @@ export default function ArticleModal({ article, onClose, onBack }) {
             </div>
           </div>
         </div>
+
+        {article.relevance_reason && (
+          <section>
+            <div className="rounded-[22px] border border-[rgba(194,91,69,0.18)] bg-[rgba(194,91,69,0.06)] px-4 py-4 sm:rounded-[24px] sm:px-6 sm:py-5">
+              <div className="mb-2 flex items-center gap-2">
+                <span
+                  className="material-symbols-outlined"
+                  style={{ fontSize: 18, color: TAG_COLOR, fontVariationSettings: "'FILL' 1" }}
+                >
+                  push_pin
+                </span>
+                <span className="text-xs font-bold uppercase tracking-[0.18em]" style={{ color: TAG_COLOR }}>
+                  为什么值得关注
+                </span>
+              </div>
+              <p className="text-[15px] leading-7 text-text sm:text-[16px]">
+                {article.relevance_reason}
+              </p>
+            </div>
+          </section>
+        )}
 
         {summaryText && (
           <section>
@@ -126,6 +164,17 @@ export default function ArticleModal({ article, onClose, onBack }) {
                   <span className="text-sm font-black uppercase tracking-[0.18em] text-text">
                     原文
                   </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowOriginal((v) => !v)}
+                    aria-expanded={showOriginal}
+                    className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-3 py-1 text-xs font-semibold text-text-muted transition-colors hover:border-border-strong hover:bg-bg-subtle"
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>
+                      {showOriginal ? 'expand_less' : 'expand_more'}
+                    </span>
+                    {showOriginal ? '收起原文' : '展开葡语原文'}
+                  </button>
                 </div>
                 <a
                   href={article.link}
@@ -137,15 +186,19 @@ export default function ArticleModal({ article, onClose, onBack }) {
                   <span className="material-symbols-outlined" style={{ fontSize: 14 }}>open_in_new</span>
                 </a>
               </div>
-              <p className="mb-4 text-sm leading-7 text-text-muted">
-                保留原始正文，方便对照语气、细节和上下文。
-              </p>
-              <div
-                className="whitespace-pre-wrap text-[14px] leading-7 text-text sm:text-[15px] sm:leading-8"
-                lang="pt-PT"
-              >
-                {originalText}
-              </div>
+              {showOriginal && (
+                <>
+                  <p className="mb-4 text-sm leading-7 text-text-muted">
+                    保留原始正文，方便对照语气、细节和上下文。
+                  </p>
+                  <div
+                    className="whitespace-pre-wrap text-[14px] leading-7 text-text sm:text-[15px] sm:leading-8"
+                    lang="pt-PT"
+                  >
+                    {originalText}
+                  </div>
+                </>
+              )}
             </div>
           </section>
         )}

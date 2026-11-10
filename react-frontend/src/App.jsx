@@ -1,27 +1,38 @@
-import { useState, useEffect, useCallback, useMemo, useRef, startTransition } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef, startTransition, lazy, Suspense } from 'react'
 import { useAuth } from './auth'
 import AppShell from './components/AppShell'
 import Sidebar from './components/Sidebar'
 import CnSidebar from './components/CnSidebar'
 import Toast from './components/Toast'
 import HomePage from './pages/HomePage'
-import PracticalGuideTab from './pages/PracticalGuideTab'
 import NewsTab from './pages/NewsTab'
 import NewsTabSkeleton from './components/news/NewsTabSkeleton'
-import CommunityTab from './pages/CommunityTab'
-import AIAssistantTab from './pages/AIAssistantTab'
-import JobsTab from './pages/JobsTab'
 import LoginPage from './pages/LoginPage'
 import JobsSidebar from './components/listings/JobsSidebar'
-import RealEstateTab from './pages/RealEstateTab'
 import RealEstateSidebar from './components/listings/RealEstateSidebar'
-import SecondHandTab from './pages/SecondHandTab'
 import SecondHandSidebar from './components/listings/SecondHandSidebar'
-import AdminModerationTab from './pages/AdminModerationTab'
-import ProfilePage from './pages/ProfilePage'
 import CookieConsent from './components/CookieConsent'
 import LegalModal from './components/LegalModal'
 import { api } from './api'
+
+// Code-split the gated / heavy tabs so a first-time visitor landing on 首页 doesn't
+// download the admin console, AI assistant, community, listing CRUD, or guide bundles.
+const PracticalGuideTab = lazy(() => import('./pages/PracticalGuideTab'))
+const CommunityTab = lazy(() => import('./pages/CommunityTab'))
+const AIAssistantTab = lazy(() => import('./pages/AIAssistantTab'))
+const JobsTab = lazy(() => import('./pages/JobsTab'))
+const RealEstateTab = lazy(() => import('./pages/RealEstateTab'))
+const SecondHandTab = lazy(() => import('./pages/SecondHandTab'))
+const AdminModerationTab = lazy(() => import('./pages/AdminModerationTab'))
+const ProfilePage = lazy(() => import('./pages/ProfilePage'))
+
+function PageFallback() {
+  return (
+    <div className="flex items-center justify-center py-24 text-accent">
+      <span className="material-symbols-outlined animate-spin" style={{ fontSize: 28 }}>progress_activity</span>
+    </div>
+  )
+}
 
 const ACTIVE_TAB_STORAGE_KEY = 'diarynews.activeTab'
 const RESTORABLE_TABS = new Set([
@@ -219,11 +230,24 @@ export default function App() {
       .sort((a, b) => b.count - a.count)
   }, [cnTagFiltered])
 
-  const filteredCnArticles = useMemo(() => (
-    activeCategory === 'All'
-      ? cnTagFiltered
-      : cnTagFiltered.filter(a => a.category === activeCategory)
-  ), [cnTagFiltered, activeCategory])
+  const cnSources = useMemo(() => {
+    const sourceMap = {}
+    for (const a of cnTagFiltered) {
+      const src = a.source || ''
+      if (!src) continue
+      sourceMap[src] = (sourceMap[src] || 0) + 1
+    }
+    return Object.entries(sourceMap)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+  }, [cnTagFiltered])
+
+  const filteredCnArticles = useMemo(() => {
+    let out = cnTagFiltered
+    if (activeCategory !== 'All') out = out.filter(a => a.category === activeCategory)
+    if (activeSource !== 'All') out = out.filter(a => a.source === activeSource)
+    return out
+  }, [cnTagFiltered, activeCategory, activeSource])
 
   // Available tabs based on auth (招聘 is public)
   const baseTabs = ['首页', '实用指南', '华人关注', '葡萄牙新闻', '招聘', '房产', '二手', '社区', 'AI 助手']
@@ -313,10 +337,13 @@ export default function App() {
       <CnSidebar
         cnTags={cnTags}
         activeCnTag={activeCnTag}
-        onCnTagChange={tag => { setActiveCnTag(tag); setActiveCategory('All') }}
+        onCnTagChange={tag => { setActiveCnTag(tag); setActiveCategory('All'); setActiveSource('All') }}
         categories={cnCategories}
         activeCategory={activeCategory}
         onCategoryChange={setActiveCategory}
+        sources={cnSources}
+        activeSource={activeSource}
+        onSourceChange={setActiveSource}
         lastUpdated={newsLastUpdated}
       />
     )
@@ -366,6 +393,7 @@ export default function App() {
         sidebar={sidebar}
         fullWidth={activeTab === '首页' || activeTab === '实用指南' || activeTab === '管理' || activeTab === 'AI 助手' || activeTab === '个人资料'}
       >
+        <Suspense fallback={<PageFallback />}>
         {activeTab === '首页' && (
           <HomePage
             user={user}
@@ -400,7 +428,7 @@ export default function App() {
             <NewsTabSkeleton variant="china" />
           ) : (
             <NewsTab
-              key={`china-${activeCnTag}-${activeCategory}`}
+              key={`china-${activeCnTag}-${activeCategory}-${activeSource}`}
               articles={filteredCnArticles}
               tabTitle="华人关注"
               tabSubtitle="与在葡华人相关的新闻精选。"
@@ -452,6 +480,7 @@ export default function App() {
         {activeTab === '管理' && user?.is_admin && (
           <AdminModerationTab onNewsChanged={refreshNews} />
         )}
+        </Suspense>
       </AppShell>
       <CookieConsent />
       {legalPage && <LegalModal page={legalPage} onClose={() => setLegalPage(null)} />}

@@ -1,5 +1,6 @@
 import Card from '../ui/Card'
 import Badge from '../ui/Badge'
+import StoryGroupBadge from './StoryGroupBadge'
 import { CATEGORY_ZH } from '../../constants/categories'
 import { categoryColor, TAG_COLOR } from '../../constants/colors'
 
@@ -29,6 +30,7 @@ export default function ArticleCardFeatured({ article, onClick }) {
         {tags.map(tag => (
           <Badge key={tag} color={TAG_COLOR}>{tag}</Badge>
         ))}
+        <StoryGroupBadge size={article.story_group_size} />
         <span className="inline-flex items-center gap-1 text-[11px] text-text-subtle ml-auto tabular-nums">
           <span className="material-symbols-outlined" style={{ fontSize: 12 }}>schedule</span>
           {pub}
@@ -45,6 +47,13 @@ export default function ArticleCardFeatured({ article, onClick }) {
       <p className="text-sm text-text-muted line-clamp-2 max-w-2xl">
         {article.summary_zh || article.content_zh || article.ai_summary || article.summary}
       </p>
+
+      {article.relevance_reason && (
+        <p className="mt-2 flex items-start gap-1 text-[12px] leading-5 text-accent line-clamp-2 max-w-2xl">
+          <span className="material-symbols-outlined shrink-0" style={{ fontSize: 14, marginTop: 1 }}>push_pin</span>
+          <span>{article.relevance_reason}</span>
+        </p>
+      )}
 
       <div className="mt-4 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
