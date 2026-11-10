@@ -1,5 +1,5 @@
 from typing import Optional
-from datetime import datetime, time, timezone
+from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from backend.config import MAX_STORED_ARTICLES, MAX_ENRICHMENT_ATTEMPTS, NEWS_FEED_LIMIT
@@ -18,6 +18,56 @@ def load_news() -> dict:
     return {
         "last_updated": _get_meta("news_last_updated"),
         "articles": [dict(r) for r in rows],
+    }
+
+
+def _collapse_story_groups(articles: list) -> list:
+    """Collapse cross-source story groups to one representative card + an 'N sources' badge.
+
+    Input is the feed window ordered by published DESC. Each group is emitted once, at the
+    position of its most-recently-published member (so actively-covered stories stay near
+    the top), but the card content is the group's representative — the earliest-published
+    member (the rule chosen for Track B). Ungrouped articles pass through unchanged.
+    Adds `story_group_size` (members in this window) and `story_group_sources` (distinct
+    source names) so the frontend can render the badge; if it ignores them, it still shows
+    one card per story.
+    """
+    members: dict[str, list] = {}
+    for a in articles:
+        gid = a.get("story_group_id") or ""
+        if gid:
+            members.setdefault(gid, []).append(a)
+
+    out: list = []
+    emitted: set = set()
+    for a in articles:
+        gid = a.get("story_group_id") or ""
+        if not gid:
+            out.append(a)
+            continue
+        if gid in emitted:
+            continue
+        emitted.add(gid)
+        group = members[gid]
+        rep = min(group, key=lambda m: (m.get("published") or ""))
+        card = dict(rep)
+        card["story_group_size"] = len(group)
+        card["story_group_sources"] = sorted({m.get("source") or "" for m in group if m.get("source")})
+        out.append(card)
+    return out
+
+
+def load_news_feed() -> dict:
+    """Public feed — like load_news() but collapses cross-source story groups.
+
+    Kept separate from load_news() because collect_news() relies on load_news() returning
+    every stored link for its existing-URL set; collapsing there would re-collect the
+    grouped non-representative articles.
+    """
+    data = load_news()
+    return {
+        "last_updated": data["last_updated"],
+        "articles": _collapse_story_groups(data["articles"]),
     }
 
 
@@ -189,13 +239,13 @@ def _bulk_upsert_articles(articles: list) -> None:
                 author, image_url, language, guid, rss_category, fetched_at,
                 enrichment_status, enrichment_attempts, enrichment_error,
                 enriched_at, enrichment_model, enrichment_prompt_version, enrichment_input_hash,
-                scrape_status, scrape_attempts)
+                content_hash, scrape_status, scrape_attempts)
                VALUES (:link,:title,:summary,:source,:category,:published,:scraped_content,:ai_summary,
                 :title_zh,:summary_zh,:content_zh,:tags_zh,:relevance_reason,
                 :author,:image_url,:language,:guid,:rss_category,:fetched_at,
                 :enrichment_status,:enrichment_attempts,:enrichment_error,
                 :enriched_at,:enrichment_model,:enrichment_prompt_version,:enrichment_input_hash,
-                :scrape_status, :scrape_attempts)
+                :content_hash, :scrape_status, :scrape_attempts)
                ON CONFLICT(link) DO UPDATE SET
                  title = excluded.title,
                  summary = excluded.summary,
@@ -225,6 +275,7 @@ def _bulk_upsert_articles(articles: list) -> None:
                  enrichment_model = COALESCE(NULLIF(excluded.enrichment_model, ''), enrichment_model),
                  enrichment_prompt_version = COALESCE(NULLIF(excluded.enrichment_prompt_version, ''), enrichment_prompt_version),
                  enrichment_input_hash = COALESCE(NULLIF(excluded.enrichment_input_hash, ''), enrichment_input_hash),
+                 content_hash = COALESCE(NULLIF(excluded.content_hash, ''), content_hash),
                  scrape_status = COALESCE(NULLIF(excluded.scrape_status, ''), scrape_status),
                  scrape_attempts = MAX(
                    COALESCE(scrape_attempts, 0),
@@ -258,6 +309,7 @@ def _bulk_upsert_articles(articles: list) -> None:
                     "enrichment_model":          a.get("enrichment_model", ""),
                     "enrichment_prompt_version": a.get("enrichment_prompt_version", ""),
                     "enrichment_input_hash":     a.get("enrichment_input_hash", ""),
+                    "content_hash":              a.get("content_hash", ""),
                     "scrape_status":             a.get("scrape_status", ""),
                     "scrape_attempts":           a.get("scrape_attempts", 0),
                 }
@@ -278,6 +330,47 @@ def save_raw_articles(articles: list, last_updated: str) -> None:
     if last_updated:
         _set_meta("news_last_updated", last_updated)
     _trim_articles()
+
+
+def list_recent_articles_for_dedup(days: int = 2) -> list:
+    """Recent articles for the cross-cycle dedup window (Track B).
+
+    Returns the fields the grouping pass needs to compare a freshly-collected article
+    against ones already stored in the last `days` days — so duplicates from slow or
+    late-publishing sources are caught across collection cycles, not just within a run.
+    """
+    _ensure_db()
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT link, title, source, published, story_group_id, content_hash, "
+            "scraped_content, summary "
+            "FROM articles WHERE published >= ? ORDER BY published DESC",
+            (cutoff,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def assign_story_groups(assignments: list) -> int:
+    """Write story_group_id/size/primary for the cross-source grouping pass (Track B).
+
+    Each assignment is {link, story_group_id, story_group_size, is_group_primary}.
+    Touches only the grouping columns — never enriched content — so it is safe to run
+    repeatedly after enrichment. Returns the number of rows updated.
+    """
+    if not assignments:
+        return 0
+    _ensure_db()
+    with get_db() as conn:
+        conn.executemany(
+            "UPDATE articles SET "
+            "story_group_id = :story_group_id, "
+            "story_group_size = :story_group_size, "
+            "is_group_primary = :is_group_primary "
+            "WHERE link = :link",
+            assignments,
+        )
+    return len(assignments)
 
 
 def list_recent_articles(limit: int = 20, status: Optional[str] = None) -> list:

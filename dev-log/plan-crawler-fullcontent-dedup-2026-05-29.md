@@ -110,45 +110,85 @@ the UI can collapse a story to one representative with an "N sources" badge.
 Explicitly **defer** MinHash+LSH/datasketch (no SQLite backend; payoff is at
 millions of docs; 2025 ACM benchmark shows hash-LSH underperforms on real news).
 
-### WS3 — Schema + migration  [effort: S]
-- `storage/database.py` `_migrate` (additive, try/except like existing): add
-  `story_group_id TEXT DEFAULT ''`, `content_hash TEXT DEFAULT ''`, optional
-  `story_group_size INTEGER`, `is_group_primary INTEGER`. Mirror in `init_db` DDL.
-- Indexes: `idx_articles_story_group`, `idx_articles_content_hash`.
-  (`enrichment_input_hash` already exists but is unused — decide repurpose vs new.)
-- Thread new columns through `_bulk_upsert_articles`. **Semantics differ**:
-  `content_hash` is preserve-on-empty; `story_group_id` must be **re-assignable**
-  by the grouping pass (NOT preserve-on-empty). Keep INSERT/VALUES/ON CONFLICT/dict
-  in lockstep.
+### WS3 — Schema + migration  [effort: S] — DONE 2026-05-29
+- [done] `storage/database.py` `_migrate`: added `content_hash TEXT DEFAULT ''`,
+  `story_group_id TEXT DEFAULT ''`, `story_group_size INTEGER NOT NULL DEFAULT 0`,
+  `is_group_primary INTEGER NOT NULL DEFAULT 0` (additive ALTER, try/except pattern).
+  Followed the established convention (newer cols live in `_migrate`, not the
+  CREATE TABLE DDL). Kept `content_hash` separate from the unused
+  `enrichment_input_hash` (different semantics).
+- [done] `init_db`: added `idx_articles_story_group` + `idx_articles_content_hash`
+  after `_migrate` (they reference migrated columns).
+- [done] `storage/news.py` `_bulk_upsert_articles`: threaded **only** `content_hash`
+  (INSERT col + VALUES bind + dict + ON CONFLICT preserve-on-empty). Decision:
+  `story_group_id`/`size`/`primary` are intentionally **excluded** — new rows get the
+  column DEFAULT and the WS5 grouping pass owns them via its own UPDATE, so Stage A/B
+  can never disturb a group assignment (also less desync risk in the big statement).
+- [done] Verified on a 2491-row copy of the live DB: all 4 columns + both indexes
+  created; row count intact (2491→2491); migration idempotent; `content_hash`
+  round-trips and survives an empty Stage-A re-upsert. Live DB migrates automatically
+  on next app start (additive + idempotent).
 
-### WS4 — Layer 0+1: content hash + cross-cycle title pre-filter  [effort: M]
-- Layer 0: compute `content_hash` (SHA-256 of HTML-stripped, whitespace-collapsed,
-  lowercased body) in Stage B once `scraped_content` exists → exact-dup short-circuit.
-- Layer 1: extend `crawler/parsing.py` `deduplicate` — normalize titles (lowercase,
-  `unicodedata` accent-strip, drop ` - <source>` suffix), switch
-  `token_sort_ratio` → `token_set_ratio`, keep SOURCE_PRIORITY tie-break.
-- **Close the cross-cycle gap**: compare new titles against a sliding window
-  (last ~3–7 days) pulled from SQLite, not just the current run. New storage helper
-  returning recent `(link, title, published, story_group_id, scraped_content)`.
-- Emit **candidate pairs** (≥~85) for Layer 2 — title fuzz must never decide alone
-  (false positives on shared entities, e.g. "Governo aprova…").
+### WS4 — Layer 0+1 data foundations  [effort: M] — DONE 2026-05-29 (scope refined)
+Window = **2 days** (user choice). WS4 lays the dedup data foundations with **no risky
+behavior change**; the `token_set_ratio` switch + "keep & group instead of drop" move
+to WS5, where the body-confirm safety net prevents over-dropping in Stage A.
+- [done] `news.py` `compute_content_hash(text)`: SHA-256 of whitespace-collapsed,
+  lowercased body; `''` for empty (preserve-on-empty safe). Wired into **both** Stage B
+  save sites (single `enrich_pending_news` + batch `_run_batch_enrichment`).
+- [done] `crawler/parsing.py` `normalize_title(title, source)`: lowercase + accent-strip
+  (`unicodedata`) + trailing ` - <source>`/`|`/`–`/`—` suffix removal + punctuation→space.
+- [done] `deduplicate` now compares **normalized** titles (still `token_sort_ratio>70`,
+  still hard-drop + SOURCE_PRIORITY tie-break) — a safe quality bump, no over-drop risk.
+- [done] `storage/news.py` `list_recent_articles_for_dedup(days=2)`: returns recent
+  `(link, title, source, published, story_group_id, content_hash, scraped_content,
+  summary)` for the cross-cycle window — ready for WS5.
+- [done] Verified: modules compile; `compute_content_hash` whitespace/case-insensitive +
+  empty→''; `normalize_title` strips accents/suffix (only when suffix matches source);
+  `deduplicate` 3→2 keeping the higher-priority dup + the distinct story; window helper
+  returned 968 rows over a DB copy with the right fields.
+- **Deferred to WS5** (need the body safety net first): `token_set_ratio` switch,
+  cross-cycle **candidate-pair emission**, and relaxing the Stage-A hard-drop so
+  cross-source dups are retained + grouped (required for the "N sources" UX).
 
-### WS5 — Layer 2 body confirmer + `story_group_id` (union-find)  [effort: L]
-- Confirmer choice (see open question): **start zero-dep** with trafilatura's
-  built-in SimHash (`content_fingerprint` / `.similarity()`); upgrade to
-  **scikit-learn TF-IDF cosine** (PT stopwords, ngram (1,2), refit over run+window,
-  confirm ≥~0.6) if SimHash misses reworded republishes. (sentence-transformers
-  is the heavy-but-most-accurate fallback; deferred — torch on Py3.9 is heavy.)
-- New module `backend/dedup.py`: take WS4 candidates → confirm on body → union-find
-  → assign `story_group_id`, seeding from existing group ids in the window so ids
-  are **stable across runs**.
-- Representative = highest SOURCE_PRIORITY / earliest published / longest body
-  (open question); set `is_group_primary`, `story_group_size`.
-- **Hook point**: confirmation needs bodies → run grouping **after** Stage B
-  enrichment (tail of `enrich_pending_news` or the auto loop in `api.py`), not
-  blocking Stage A. (Layer 1 candidate-flagging may still run in `collect_news`.)
-- Expose group info in the `/api/news` response for the frontend (FE work separate).
-- Risk: keep thresholds conservative — prefer two ungrouped rows over a wrong merge.
+Decision (user): confirmer = trafilatura SimHash first; representative = **earliest
+published**. WS5 split into WS5a (grouping engine — data only) and WS5b (surface it).
+
+### WS5a — Grouping engine + `story_group_id`  [effort: L] — DONE 2026-05-29
+- [done] `backend/dedup.py`: title pre-filter (`token_set_ratio` ≥ 85 on normalized
+  titles, day-bucketed) → confirm (`content_hash` exact, else trafilatura
+  `Simhash.similarity` ≥ 0.80, else stricter title ≥ 92 when a body is missing) →
+  union-find → stable `story_group_id` (`sg_<sha>` minted from the earliest member's
+  link, or reuse an existing id in the component). Representative = earliest published.
+  Conservative thresholds (constants, tunable).
+- [done] `storage/news.py` `assign_story_groups(assignments)` — UPDATEs only the
+  grouping columns, never enriched content. Re-exported from `backend.storage`.
+- [done] `services.py` `regroup_recent_stories(days=2)` — loads the window, groups,
+  persists, **and clears** stale groups for rows that no longer match. Hooked at the
+  tail of `enrich_pending_news` (after save), wrapped so it never breaks enrichment.
+- [done] Verified on a copy of the real DB (7-day window): 2271 → 224 grouped into 104
+  groups; **idempotent** (group ids stable across re-runs); spot-checked groups are
+  correct cross-source dups (e.g. "Prestação Social Única" across 5 distinct sources;
+  "Polícia turca…" across 4). Known mild false-merge: same-source serial bulletins
+  ("As notícias das 3h/4h/6h") merge via overlapping bodies — tunable, arguably benign.
+- SimHash API note: it's `trafilatura.deduplication.Simhash(text).similarity(other)`
+  (NOT `content_fingerprint`, which the research mis-named). sklearn TF-IDF upgrade
+  still available if SimHash proves to miss reworded republishes.
+
+### WS5b — Surface it: relax Stage-A drop + collapse the feed  [effort: M] — DONE 2026-05-29
+- [done] `crawler/parsing.deduplicate` now drops only **same-source** near-identicals
+  (same source + same day + token_sort>70); cross-source dups are retained for grouping.
+- [done] `storage/news.py` `load_news_feed()` + `_collapse_story_groups()`: collapses by
+  `story_group_id` to one card at the most-recent member's position, content from the
+  earliest-published representative, adding `story_group_size` + distinct
+  `story_group_sources`. Raw `load_news()` left untouched.
+- [done] Re-exported `load_news_feed`; `GET /api/news` now returns the collapsed feed.
+- [done] Verified on a DB copy: `deduplicate` keeps cross-source / drops same-source;
+  raw feed 2492 → collapsed 2373 (119 folded); a 5-member group shows as 1 card with
+  size=5 + sources=[Expresso, Observador, RTP, SIC]; feed links ⊆ raw, and `load_news()`
+  still returns all 2492 so `collect_news`'s existing-URL set is unaffected.
+- Frontend badge ("N 来源") is now a graceful enhancement — server already collapses;
+  it can read `story_group_size` / `story_group_sources`.
 
 ### WS6 — Layer 3 MiniMax tie-breaker  [DEFERRED, effort: S–M]
 Only adjudicate the ambiguous middle band (e.g. body cosine 0.45–0.6) with a strict
@@ -161,14 +201,27 @@ hand HTML back to trafilatura. Do NOT bypass hard paywalls (Público, Expresso) 
 accept RSS-summary fallback (ToS/copyright/GDPR). Build only if logs prove specific
 sources need it.
 
-## Sequencing
+## Status (2026-05-29)
 
-1. **WS1** — highest ROI, zero new deps; recovers verified DN/ECO full bodies.
-2. **WS2** — ~5-line trafilatura retune + the `is_truncated` gate the chain needs.
-3. **WS3** — tiny additive plumbing for dedup; can overlap WS2.
-4. **WS4** — extends existing rapidfuzz dedup; closes cross-cycle gap; installed deps only.
-5. **WS5** — the visible cross-source dedup feature; SimHash-first, sklearn if needed.
-6. **WS6 / WS7** — deferred; build only if WS5/WS2 metrics prove the cheap layers miss.
+- ✅ **WS1–WS5 DONE** — Track A (content robustness) + Track B (cross-source dedup),
+  both ends shipped server-side. All verified against the live feeds / a copy of the
+  real DB. Nothing committed — changes are in the working tree.
+- ⏭️ **WS6 / WS7 deferred** — build only if logs/metrics prove the cheap layers miss.
+- 🔜 **Frontend** (separate): render the "N 来源" badge from `story_group_size` /
+  `story_group_sources`; otherwise the collapsed feed already works.
+- 🔧 **Tuning knobs** if needed: `dedup.TITLE_CANDIDATE_THRESHOLD` (85),
+  `BODY_SIMILARITY_THRESHOLD` (0.80), `TITLE_ONLY_CONFIRM_THRESHOLD` (92),
+  `news.TRUNCATION_MIN_WORDS` (120), `config.RSS_FULLTEXT_MIN_WORDS` (250),
+  window `days=2`.
+
+## Sequencing (as executed)
+
+1. **WS1** ✅ — recovered verified DN/ECO full bodies (content:encoded), zero new deps.
+2. **WS2** ✅ — trafilatura retune (`favor_recall`) + `is_truncated` escalation chain.
+3. **WS3** ✅ — additive schema/migration for dedup columns + indexes.
+4. **WS4** ✅ — content_hash + normalized-title dedup + 2-day window helper.
+5. **WS5a/b** ✅ — SimHash grouping engine + feed collapse with "N sources".
+6. **WS6 / WS7** — deferred.
 
 ## Open questions (need decisions)
 

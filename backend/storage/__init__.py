@@ -3,6 +3,7 @@
 
 from backend.storage.news import (  # noqa: F401
     load_news,
+    load_news_feed,
     save_news,
     merge_articles,
     increment_article_view,
@@ -16,6 +17,8 @@ from backend.storage.news import (  # noqa: F401
     get_article_stats,
     get_today_article_stats,
     list_recent_articles,
+    list_recent_articles_for_dedup,
+    assign_story_groups,
 )
 from backend.storage.health import upsert_source_health, load_source_health  # noqa: F401
 from backend.storage.news_briefs import (  # noqa: F401

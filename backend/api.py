@@ -627,7 +627,7 @@ BriefType = Literal["china", "portugal"]
 
 @app.get("/api/news")
 def get_news():
-    return storage.load_news()
+    return storage.load_news_feed()
 
 
 # In-process (client, link) dedup for view counting. One vote per hour per client.

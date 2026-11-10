@@ -1,5 +1,7 @@
 """Shared parsing helpers used by all per-source adapters."""
 
+import re
+import unicodedata
 from datetime import datetime, timezone
 
 from rapidfuzz import fuzz
@@ -62,21 +64,56 @@ def extract_rss_category(entry) -> str:
     return entry.get("category", "") or ""
 
 
-def deduplicate(articles: list) -> list:
-    """Remove near-duplicate articles, keeping the highest-priority source.
+def _strip_accents(text: str) -> str:
+    return "".join(
+        c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c)
+    )
 
-    Operates on dicts with at least: source, published, title.
+
+def normalize_title(title: str, source: str = "") -> str:
+    """Normalize a headline for fuzzy comparison.
+
+    Lowercases, strips accents, removes a trailing ' - <source>' style attribution,
+    and reduces punctuation to spaces so cross-source variants of the same headline
+    align. Shared by deduplicate() and the Track B cross-source grouping pass.
+    """
+    if not title:
+        return ""
+    text = _strip_accents(title).lower()
+    src = _strip_accents(source).lower().strip()
+    if src:
+        for sep in (" - ", " | ", " – ", " — ", " :: "):
+            suffix = sep + src
+            if text.endswith(suffix):
+                text = text[: -len(suffix)]
+                break
+    text = re.sub(r"[^\w\s]", " ", text, flags=re.UNICODE)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def deduplicate(articles: list) -> list:
+    """Drop near-identical articles from the SAME source within a fetch cycle.
+
+    Matches on same source + same publication day + fuzzy normalized-title similarity.
+    Cross-source duplicates are intentionally KEPT so the Track B grouping pass can
+    collapse them to one card with an 'N sources' badge — dropping them here would make
+    that count impossible. Operates on dicts with at least: source, published, title.
     """
     articles = sorted(articles, key=lambda a: SOURCE_PRIORITY.get(a.get("source", ""), 99))
     accepted = []
+    accepted_keys = []  # (pub_date, normalized_title, source)
     for article in articles:
         pub_date = (article.get("published") or "")[:10]
-        title_lower = (article.get("title") or "").lower()
+        source = article.get("source") or ""
+        norm = normalize_title(article.get("title") or "", source)
         is_dup = any(
-            (kept.get("published") or "")[:10] == pub_date
-            and fuzz.token_sort_ratio(title_lower, (kept.get("title") or "").lower()) > 70
-            for kept in accepted
+            kept_source == source
+            and kept_date == pub_date
+            and norm
+            and fuzz.token_sort_ratio(norm, kept_norm) > 70
+            for kept_date, kept_norm, kept_source in accepted_keys
         )
         if not is_dup:
             accepted.append(article)
+            accepted_keys.append((pub_date, norm, source))
     return accepted

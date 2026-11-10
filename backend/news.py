@@ -3,7 +3,9 @@
 `classify()` is also re-exported here so legacy callers still work.
 """
 
+import hashlib
 import logging
+import re
 
 import requests as _requests
 
@@ -40,6 +42,21 @@ _PAYWALL_MARKERS = (
     "torne-se assinante",
     "assine já",
 )
+
+
+def compute_content_hash(text: str) -> str:
+    """SHA-256 of normalized body text — the exact-duplicate short-circuit for dedup.
+
+    Collapses whitespace and lowercases so trivial formatting differences still hash
+    equal. Returns '' for empty input so preserve-on-empty upserts never wipe an
+    existing hash.
+    """
+    if not text:
+        return ""
+    normalized = re.sub(r"\s+", " ", text).strip().lower()
+    if not normalized:
+        return ""
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
 def extract_rss_fulltext(html: str) -> str:

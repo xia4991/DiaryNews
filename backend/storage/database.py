@@ -25,6 +25,13 @@ def _migrate(conn) -> None:
         "enrichment_input_hash TEXT DEFAULT ''",
         "summary_zh TEXT DEFAULT ''",
         "relevance_reason TEXT DEFAULT ''",
+        # Cross-source dedup (Track B). content_hash: SHA-256 of normalized body for
+        # exact-dup short-circuit. story_group_id: groups the same story across sources;
+        # owned by the post-enrichment grouping pass, not Stage A/B.
+        "content_hash TEXT DEFAULT ''",
+        "story_group_id TEXT DEFAULT ''",
+        "story_group_size INTEGER NOT NULL DEFAULT 0",
+        "is_group_primary INTEGER NOT NULL DEFAULT 0",
         # Body-scrape outcome: '' (not tried) | ok | truncated. scrape_attempts counts
         # on-demand scrapes so a truncated body is retried before the LLM falls back to
         # the RSS summary (see SCRAPE_MAX_ATTEMPTS).
@@ -284,6 +291,14 @@ def init_db() -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_articles_enrichment "
             "ON articles (enrichment_status, published DESC)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_articles_story_group "
+            "ON articles (story_group_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_articles_content_hash "
+            "ON articles (content_hash)"
         )
 
 

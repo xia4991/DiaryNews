@@ -17,13 +17,19 @@ from backend.config import (
     SCRAPE_MAX_ATTEMPTS,
 )
 from backend.crawler import run_all
+from backend.dedup import group_articles
 from backend.llm import (
     MiniMaxConfigError,
     MiniMaxError,
     batch_enrich_news_articles,
     enrich_news_article,
 )
-from backend.news import ensure_scraped_content, extract_rss_fulltext, reset_scrape_caches
+from backend.news import (
+    compute_content_hash,
+    ensure_scraped_content,
+    extract_rss_fulltext,
+    reset_scrape_caches,
+)
 from backend.storage_media import get_media_storage
 
 log = logging.getLogger("diarynews.services")
@@ -197,6 +203,7 @@ def enrich_pending_news(max_retry: int = 20) -> dict:
                     continue
                 llm_called = True
                 updated = enrich_news_article(article, text_for_llm, scraped_content)
+                updated["content_hash"] = compute_content_hash(updated.get("scraped_content", ""))
                 if updated.get("title_zh") and updated.get("content_zh"):
                     updated["enrichment_status"] = "done"
                     updated["enrichment_attempts"] = new_attempts
@@ -260,6 +267,11 @@ def enrich_pending_news(max_retry: int = 20) -> dict:
             now = datetime.now(timezone.utc).isoformat()
             storage.save_news({"last_updated": now, "articles": enriched})
             log.info("Stage B enriched %d articles (%d marked done)", len(enriched), done)
+            # Track B — group same-story articles across sources (needs bodies → post-enrich).
+            try:
+                regroup_recent_stories()
+            except Exception:  # noqa: BLE001 — grouping must never break enrichment
+                log.exception("Story regrouping failed (non-fatal)")
 
         result = {"retried_count": len(enriched), "done_count": done, "scrape_deferred_count": deferred}
         if aborted_reason:
@@ -272,6 +284,39 @@ def enrich_pending_news(max_retry: int = 20) -> dict:
         return result
     finally:
         _enrich_lock.release()
+
+
+def regroup_recent_stories(days: int = 2) -> dict:
+    """Track B — group same-story articles across sources over the recent window.
+
+    Idempotent: recomputes groups for the last `days` days each call, reusing existing
+    group ids (stable across runs) and clearing groups for rows that no longer match.
+    Run after Stage B since confirmation needs article bodies. Returns a small summary.
+    """
+    window = storage.list_recent_articles_for_dedup(days=days)
+    if not window:
+        return {"window": 0, "grouped": 0, "groups": 0, "cleared": 0}
+
+    assignments = group_articles(window)
+    assigned_links = {a["link"] for a in assignments}
+    group_ids = {a["story_group_id"] for a in assignments}
+    # Clear stale groups: window rows previously grouped but no longer in any group.
+    cleared = [
+        {"link": w["link"], "story_group_id": "", "story_group_size": 0, "is_group_primary": 0}
+        for w in window
+        if (w.get("story_group_id") or "") and w["link"] not in assigned_links
+    ]
+    storage.assign_story_groups(assignments + cleared)
+    log.info(
+        "Story grouping: window=%d grouped=%d into %d groups, cleared=%d",
+        len(window), len(assigned_links), len(group_ids), len(cleared),
+    )
+    return {
+        "window": len(window),
+        "grouped": len(assigned_links),
+        "groups": len(group_ids),
+        "cleared": len(cleared),
+    }
 
 
 def _next_enrichment_status(article: dict) -> str:
@@ -409,11 +454,17 @@ def _run_batch_enrichment(
         updated["enrichment_status"] = "done"
         updated["enrichment_attempts"] = new_attempts
         updated["enrichment_error"] = ""
+        updated["content_hash"] = compute_content_hash(updated.get("scraped_content", ""))
 
     if enriched:
         now = datetime.now(timezone.utc).isoformat()
         storage.save_news({"last_updated": now, "articles": enriched})
         log.info("Batch enriched %d articles", len(enriched))
+        # Track B — group same-story articles across sources (needs bodies → post-enrich).
+        try:
+            regroup_recent_stories()
+        except Exception:  # noqa: BLE001 — grouping must never break enrichment
+            log.exception("Story regrouping failed (non-fatal)")
 
     missing_articles = [
         article for index, article in enumerate(pending)
