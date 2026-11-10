@@ -46,6 +46,7 @@ enriched_at, enrichment_model, enrichment_prompt_version, enrichment_input_hash
 - `enrichment_status` — `pending` | `done` (`title_zh` + `content_zh` non-empty) | `failed` (terminal). Content is the source of truth — `repair_enrichment_status()` reconciles stale state. `list_pending_enrichment()` gates on content completeness + retry ceiling, not status alone.
 - `enrichment_attempts` — incremented each Stage B run; capped by `MAX_ENRICHMENT_ATTEMPTS` (env, default 3). At the ceiling the row auto-transitions to `failed`.
 - `enrichment_error` — last failure reason; cleared on `done`. Surfaced by `/api/admin/news/recent`.
+- `scrape_status` (`'' | ok | truncated`) / `scrape_attempts` — on-demand body scrape outcome. In `enrich_pending_news`, a truncated scrape with `scrape_attempts < SCRAPE_MAX_ATTEMPTS` (env, default 2) skips the LLM and stays pending for a re-scrape next cycle; at the ceiling the LLM falls back to the RSS summary and the row keeps `truncated`. The manual batch path records the status but never defers.
 - `enriched_at`, `enrichment_model`, `enrichment_prompt_version`, `enrichment_input_hash` — observability columns written by Stage B once Article Enrichment V2 (Feature 2 of the MiniMax optimization plan) lands.
 
 ### Upsert preserve-on-empty

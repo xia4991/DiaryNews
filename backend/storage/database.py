@@ -25,6 +25,11 @@ def _migrate(conn) -> None:
         "enrichment_input_hash TEXT DEFAULT ''",
         "summary_zh TEXT DEFAULT ''",
         "relevance_reason TEXT DEFAULT ''",
+        # Body-scrape outcome: '' (not tried) | ok | truncated. scrape_attempts counts
+        # on-demand scrapes so a truncated body is retried before the LLM falls back to
+        # the RSS summary (see SCRAPE_MAX_ATTEMPTS).
+        "scrape_status TEXT DEFAULT ''",
+        "scrape_attempts INTEGER NOT NULL DEFAULT 0",
     ]
     for col in article_cols:
         try:

@@ -188,12 +188,14 @@ def _bulk_upsert_articles(articles: list) -> None:
                 title_zh, summary_zh, content_zh, tags_zh, relevance_reason,
                 author, image_url, language, guid, rss_category, fetched_at,
                 enrichment_status, enrichment_attempts, enrichment_error,
-                enriched_at, enrichment_model, enrichment_prompt_version, enrichment_input_hash)
+                enriched_at, enrichment_model, enrichment_prompt_version, enrichment_input_hash,
+                scrape_status, scrape_attempts)
                VALUES (:link,:title,:summary,:source,:category,:published,:scraped_content,:ai_summary,
                 :title_zh,:summary_zh,:content_zh,:tags_zh,:relevance_reason,
                 :author,:image_url,:language,:guid,:rss_category,:fetched_at,
                 :enrichment_status,:enrichment_attempts,:enrichment_error,
-                :enriched_at,:enrichment_model,:enrichment_prompt_version,:enrichment_input_hash)
+                :enriched_at,:enrichment_model,:enrichment_prompt_version,:enrichment_input_hash,
+                :scrape_status, :scrape_attempts)
                ON CONFLICT(link) DO UPDATE SET
                  title = excluded.title,
                  summary = excluded.summary,
@@ -222,7 +224,12 @@ def _bulk_upsert_articles(articles: list) -> None:
                  enriched_at = COALESCE(NULLIF(excluded.enriched_at, ''), enriched_at),
                  enrichment_model = COALESCE(NULLIF(excluded.enrichment_model, ''), enrichment_model),
                  enrichment_prompt_version = COALESCE(NULLIF(excluded.enrichment_prompt_version, ''), enrichment_prompt_version),
-                 enrichment_input_hash = COALESCE(NULLIF(excluded.enrichment_input_hash, ''), enrichment_input_hash)""",
+                 enrichment_input_hash = COALESCE(NULLIF(excluded.enrichment_input_hash, ''), enrichment_input_hash),
+                 scrape_status = COALESCE(NULLIF(excluded.scrape_status, ''), scrape_status),
+                 scrape_attempts = MAX(
+                   COALESCE(scrape_attempts, 0),
+                   COALESCE(excluded.scrape_attempts, 0)
+                 )""",
             [
                 {
                     "link":                a.get("link", ""),
@@ -251,6 +258,8 @@ def _bulk_upsert_articles(articles: list) -> None:
                     "enrichment_model":          a.get("enrichment_model", ""),
                     "enrichment_prompt_version": a.get("enrichment_prompt_version", ""),
                     "enrichment_input_hash":     a.get("enrichment_input_hash", ""),
+                    "scrape_status":             a.get("scrape_status", ""),
+                    "scrape_attempts":           a.get("scrape_attempts", 0),
                 }
                 for a in articles
             ],
@@ -286,6 +295,7 @@ def list_recent_articles(limit: int = 20, status: Optional[str] = None) -> list:
             "enrichment_status, enrichment_attempts, enrichment_error, "
             "enriched_at, enrichment_model, enrichment_prompt_version, "
             "title_zh, summary_zh, tags_zh, relevance_reason, "
+            "scrape_status, scrape_attempts, "
             "LENGTH(COALESCE(summary, '')) AS summary_len, "
             "LENGTH(COALESCE(scraped_content, '')) AS scraped_content_len, "
             "LENGTH(COALESCE(content_zh, '')) AS content_zh_len "
@@ -394,6 +404,23 @@ def mark_enrichment_status(
     sql = f"UPDATE articles SET {', '.join(sets)} WHERE link = ?"
     with get_db() as conn:
         conn.execute(sql, params)
+
+
+def mark_scrape_deferred(link: str, scrape_attempts: int) -> None:
+    """Record a truncated on-demand scrape and leave the row pending for a re-scrape.
+
+    Touches only the scrape columns — enrichment_status/attempts stay as they are, so a
+    deferred scrape never burns an LLM retry.
+    """
+    _ensure_db()
+    with get_db() as conn:
+        conn.execute(
+            """UPDATE articles
+               SET scrape_status = 'truncated',
+                   scrape_attempts = MAX(COALESCE(scrape_attempts, 0), ?)
+               WHERE link = ?""",
+            (scrape_attempts, link),
+        )
 
 
 def update_scraped_content(link: str, scraped_content: str) -> None:

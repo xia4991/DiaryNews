@@ -53,6 +53,10 @@ MIN_SUMMARY_WORDS = int(os.environ.get("MIN_SUMMARY_WORDS", "0"))
 # stores it as scraped_content if it has at least this many words — so Stage B reuses
 # it instead of scraping the page. Guards against teaser-in-content feeds. 0 disables.
 RSS_FULLTEXT_MIN_WORDS = int(os.environ.get("RSS_FULLTEXT_MIN_WORDS", "250"))
+# Stage B scrape attempts before falling back to the RSS summary. While a scrape comes back
+# truncated and attempts < this, the per-article loop skips the LLM call and leaves the row
+# pending so the next cycle re-scrapes. 1 = no deferral (old behaviour).
+SCRAPE_MAX_ATTEMPTS = int(os.environ.get("SCRAPE_MAX_ATTEMPTS", "2"))
 
 # ── Media storage ────────────────────────────────────────────────────────────
 MEDIA_BACKEND    = os.environ.get("MEDIA_BACKEND", "local")      # local | s3

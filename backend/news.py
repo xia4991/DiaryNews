@@ -122,33 +122,34 @@ def reset_scrape_caches() -> None:
         pass
 
 
-def ensure_scraped_content(article: dict) -> tuple[str, str]:
-    """Return (text_for_llm, scraped_content_to_persist).
+def ensure_scraped_content(article: dict) -> tuple[str, str, bool]:
+    """Return (text_for_llm, scraped_content_to_persist, scrape_ok).
 
     Reuse stored scraped_content if present. Otherwise scrape on demand through a
     self-healing chain: plain scrape -> (on truncation) consent-cookie retry. A
     body that passes the truncation gate is persisted. If everything stays
-    truncated, feed the LLM whichever of body/summary is richer and persist '' so
-    a future retry (or a WS7 headless render) can try again.
+    truncated, feed the LLM whichever of body/summary is richer, persist '' and
+    return scrape_ok=False so the caller can defer and re-scrape later
+    (see SCRAPE_MAX_ATTEMPTS) instead of locking in a summary-only translation.
     """
     stored = article.get("scraped_content") or ""
     if stored:
-        return stored[:3000], stored
+        return stored[:3000], stored, True
 
     summary = article.get("summary", "") or ""
     link = article["link"]
 
     best = scrape_article(link)
     if best and not is_truncated(best, summary):
-        return best[:3000], best
+        return best[:3000], best, True
 
     # Escalation 1 — retry with EU consent cookies (cheap, no browser).
     alt = scrape_article(link, with_consent=True)
     if len(alt.split()) > len(best.split()):
         best = alt
     if best and not is_truncated(best, summary):
-        return best[:3000], best
+        return best[:3000], best, True
 
     # Still truncated/empty: don't lock in a bad body; use the richer text for the LLM.
     llm_text = best if len(best.split()) > len(summary.split()) else summary
-    return (llm_text[:3000] if llm_text else ""), ""
+    return (llm_text[:3000] if llm_text else ""), "", False

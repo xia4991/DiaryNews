@@ -108,6 +108,9 @@ class CrawlerRunner:
         if max_articles and len(new_dicts) > max_articles:
             cap_skipped = len(new_dicts) - max_articles
             log.info("Capping %d new articles to %d for this cycle", len(new_dicts), max_articles)
+            # deduplicate() leaves the list in SOURCE_PRIORITY order; slicing that would
+            # always drop the low-priority sources. Keep the newest articles instead.
+            new_dicts.sort(key=lambda a: a.get("published") or "", reverse=True)
             new_dicts = new_dicts[:max_articles]
 
         for r in results:

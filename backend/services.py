@@ -14,6 +14,7 @@ from backend.config import (
     MAX_ENRICHMENT_ATTEMPTS,
     MINIMAX_RATE_LIMIT_SLEEP_SEC,
     RSS_FULLTEXT_MIN_WORDS,
+    SCRAPE_MAX_ATTEMPTS,
 )
 from backend.crawler import run_all
 from backend.llm import (
@@ -140,6 +141,23 @@ def _sensitive_error_text(exc: BaseException) -> str:
     return f"MiniMaxSensitiveOutput: {str(exc)[:260]}"
 
 
+def _apply_scrape_outcome(article: dict, scrape_ok: bool, *, allow_defer: bool = True) -> bool:
+    """Stamp scrape_status/scrape_attempts onto `article`; return False to defer the LLM.
+
+    A row that already had a stored body did not scrape this cycle, so its attempt counter
+    is left alone. A truncated scrape is deferred (row stays pending, re-scraped next cycle)
+    until SCRAPE_MAX_ATTEMPTS is reached; after that the LLM falls back to the RSS summary
+    and the row keeps scrape_status='truncated' so the admin UI can spot it.
+    """
+    scraped_now = not article.get("scraped_content")
+    attempts = (article.get("scrape_attempts") or 0) + (1 if scraped_now else 0)
+    article["scrape_attempts"] = attempts
+    article["scrape_status"] = "ok" if scrape_ok else "truncated"
+    if scrape_ok or not allow_defer:
+        return True
+    return attempts >= SCRAPE_MAX_ATTEMPTS
+
+
 def enrich_pending_news(max_retry: int = 20) -> dict:
     """Stage B — run MiniMax enrichment on articles still missing Chinese fields.
 
@@ -157,14 +175,27 @@ def enrich_pending_news(max_retry: int = 20) -> dict:
 
         enriched: list = []
         done = 0
+        deferred = 0
         aborted_reason = ""
-        for index, article in enumerate(pending):
-            if index > 0 and MINIMAX_RATE_LIMIT_SLEEP_SEC > 0:
+        llm_called = False
+        for article in pending:
+            # Pace only between real LLM calls — a deferred scrape never hits MiniMax.
+            if llm_called and MINIMAX_RATE_LIMIT_SLEEP_SEC > 0:
                 time.sleep(MINIMAX_RATE_LIMIT_SLEEP_SEC)
+            llm_called = False
             link = article["link"]
             new_attempts = (article.get("enrichment_attempts") or 0) + 1
             try:
-                text_for_llm, scraped_content = ensure_scraped_content(article)
+                text_for_llm, scraped_content, scrape_ok = ensure_scraped_content(article)
+                if not _apply_scrape_outcome(article, scrape_ok):
+                    log.info(
+                        "Scrape truncated for '%s' (attempt %d/%d); deferring LLM to re-scrape",
+                        link, article["scrape_attempts"], SCRAPE_MAX_ATTEMPTS,
+                    )
+                    storage.mark_scrape_deferred(link, article["scrape_attempts"])
+                    deferred += 1
+                    continue
+                llm_called = True
                 updated = enrich_news_article(article, text_for_llm, scraped_content)
                 if updated.get("title_zh") and updated.get("content_zh"):
                     updated["enrichment_status"] = "done"
@@ -230,7 +261,7 @@ def enrich_pending_news(max_retry: int = 20) -> dict:
             storage.save_news({"last_updated": now, "articles": enriched})
             log.info("Stage B enriched %d articles (%d marked done)", len(enriched), done)
 
-        result = {"retried_count": len(enriched), "done_count": done}
+        result = {"retried_count": len(enriched), "done_count": done, "scrape_deferred_count": deferred}
         if aborted_reason:
             result["aborted"] = aborted_reason
         storage.add_log(
@@ -267,8 +298,10 @@ def _prepare_batch_enrichment_articles(pending: list[dict]) -> list[dict]:
     """
     prepared = []
     for article in pending:
-        text_for_llm, scraped_content = ensure_scraped_content(article)
+        text_for_llm, scraped_content, scrape_ok = ensure_scraped_content(article)
         updated = {**article, "_llm_content": text_for_llm}
+        # Manual batch button: never defer, but still record the scrape outcome.
+        _apply_scrape_outcome(updated, scrape_ok, allow_defer=False)
         if scraped_content:
             updated["scraped_content"] = scraped_content
             if not article.get("scraped_content"):
