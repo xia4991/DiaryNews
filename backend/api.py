@@ -244,11 +244,21 @@ def delete_my_account(user: dict = Depends(get_current_user)):
 AnnouncementStatus = Literal["active", "hidden", "removed"]
 
 
+AnnouncementKind = Literal["notice", "promo"]
+AnnouncementPlacement = Literal["sidebar", "banner", "feed"]
+
+
 class AnnouncementCreateRequest(BaseModel):
     title: str
     content: str
     is_pinned: bool = False
     status: AnnouncementStatus = "active"
+    kind: AnnouncementKind = "notice"
+    placement: AnnouncementPlacement = "sidebar"
+    image_url: Optional[str] = None
+    link_url: Optional[str] = None
+    link_label: Optional[str] = None
+    expires_at: Optional[str] = None
 
 
 class AnnouncementUpdateRequest(BaseModel):
@@ -256,11 +266,50 @@ class AnnouncementUpdateRequest(BaseModel):
     content: Optional[str] = None
     is_pinned: Optional[bool] = None
     status: Optional[AnnouncementStatus] = None
+    kind: Optional[AnnouncementKind] = None
+    placement: Optional[AnnouncementPlacement] = None
+    image_url: Optional[str] = None
+    link_url: Optional[str] = None
+    link_label: Optional[str] = None
+    expires_at: Optional[str] = None
+
+
+def _clean_announcement_extras(fields: dict) -> dict:
+    """Validate the optional slot fields in place: http(s) links, site-relative or
+    http(s) images, short label, expiry normalised to a UTC ISO timestamp. Empty → ''."""
+    if "link_url" in fields:
+        link = (fields["link_url"] or "").strip()
+        if link and not link.lower().startswith(("http://", "https://")):
+            raise HTTPException(status_code=400, detail="link_url must start with http:// or https://")
+        fields["link_url"] = link
+    if "image_url" in fields:
+        image = (fields["image_url"] or "").strip()
+        relative = image.startswith("/") and not image.startswith("//")
+        if image and not relative and not image.lower().startswith(("http://", "https://")):
+            raise HTTPException(status_code=400, detail="image_url must be an http(s) URL or a site path")
+        fields["image_url"] = image
+    if "link_label" in fields:
+        label = (fields["link_label"] or "").strip()
+        if len(label) > 20:
+            raise HTTPException(status_code=400, detail="link_label is limited to 20 characters")
+        fields["link_label"] = label
+    if "expires_at" in fields:
+        raw = (fields["expires_at"] or "").strip()
+        if raw:
+            try:
+                parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+            except ValueError:
+                raise HTTPException(status_code=400, detail="expires_at must be an ISO date or datetime")
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            raw = parsed.astimezone(timezone.utc).isoformat()
+        fields["expires_at"] = raw
+    return fields
 
 
 @app.get("/api/announcements")
 def list_public_announcements(
-    limit: int = Query(5, ge=1, le=20),
+    limit: int = Query(5, ge=1, le=50),
     offset: int = Query(0, ge=0),
 ):
     return storage.list_announcements(status="public", limit=limit, offset=offset)
@@ -288,6 +337,13 @@ def admin_create_announcement(
     if not content:
         raise HTTPException(status_code=400, detail="Content cannot be empty")
 
+    extras = _clean_announcement_extras({
+        "image_url": req.image_url,
+        "link_url": req.link_url,
+        "link_label": req.link_label,
+        "expires_at": req.expires_at,
+    })
+
     try:
         announcement = storage.create_announcement(
             created_by=int(admin["sub"]),
@@ -295,6 +351,9 @@ def admin_create_announcement(
             content=content,
             is_pinned=req.is_pinned,
             status=req.status,
+            kind=req.kind,
+            placement=req.placement,
+            **extras,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -322,6 +381,10 @@ def admin_update_announcement(
         patch["content"] = patch["content"].strip()
         if not patch["content"]:
             raise HTTPException(status_code=400, detail="Content cannot be empty")
+    for key in ("kind", "placement"):
+        if key in patch and patch[key] is None:
+            del patch[key]
+    _clean_announcement_extras(patch)
 
     try:
         announcement = storage.update_announcement(announcement_id, patch)

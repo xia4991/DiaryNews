@@ -30,6 +30,8 @@ from backend.storage.news_briefs import (  # noqa: F401
 )
 from backend.storage.announcements import (  # noqa: F401
     ANNOUNCEMENT_STATUSES,
+    ANNOUNCEMENT_KINDS,
+    ANNOUNCEMENT_PLACEMENTS,
     list_announcements,
     get_announcement,
     create_announcement,

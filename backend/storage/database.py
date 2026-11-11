@@ -48,6 +48,20 @@ def _migrate(conn) -> None:
             conn.execute(f"ALTER TABLE users ADD COLUMN {col}")
         except sqlite3.OperationalError:
             pass
+    # Home-page content slots: announcements double as promos with an image, a link,
+    # a placement and an optional expiry.
+    for col in [
+        "kind TEXT NOT NULL DEFAULT 'notice'",
+        "placement TEXT NOT NULL DEFAULT 'sidebar'",
+        "image_url TEXT",
+        "link_url TEXT",
+        "link_label TEXT",
+        "expires_at TEXT",
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE platform_announcements ADD COLUMN {col}")
+        except sqlite3.OperationalError:
+            pass
     # daily_news_briefs.generated_by added in F4: 'llm' | 'fallback' | 'failed'
     for col in ["generated_by TEXT NOT NULL DEFAULT 'llm'"]:
         try:

@@ -6,6 +6,9 @@ from backend.storage.base import _ensure_db
 
 
 ANNOUNCEMENT_STATUSES = ("active", "hidden", "removed")
+ANNOUNCEMENT_KINDS = ("notice", "promo")
+ANNOUNCEMENT_PLACEMENTS = ("sidebar", "banner", "feed")
+_OPTIONAL_TEXT_FIELDS = ("image_url", "link_url", "link_label", "expires_at")
 
 
 def _now() -> str:
@@ -15,6 +18,16 @@ def _now() -> str:
 def _validate_status(status: str) -> None:
     if status not in ANNOUNCEMENT_STATUSES:
         raise ValueError(f"Invalid status: {status!r}. Must be one of {ANNOUNCEMENT_STATUSES}")
+
+
+def _validate_kind(kind: str) -> None:
+    if kind not in ANNOUNCEMENT_KINDS:
+        raise ValueError(f"Invalid kind: {kind!r}. Must be one of {ANNOUNCEMENT_KINDS}")
+
+
+def _validate_placement(placement: str) -> None:
+    if placement not in ANNOUNCEMENT_PLACEMENTS:
+        raise ValueError(f"Invalid placement: {placement!r}. Must be one of {ANNOUNCEMENT_PLACEMENTS}")
 
 
 def _row_to_announcement(row) -> Optional[dict]:
@@ -37,6 +50,9 @@ def list_announcements(
 
     if status == "public":
         clauses.append("a.status = 'active'")
+        # expires_at is stored as a UTC ISO timestamp, so string comparison is chronological.
+        clauses.append("(a.expires_at IS NULL OR a.expires_at = '' OR a.expires_at > ?)")
+        params.append(_now())
     elif status == "all":
         pass
     else:
@@ -83,8 +99,10 @@ def get_announcement(announcement_id: int, include_nonpublic: bool = False) -> O
     announcement = _row_to_announcement(row)
     if not announcement:
         return None
-    if not include_nonpublic and announcement["status"] != "active":
-        return None
+    if not include_nonpublic:
+        expires_at = announcement.get("expires_at") or ""
+        if announcement["status"] != "active" or (expires_at and expires_at <= _now()):
+            return None
     return announcement
 
 
@@ -94,16 +112,30 @@ def create_announcement(
     content: str,
     is_pinned: bool = False,
     status: str = "active",
+    kind: str = "notice",
+    placement: str = "sidebar",
+    image_url: Optional[str] = None,
+    link_url: Optional[str] = None,
+    link_label: Optional[str] = None,
+    expires_at: Optional[str] = None,
 ) -> dict:
     _ensure_db()
     _validate_status(status)
+    _validate_kind(kind)
+    _validate_placement(placement)
     now = _now()
     with get_db() as conn:
         cur = conn.execute(
             """INSERT INTO platform_announcements
-               (title, content, status, is_pinned, created_by, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (title, content, status, int(is_pinned), created_by, now, now),
+               (title, content, status, is_pinned, kind, placement,
+                image_url, link_url, link_label, expires_at,
+                created_by, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                title, content, status, int(is_pinned), kind, placement,
+                image_url or None, link_url or None, link_label or None, expires_at or None,
+                created_by, now, now,
+            ),
         )
     return get_announcement(cur.lastrowid, include_nonpublic=True)
 
@@ -113,10 +145,17 @@ def update_announcement(
     patch: dict,
 ) -> dict:
     _ensure_db()
-    allowed = {"title", "content", "status", "is_pinned"}
+    allowed = {"title", "content", "status", "is_pinned", "kind", "placement", *_OPTIONAL_TEXT_FIELDS}
     clean = {key: value for key, value in patch.items() if key in allowed}
     if "status" in clean:
         _validate_status(clean["status"])
+    if "kind" in clean:
+        _validate_kind(clean["kind"])
+    if "placement" in clean:
+        _validate_placement(clean["placement"])
+    for key in _OPTIONAL_TEXT_FIELDS:
+        if key in clean:
+            clean[key] = clean[key] or None  # empty string clears the field
     if "is_pinned" in clean:
         clean["is_pinned"] = int(bool(clean["is_pinned"]))
 
