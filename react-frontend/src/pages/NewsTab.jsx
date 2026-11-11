@@ -439,26 +439,9 @@ export default function NewsTab({
         )}
 
         <div className="grid gap-4">
-          <header className="flex flex-wrap items-end justify-between gap-3">
-            <div className="min-w-0">
-              <h1
-                className="text-[1.6rem] font-black tracking-tight text-text sm:text-[1.9rem]"
-                style={{ fontFamily: 'var(--font-headline)' }}
-              >
-                {tabTitle}
-              </h1>
-              <p className="mt-1 text-sm text-text-muted">
-                {tabSubtitle} 当前 <strong className="font-semibold text-text">{chinaFeed.length}</strong> 条
-              </p>
-            </div>
-            {isAdmin && (
-              <Button variant="ghost" size="sm" icon="edit_calendar" onClick={() => setBriefModalOpen(true)}>
-                生成日报
-              </Button>
-            )}
-          </header>
+          <h1 className="sr-only">{tabTitle}</h1>
 
-          <div className="flex flex-wrap items-center gap-2 border-y border-border py-3">
+          <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3">
             <NewsSearchInput value={searchQuery} onChange={handleSearchChange} />
             <NewsDateFilter value={selectedDateFilter} onChange={handleDateFilterChange} />
             <div className="inline-flex rounded-full border border-border bg-white/78 p-1 shadow-[0_10px_24px_rgba(62,45,24,0.08)]">
@@ -496,6 +479,11 @@ export default function NewsTab({
               >
                 {showUntranslated ? '隐藏未翻译' : `显示未翻译 ${chinaUntranslatedCount} 条`}
               </button>
+            )}
+            {isAdmin && (
+              <Button variant="ghost" size="sm" icon="edit_calendar" className="ml-auto" onClick={() => setBriefModalOpen(true)}>
+                生成日报
+              </Button>
             )}
           </div>
 

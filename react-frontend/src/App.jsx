@@ -84,6 +84,9 @@ export default function App() {
   const [newsTabLoading, setNewsTabLoading] = useState(null)
   const newsTabTimerRef = useRef(null)
 
+  const [guideToOpen, setGuideToOpen] = useState(null)
+  const clearGuideToOpen = useCallback(() => setGuideToOpen(null), [])
+
   const applyArticleViewCount = useCallback((link, viewCount) => {
     setArticles(prev => prev.map(article => (
       article.link === link
@@ -112,13 +115,13 @@ export default function App() {
       setArticles(d.articles || [])
       setNewsLastUpdated(d.last_updated)
     })
-    api.listAnnouncements({ limit: 2 }).then(d => setAnnouncements(d.items || [])).catch(() => {})
+    api.listAnnouncements({ limit: 30 }).then(d => setAnnouncements(d.items || [])).catch(() => {})
     api.listJobs({ limit: 12 }).then(d => setJobs(d.items || [])).catch(() => {})
   }, [])
 
   useEffect(() => {
     if (activeTab !== '首页') return
-    api.listAnnouncements({ limit: 2 }).then(d => setAnnouncements(d.items || [])).catch(() => {})
+    api.listAnnouncements({ limit: 30 }).then(d => setAnnouncements(d.items || [])).catch(() => {})
   }, [activeTab])
 
   useEffect(() => {
@@ -405,10 +408,14 @@ export default function App() {
             onTabChange={handleTabChange}
             onLoginClick={() => setShowLogin(true)}
             onArticleOpen={handleArticleOpen}
+            onGuideOpen={(guideId) => {
+              setGuideToOpen(guideId)
+              handleTabChange('实用指南')
+            }}
           />
         )}
         {activeTab === '实用指南' && (
-          <PracticalGuideTab />
+          <PracticalGuideTab initialGuideId={guideToOpen} onInitialGuideConsumed={clearGuideToOpen} />
         )}
         {activeTab === '葡萄牙新闻' && (
           showNewsSkeleton ? (

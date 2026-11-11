@@ -1,60 +1,114 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { api } from '../api'
 import ArticleModal from '../components/news/ArticleModal'
-import Badge from '../components/ui/Badge'
-import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
 import HotWindowToggle from '../components/news/HotWindowToggle'
-import { describeHotness, sortArticlesByHotness } from '../utils/newsHotness'
+import NewsFeedRow from '../components/news/NewsFeedRow'
+import SlotCard from '../components/home/SlotCard'
+import { sortArticlesByHotness } from '../utils/newsHotness'
+import { DEAL_TYPE_ZH, formatPrice } from '../constants/realestate'
+import { CATEGORY_ZH as SH_CATEGORY_ZH } from '../constants/secondhand'
 
-const QUICK_ACTIONS = [
-  { tab: '华人关注', label: '华人关注', icon: 'diversity_3', tone: '#9D3D33' },
-  { tab: '葡萄牙新闻', label: '葡萄牙新闻', icon: 'newspaper', tone: '#2B6CB0' },
-  { tab: '招聘', label: '招聘信息', icon: 'work', tone: '#2E7D5A' },
-  { tab: 'AI 助手', label: 'AI 助手', icon: 'smart_toy', tone: '#8B5CF6' },
-]
+const CN_LIST_COUNT = 5
+const PT_LIST_COUNT = 6
+const HOT_COUNT = 5
+const JOB_COUNT = 3
+const FEED_SLOT_COUNT = 2
+const SIDEBAR_NOTICE_COUNT = 3
+const SIDEBAR_PROMO_COUNT = 2
+const BOARD_COUNT = 3
+const GUIDE_COUNT = 4
 
-function formatDate(value) {
-  if (!value) return '暂无更新'
-  return value.slice(0, 16).replace('T', ' ')
+const IMPORTANCE_SCORE = { high: 3, medium: 2, low: 1 }
+const EMPTY_BOARDS = { realEstate: [], secondHand: [], events: [], posts: [] }
+
+const joinMeta = (...parts) => parts.filter(Boolean).join(' · ')
+const euros = (priceCents) => (priceCents == null ? '' : formatPrice(priceCents))
+
+const pad = (value) => String(value).padStart(2, '0')
+
+function publishedTime(article) {
+  const timestamp = Date.parse(article.published || '')
+  return Number.isNaN(timestamp) ? 0 : timestamp
 }
 
-function formatViews(value) {
-  return `${Number(value || 0)} 次阅读`
+function byNewest(a, b) {
+  return publishedTime(b) - publishedTime(a)
 }
 
-function hotWindowEmptyLabel(window) {
-  if (window === 'today') return '今天还没有形成明显热度'
-  if (window === 'week') return '本周还没有形成明显热度'
-  return '当前还没有热门新闻'
+// Local "MM-DD HH:mm"; the API sends UTC timestamps.
+function formatDateTime(value) {
+  const timestamp = Date.parse(value || '')
+  if (Number.isNaN(timestamp)) return (value || '').slice(5, 16).replace('T', ' ')
+  const date = new Date(timestamp)
+  return `${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
-function StatCard({ label, value, hint }) {
+function todayLabel() {
+  const now = new Date()
+  return `${now.getMonth() + 1}月${now.getDate()}日 周${'日一二三四五六'[now.getDay()]}`
+}
+
+function hotEmptyLabel(window) {
+  if (window === 'today') return '今天还没有热门新闻'
+  if (window === 'week') return '本周还没有热门新闻'
+  return '还没有热门新闻'
+}
+
+// A compact title list for one board (房产 / 二手 / 活动 / 帖子); every row opens that tab.
+function BoardSection({ title, items, onOpen, getMeta }) {
   return (
-    <Card className="rounded-[24px] border-white/70 bg-white/90 shadow-[0_18px_50px_rgba(58,44,31,0.08)] backdrop-blur">
-      <p className="text-[11px] uppercase tracking-[0.18em] text-text-subtle">{label}</p>
-      <p className="mt-3 text-[1.7rem] font-black tracking-tight text-text sm:text-3xl" style={{ fontFamily: 'var(--font-headline)' }}>
-        {value}
-      </p>
-      <p className="mt-2 text-sm text-text-muted">{hint}</p>
-    </Card>
+    <section className="grid content-start gap-3">
+      <SectionHeading title={title} actionLabel="全部" onAction={onOpen} />
+      <Card padding="none" className="divide-y divide-border">
+        {items.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={onOpen}
+            className="group block w-full px-4 py-3 text-left transition-colors hover:bg-bg-subtle"
+          >
+            <span className="line-clamp-1 text-[14px] font-semibold leading-6 text-text transition-colors group-hover:text-accent">
+              {item.title}
+            </span>
+            <span className="mt-0.5 block truncate text-[12px] text-text-subtle">{getMeta(item)}</span>
+          </button>
+        ))}
+      </Card>
+    </section>
   )
 }
 
-function PreviewList({ items, empty, renderItem }) {
-  if (!items.length) {
-    return (
-      <Card className="rounded-[24px] border-dashed border-border-strong bg-surface-muted text-text-muted">
-        <p className="text-sm">{empty}</p>
-      </Card>
-    )
-  }
+function SectionHeading({ title, actionLabel, onAction, children }) {
   return (
-    <div className="grid gap-3">
-      {items.map(renderItem)}
+    <div className="flex items-center justify-between gap-3">
+      <h2 className="text-[17px] font-black tracking-tight text-text" style={{ fontFamily: 'var(--font-headline)' }}>
+        {title}
+      </h2>
+      <div className="flex items-center gap-3">
+        {children}
+        {actionLabel && (
+          <button
+            type="button"
+            onClick={onAction}
+            className="inline-flex items-center gap-0.5 text-[13px] font-semibold text-accent transition-colors hover:text-accent-hover"
+          >
+            {actionLabel}
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>chevron_right</span>
+          </button>
+        )}
+      </div>
     </div>
   )
 }
 
+/**
+ * Front page: a lead story, the latest Chinese-interest and Portugal news, and a side
+ * column with announcements, the hot list and recent jobs. Admin-managed slots
+ * (`announcements`, notices and promos) land in three placements: a banner under the
+ * date line, cards between the two news sections, and the side column. Content only —
+ * navigation lives in the header and sidebar.
+ */
 export default function HomePage({
   user,
   articles,
@@ -63,23 +117,126 @@ export default function HomePage({
   jobs,
   newsLastUpdated,
   onTabChange,
-  onLoginClick,
   onArticleOpen,
+  onGuideOpen,
 }) {
   const [selectedArticleState, setSelectedArticleState] = useState(null)
   const [hotWindow, setHotWindow] = useState('week')
-  const featuredCn = cnArticles.slice(0, 3)
-  const latestNews = articles.slice(0, 4)
-  const latestJobs = jobs.slice(0, 3)
-  const leadArticle = featuredCn[0] || latestNews[0] || null
+  const [boards, setBoards] = useState(EMPTY_BOARDS)
+  const [guides, setGuides] = useState([])
+
+  // Other boards: latest few of each; a board with nothing in it is simply not rendered.
+  useEffect(() => {
+    let cancelled = false
+    const params = { limit: BOARD_COUNT }
+    Promise.allSettled([
+      api.listRealEstate(params),
+      api.listSecondHand(params),
+      api.listCommunityEvents({ ...params, date_from: new Date().toISOString().slice(0, 10) }),
+      api.listCommunityPosts(params),
+    ]).then((results) => {
+      if (cancelled) return
+      const [realEstate, secondHand, events, posts] = results.map(
+        (result) => (result.status === 'fulfilled' ? result.value?.items || [] : []).slice(0, BOARD_COUNT)
+      )
+      setBoards({ realEstate, secondHand, events, posts })
+    })
+    // The guide data is large and ships with the guide page; load it lazily here too.
+    import('../data/practicalGuides')
+      .then(({ PRACTICAL_GUIDES }) => {
+        if (cancelled) return
+        const sorted = [...PRACTICAL_GUIDES].sort((a, b) => (
+          (IMPORTANCE_SCORE[b.importance] || 0) - (IMPORTANCE_SCORE[a.importance] || 0)
+          || (b.date || '').localeCompare(a.date || '')
+        ))
+        setGuides(sorted.slice(0, GUIDE_COUNT).map(({ id, title, category }) => ({ id, title, category })))
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  const boardSections = [
+    {
+      title: '房产',
+      tab: '房产',
+      items: boards.realEstate,
+      getMeta: (item) => joinMeta(
+        DEAL_TYPE_ZH[item.deal_type],
+        item.price_cents == null ? '' : formatPrice(item.price_cents, item.deal_type),
+        item.rooms ? `T${item.rooms}` : '',
+        item.location
+      ),
+    },
+    {
+      title: '二手',
+      tab: '二手',
+      items: boards.secondHand,
+      getMeta: (item) => joinMeta(euros(item.price_cents), SH_CATEGORY_ZH[item.category], item.location),
+    },
+    {
+      title: '社区活动',
+      tab: '社区',
+      items: boards.events,
+      getMeta: (item) => joinMeta(formatDateTime(item.start_at), item.city, item.is_free ? '免费' : item.fee_text),
+    },
+    {
+      title: '社区交流',
+      tab: '社区',
+      items: boards.posts,
+      getMeta: (item) => joinMeta(
+        item.owner_name,
+        item.reply_count ? `${item.reply_count} 条回复` : '',
+        formatDateTime(item.created_at)
+      ),
+    },
+  ].filter((section) => section.items.length > 0)
+
+  // Chinese-interest column: newest translated articles, tagged ones first when there are enough.
+  const cnLatest = useMemo(() => {
+    const translated = cnArticles.filter((article) => article.title_zh)
+    const tagged = translated.filter((article) => (article.tags_zh || '').trim())
+    const pool = tagged.length > CN_LIST_COUNT ? tagged : translated
+    return [...pool].sort(byNewest).slice(0, CN_LIST_COUNT + 1)
+  }, [cnArticles])
+  const leadArticle = cnLatest[0] || null
+  const cnList = cnLatest.slice(1)
+
+  const ptLatest = useMemo(() => {
+    const shown = new Set(cnLatest.map((article) => article.link))
+    const rest = articles.filter((article) => !shown.has(article.link))
+    const translated = rest.filter((article) => article.title_zh)
+    return [...(translated.length ? translated : rest)].sort(byNewest).slice(0, PT_LIST_COUNT)
+  }, [articles, cnLatest])
+
   const hotNews = useMemo(
-    () => sortArticlesByHotness(articles, { limit: 3, window: hotWindow }),
+    () => sortArticlesByHotness(articles, { limit: HOT_COUNT, window: hotWindow }),
     [articles, hotWindow]
   )
-  const hotCnArticles = useMemo(
-    () => sortArticlesByHotness(cnArticles, { limit: 3, window: hotWindow }),
-    [cnArticles, hotWindow]
+  const latestJobs = useMemo(
+    () => jobs.filter((job) => !job.status || job.status === 'active').slice(0, JOB_COUNT),
+    [jobs]
   )
+  const sourceCount = useMemo(
+    () => new Set(articles.map((article) => article.source).filter(Boolean)).size,
+    [articles]
+  )
+  const cnTaggedCount = useMemo(
+    () => cnArticles.filter((article) => (article.tags_zh || '').trim()).length,
+    [cnArticles]
+  )
+
+  // Slots arrive pinned-first, newest-first; an unknown placement falls back to the sidebar.
+  const slots = useMemo(() => {
+    const at = (placement) => announcements.filter((item) => (item.placement || 'sidebar') === placement)
+    const sidebar = announcements.filter((item) => !['banner', 'feed'].includes(item.placement))
+    return {
+      banner: at('banner')[0] || null,
+      feed: at('feed').slice(0, FEED_SLOT_COUNT),
+      notices: sidebar.filter((item) => item.kind !== 'promo').slice(0, SIDEBAR_NOTICE_COUNT),
+      sidebarPromos: sidebar.filter((item) => item.kind === 'promo').slice(0, SIDEBAR_PROMO_COUNT),
+    }
+  }, [announcements])
+
   const articlesByLink = useMemo(
     () => new Map(articles.map((article) => [article.link, article])),
     [articles]
@@ -88,500 +245,227 @@ export default function HomePage({
     if (!selectedArticleState?.link) return null
     return articlesByLink.get(selectedArticleState.link) || selectedArticleState.fallbackArticle
   }, [articlesByLink, selectedArticleState])
-  const topTags = Object.entries(
-    cnArticles.reduce((acc, article) => {
-      for (const tag of (article.tags_zh || '').split(',').map((item) => item.trim()).filter(Boolean)) {
-        acc[tag] = (acc[tag] || 0) + 1
-      }
-      return acc
-    }, {})
-  )
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
-  const shouldShowAnnouncements = announcements.length > 0 || Boolean(user?.is_admin)
 
   const handleOpenArticle = (article) => {
     const nextViewCount = onArticleOpen?.(article)
     const optimisticArticle = typeof nextViewCount === 'number' ? { ...article, view_count: nextViewCount } : article
-    setSelectedArticleState({
-      link: article.link,
-      fallbackArticle: optimisticArticle,
-    })
+    setSelectedArticleState({ link: article.link, fallbackArticle: optimisticArticle })
   }
 
   return (
-    <div className="relative overflow-hidden">
-      <div
-        aria-hidden
-        className="absolute inset-x-0 top-0 -z-10 h-[420px] rounded-[40px]"
-        style={{
-          background:
-            'radial-gradient(circle at top left, rgba(157,61,51,0.18), transparent 40%), radial-gradient(circle at top right, rgba(43,108,176,0.18), transparent 36%), linear-gradient(180deg, rgba(253,249,242,0.98), rgba(245,243,238,0.88))',
-        }}
-      />
+    <div className="grid gap-5">
+      <h1 className="sr-only">葡萄牙华人信息中心</h1>
 
-      <section className="grid gap-5 lg:grid-cols-[minmax(0,1.25fr)_360px] lg:items-start">
-        <div className="grid gap-5 pt-2 sm:pt-8">
-          <div>
-            <Badge color="#9D3D33">Portugal Chinese Hub</Badge>
-            <div className="mt-4 flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
-              <div className="max-w-4xl">
-                <h1
-                  className="text-[2.2rem] font-black tracking-[-0.04em] text-text sm:text-5xl lg:text-6xl"
-                  style={{ fontFamily: 'var(--font-headline)' }}
-                >
-                  葡萄牙华人信息中心
-                </h1>
-                <p className="mt-4 max-w-2xl text-[15px] leading-7 text-text-muted sm:mt-5 sm:text-lg sm:leading-8">
-                  一个为在葡华人整理新闻、招聘、房产、社区与知识问答的日常信息中心。先看重点，再进入你今天最需要的页面。
-                </p>
-              </div>
+      <p className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border pb-3 text-[13px] text-text-muted">
+        <span className="font-semibold text-text">{todayLabel()}</span>
+        {newsLastUpdated && <span>新闻更新于 {formatDateTime(newsLastUpdated)}</span>}
+        {articles.length > 0 && (
+          <span>{cnTaggedCount} 条华人相关 · {sourceCount} 个来源</span>
+        )}
+      </p>
 
-              <div className="grid grid-cols-1 gap-2 sm:max-w-[420px] sm:grid-cols-2 sm:gap-3">
-                {QUICK_ACTIONS.map((action) => (
-                  <button
-                    key={action.tab}
-                    onClick={() => onTabChange(action.tab)}
-                    className="group inline-flex items-center gap-3 rounded-2xl border border-white/70 bg-white/92 px-4 py-3 text-left text-sm font-semibold text-text shadow-[0_12px_34px_rgba(58,44,31,0.08)] transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgba(58,44,31,0.12)]"
-                  >
-                    <span
-                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
-                      style={{ background: `${action.tone}14`, color: action.tone }}
-                    >
-                      <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
-                        {action.icon}
-                      </span>
-                    </span>
-                    <span>{action.label}</span>
-                  </button>
+      {slots.banner && <SlotCard slot={slots.banner} />}
+
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start">
+        <div className="grid min-w-0 gap-7">
+          <section className="grid gap-3">
+            <SectionHeading title="华人关注" actionLabel="全部" onAction={() => onTabChange('华人关注')} />
+            {leadArticle ? (
+              <>
+                <NewsFeedRow article={leadArticle} onClick={handleOpenArticle} lead showDate />
+                {cnList.map((article) => (
+                  <NewsFeedRow key={article.link} article={article} onClick={handleOpenArticle} showDate />
                 ))}
-              </div>
+              </>
+            ) : (
+              <Card className="text-sm text-text-muted">还没有翻译好的华人相关新闻。</Card>
+            )}
+          </section>
+
+          {slots.feed.length > 0 && (
+            <div className="grid gap-3">
+              {slots.feed.map((slot) => <SlotCard key={slot.id} slot={slot} />)}
             </div>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)] xl:gap-5">
-            <Card className="relative overflow-hidden rounded-[32px] border-[#E2D2BF] bg-[linear-gradient(135deg,#fffaf2_0%,#f4e7d6_100%)] p-0 shadow-[0_26px_56px_rgba(86,60,33,0.16)]">
-              <div
-                aria-hidden
-                className="absolute right-0 top-0 h-40 w-40 rounded-full blur-3xl"
-                style={{ background: 'rgba(157,61,51,0.16)' }}
-              />
-              <div className="relative px-5 py-5 sm:px-7 sm:py-7">
-                <div className="flex items-center justify-between gap-3">
-                  <Badge color="#9D3D33">今日焦点</Badge>
-                  <button
-                    onClick={() => onTabChange('华人关注')}
-                    className="text-xs font-semibold text-accent transition-colors hover:text-accent-hover sm:text-sm"
-                  >
-                    查看更多
-                  </button>
-                </div>
-
-                <h2
-                  className="mt-4 max-w-2xl text-[1.65rem] font-black leading-tight tracking-tight text-text sm:mt-5 sm:text-[2rem]"
-                  style={{ fontFamily: 'var(--font-headline)' }}
-                >
-                  {leadArticle?.title_zh || leadArticle?.title || '今天的重点内容会出现在这里'}
-                </h2>
-
-                <p className="mt-3 max-w-2xl text-sm leading-7 text-text-muted sm:mt-4 sm:text-[15px] sm:leading-8">
-                  {leadArticle?.summary_zh || leadArticle?.content_zh || leadArticle?.ai_summary || leadArticle?.summary || '获取新闻后，首页会自动把最相关的华人内容放到这里，方便你不用先点进栏目也能看到重点。'}
-                </p>
-
-                <div className="mt-6 flex flex-wrap items-center gap-2">
-                  {topTags.length > 0 ? topTags.map(([tag, count]) => (
-                    <span
-                      key={tag}
-                      className="inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/75 px-3 py-1.5 text-xs font-semibold text-text"
-                    >
-                      <span className="material-symbols-outlined text-[#9D3D33]" style={{ fontSize: 14 }}>sell</span>
-                      {tag}
-                      <span className="text-text-subtle">{count}</span>
-                    </span>
-                  )) : (
-                    <span className="inline-flex items-center rounded-full border border-white/80 bg-white/75 px-3 py-1.5 text-xs font-semibold text-text-muted">
-                      等待华人标签数据
-                    </span>
-                  )}
-                </div>
-
-                <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-2xl border border-white/75 bg-white/70 px-4 py-4">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-text-subtle">最新更新</p>
-                    <p className="mt-2 text-sm font-semibold text-text">{formatDate(newsLastUpdated)}</p>
-                    <p className="mt-2 text-xs leading-6 text-text-muted">新闻流已经整理完成后，这里会优先显示与你更相关的内容。</p>
-                  </div>
-                  <div className="rounded-2xl border border-white/75 bg-white/70 px-4 py-4">
-                    <p className="text-[11px] uppercase tracking-[0.14em] text-text-subtle">今天建议</p>
-                    <p className="mt-2 text-sm font-semibold text-text">先看华人关注，再切到招聘或视频</p>
-                    <p className="mt-2 text-xs leading-6 text-text-muted">适合快速了解生活、政策、社区和工作机会的新变化。</p>
-                  </div>
-                </div>
-              </div>
-            </Card>
-
-            <div className="grid gap-5">
-              <Card className="rounded-[28px] border-white/80 bg-white/92 shadow-[0_20px_50px_rgba(58,44,31,0.08)]">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <Badge color="#B8843C">热门</Badge>
-                    <h2 className="mt-3 text-xl font-black tracking-tight text-text" style={{ fontFamily: 'var(--font-headline)' }}>
-                      热门新闻
-                    </h2>
-                  </div>
-                  <div className="flex flex-col items-end gap-2">
-                    <button onClick={() => onTabChange('葡萄牙新闻')} className="text-xs font-semibold text-accent hover:text-accent-hover sm:text-sm">
-                      全部新闻
-                    </button>
-                    <HotWindowToggle value={hotWindow} onChange={setHotWindow} />
-                  </div>
-                </div>
-
-                <div className="mt-5 grid gap-4">
-                  {hotNews.length > 0 ? hotNews.map((article, index) => (
-                    <button
-                      key={article.link}
-                      type="button"
-                      onClick={() => handleOpenArticle(article)}
-                      className="flex w-full gap-3 border-b border-border pb-4 text-left transition-colors last:border-b-0 last:pb-0 hover:bg-bg-subtle/50"
-                    >
-                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-sm font-black text-accent">
-                        {index + 1}
-                      </span>
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="text-xs uppercase tracking-[0.14em] text-text-subtle">
-                            {article.source || 'Portugal'} · {formatViews(article.view_count)}
-                          </p>
-                          <span className="text-[11px] font-semibold text-[#B8843C]">{describeHotness(article)}</span>
-                        </div>
-                        <h3 className="mt-1 text-sm font-bold leading-6 text-text">{article.title_zh || article.title}</h3>
-                      </div>
-                    </button>
-                  )) : (
-                    <p className="text-sm text-text-muted">{hotWindowEmptyLabel(hotWindow)}</p>
-                  )}
-                </div>
-                <p className="mt-5 text-xs leading-6 text-text-subtle">
-                  你可以切换查看今日、本周或全部热门内容；排序会优先参考阅读量，并对近期新闻加权。
-                </p>
-              </Card>
-
-              <Card className="rounded-[28px] border-white/80 bg-white/92 shadow-[0_20px_50px_rgba(58,44,31,0.08)]">
-                <Badge color="#2E7D5A">入口</Badge>
-                <h2 className="mt-3 text-xl font-black tracking-tight text-text" style={{ fontFamily: 'var(--font-headline)' }}>
-                  现在可以做什么
-                </h2>
-                <div className="mt-5 grid gap-3">
-                  {[
-                    ['看在葡华人最关心的信息', '华人关注'],
-                    ['快速浏览公开招聘机会', '招聘'],
-                  ].map(([text, tab]) => (
-                    <button
-                      key={`${tab}-${text}`}
-                      onClick={() => (tab === '首页' ? onLoginClick() : onTabChange(tab))}
-                      className="flex items-center justify-between rounded-2xl border border-border bg-surface-muted px-4 py-3 text-left transition-colors hover:bg-white"
-                    >
-                      <span className="pr-3 text-sm font-semibold leading-6 text-text">{text}</span>
-                      <span className="material-symbols-outlined text-accent" style={{ fontSize: 18 }}>
-                        arrow_outward
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </Card>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid gap-5">
-          {shouldShowAnnouncements && (
-            <Card className="relative overflow-hidden rounded-[28px] border-[#E7D9C8] bg-[linear-gradient(160deg,#fffdf7_0%,#f9f1e6_100%)] shadow-[0_20px_50px_rgba(86,60,33,0.12)]">
-              <div
-                aria-hidden
-                className="absolute right-0 top-0 h-28 w-28 rounded-full blur-3xl"
-                style={{ background: 'rgba(157,61,51,0.12)' }}
-              />
-              <div className="relative">
-                <div className="border-b border-[#E6DCCB] px-5 py-5 sm:px-6">
-                  <div className="flex items-center justify-between gap-3">
-                    <Badge color="#9D3D33">平台公告</Badge>
-                    {user?.is_admin && (
-                      <button
-                        type="button"
-                        onClick={() => onTabChange('管理')}
-                        className="text-xs font-semibold text-accent transition-colors hover:text-accent-hover"
-                      >
-                        去管理
-                      </button>
-                    )}
-                  </div>
-                  <p className="mt-4 text-[1.45rem] font-black tracking-tight text-text sm:text-[1.65rem]" style={{ fontFamily: 'var(--font-headline)' }}>
-                    {announcements.length > 0 ? '平台最新提醒与更新' : '这里会显示管理员发布的平台公告'}
-                  </p>
-                  <p className="mt-2 text-sm leading-7 text-text-muted">
-                    {announcements.length > 0 ? '优先展示置顶公告，方便你先看到平台通知、维护提醒和重要说明。' : '目前还没有公开公告。后续管理员发布后，会优先展示在首页右侧。'}
-                  </p>
-                </div>
-
-                <div className="grid gap-3 px-5 py-5 sm:px-6">
-                  {announcements.length > 0 ? announcements.map((announcement) => (
-                    <div
-                      key={announcement.id}
-                      className="rounded-[22px] border border-white/80 bg-white/88 px-4 py-4 shadow-[0_10px_24px_rgba(58,44,31,0.06)]"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            {announcement.is_pinned && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-[#9D3D33]/10 px-2.5 py-1 text-[11px] font-semibold text-[#9D3D33]">
-                                <span className="material-symbols-outlined" style={{ fontSize: 13 }}>keep</span>
-                                置顶
-                              </span>
-                            )}
-                            <span className="text-[11px] uppercase tracking-[0.14em] text-text-subtle">
-                              {formatDate(announcement.updated_at || announcement.created_at)}
-                            </span>
-                          </div>
-                          <h3 className="mt-3 text-base font-black leading-7 text-text">
-                            {announcement.title}
-                          </h3>
-                        </div>
-                      </div>
-                      <p className="mt-2 whitespace-pre-line text-sm leading-7 text-text-muted">
-                        {announcement.content}
-                      </p>
-                    </div>
-                  )) : (
-                    <div className="rounded-[22px] border border-dashed border-[#D8C8B6] bg-white/72 px-4 py-4">
-                      <p className="text-sm font-semibold text-text">还没有公开公告</p>
-                      <p className="mt-2 text-sm leading-7 text-text-muted">
-                        你可以在管理页的 `公告` 标签里发布第一条平台通知，发布后这里会自动显示。
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Card>
           )}
 
-          <Card
-            className="relative overflow-hidden rounded-[30px] border-[#E6DCCB] bg-[linear-gradient(160deg,#fffdf7_0%,#f7efe4_100%)] p-0 shadow-[0_24px_60px_rgba(86,60,33,0.14)]"
-          >
-            <div className="border-b border-[#E6DCCB] px-5 py-5 sm:px-6">
-              <Badge color="#2E7D5A">今日概览</Badge>
-              <p className="mt-4 text-[1.7rem] font-black tracking-tight text-text sm:text-2xl" style={{ fontFamily: 'var(--font-headline)' }}>
-                {user ? `欢迎回来，${user.name || '朋友'}` : '从这里开始今天的信息浏览'}
-              </p>
-              <p className="mt-2 text-sm leading-7 text-text-muted">
-                新闻更新时间 {formatDate(newsLastUpdated)}。
-              </p>
-            </div>
-
-            <div className="grid gap-4 px-5 py-5 sm:px-6">
-              <button
-                type="button"
-                onClick={() => featuredCn[0] ? handleOpenArticle(featuredCn[0]) : onTabChange('华人关注')}
-                className="flex items-center justify-between gap-3 rounded-2xl bg-white/85 px-4 py-3 text-left transition-colors hover:bg-white"
-              >
-                <div className="min-w-0">
-                  <p className="text-xs uppercase tracking-[0.16em] text-text-subtle">华人精选</p>
-                  <p className="mt-1 line-clamp-2 text-base font-bold text-text">{featuredCn[0]?.title_zh || featuredCn[0]?.title || '等待最新内容'}</p>
-                </div>
-                <span className="shrink-0 text-sm font-semibold text-accent">查看</span>
-              </button>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <StatCard label="华人相关" value={cnArticles.length} hint="已筛出与在葡华人更相关的新闻条目" />
-                <StatCard label="招聘发布" value={jobs.length} hint="公开可见的工作机会，适合快速浏览" />
-                <StatCard label="新闻来源" value={new Set(articles.map((article) => article.source)).size} hint="持续抓取的葡语媒体来源数量" />
-              </div>
-            </div>
-          </Card>
-        </div>
-      </section>
-
-      <section className="mt-8 grid grid-cols-2 gap-3 sm:grid-cols-2 sm:gap-4 xl:grid-cols-3">
-        <StatCard label="全部新闻" value={articles.length} hint="汇总葡萄牙重点媒体与分类内容" />
-        <StatCard label="葡语来源" value={new Set(articles.map((article) => article.source)).size} hint="持续抓取的媒体来源数量" />
-        <StatCard label="最新职位" value={jobs.filter((job) => job.status === 'active').length} hint="仍在开放中的招聘信息" />
-      </section>
-
-      <section className="mt-10 grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-        <Card className="rounded-[30px] border-white/80 bg-white/92 shadow-[0_20px_50px_rgba(58,44,31,0.08)]">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <Badge color="#9D3D33">精选</Badge>
-              <h2 className="mt-3 text-2xl font-black tracking-tight text-text" style={{ fontFamily: 'var(--font-headline)' }}>
-                华人关注
-              </h2>
-              <p className="mt-1 text-sm text-text-muted">按当前热门时间范围筛出的在葡华人相关内容。</p>
-            </div>
-            <button onClick={() => onTabChange('华人关注')} className="text-sm font-semibold text-accent hover:text-accent-hover">
-              进入页面
-            </button>
-          </div>
-
-          <PreviewList
-            items={hotCnArticles}
-            empty="暂时还没有华人精选内容，获取新闻后会出现在这里。"
-            renderItem={(article) => (
-              <button
-                key={article.link}
-                type="button"
-                onClick={() => handleOpenArticle(article)}
-                className="mt-4 w-full rounded-2xl border border-border bg-surface-muted px-4 py-4 text-left transition-colors hover:bg-white"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <Badge color="#9D3D33">{article.tags_zh?.split(',')[0]?.trim() || '精选新闻'}</Badge>
-                  <span className="text-xs font-semibold text-[#9D3D33]">{describeHotness(article)}</span>
-                </div>
-                <h3 className="mt-3 text-lg font-bold leading-7 text-text">
-                  {article.title_zh || article.title}
-                </h3>
-                <p className="mt-2 text-sm leading-7 text-text-muted line-clamp-3">
-                  {article.summary_zh || article.content_zh || article.ai_summary || article.summary}
-                </p>
-                <div className="mt-3 flex items-center justify-between gap-3">
-                  <span className="text-xs text-text-subtle">{formatViews(article.view_count)}</span>
-                  <span className="text-xs font-semibold text-accent">点击阅读</span>
-                </div>
-              </button>
+          <section className="grid gap-3">
+            <SectionHeading title="葡萄牙新闻" actionLabel="全部" onAction={() => onTabChange('葡萄牙新闻')} />
+            {ptLatest.length > 0 ? (
+              <Card padding="none" className="divide-y divide-border">
+                {ptLatest.map((article) => (
+                  <button
+                    key={article.link}
+                    type="button"
+                    onClick={() => handleOpenArticle(article)}
+                    className="group flex w-full flex-col gap-0.5 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4 text-left transition-colors hover:bg-bg-subtle sm:px-5"
+                  >
+                    <span className="min-w-0 text-[15px] font-semibold leading-6 text-text transition-colors group-hover:text-accent">
+                      {article.title_zh || article.title}
+                    </span>
+                    <span className="shrink-0 text-[12px] tabular-nums text-text-subtle">
+                      {article.source} · {formatDateTime(article.published)}
+                    </span>
+                  </button>
+                ))}
+              </Card>
+            ) : (
+              <Card className="text-sm text-text-muted">还没有新闻。</Card>
             )}
-          />
-        </Card>
+          </section>
 
-        <div className="grid gap-6">
-          <Card className="rounded-[30px] border-white/80 bg-white/92 shadow-[0_20px_50px_rgba(58,44,31,0.08)]">
-          <div className="flex items-start justify-between gap-4">
-              <div>
-                <Badge color="#2B6CB0">新闻</Badge>
-                <h2 className="mt-3 text-xl font-black tracking-tight text-text" style={{ fontFamily: 'var(--font-headline)' }}>
-                  葡萄牙新闻速览
-                </h2>
-              </div>
-              <button onClick={() => onTabChange('葡萄牙新闻')} className="text-sm font-semibold text-accent hover:text-accent-hover">
-                全部新闻
-              </button>
+          {boardSections.length > 0 && (
+            <div className="grid gap-x-6 gap-y-7 md:grid-cols-2">
+              {boardSections.map((section) => (
+                <BoardSection
+                  key={section.title}
+                  title={section.title}
+                  items={section.items}
+                  getMeta={section.getMeta}
+                  onOpen={() => onTabChange(section.tab)}
+                />
+              ))}
             </div>
+          )}
+        </div>
 
-            <PreviewList
-              items={latestNews}
-              empty="还没有新闻内容。"
-              renderItem={(article) => (
-                <div key={article.link} className="mt-4 border-b border-border pb-4 last:border-b-0 last:pb-0">
-                  <p className="text-xs uppercase tracking-[0.14em] text-text-subtle">{article.source}</p>
-                  <h3 className="mt-2 text-base font-bold leading-7 text-text">{article.title_zh || article.title}</h3>
-                </div>
-              )}
-            />
-          </Card>
-
-          <Card className="rounded-[30px] border-white/80 bg-white/92 shadow-[0_20px_50px_rgba(58,44,31,0.08)]">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <Badge color="#2E7D5A">社区</Badge>
-                <h2 className="mt-3 text-xl font-black tracking-tight text-text" style={{ fontFamily: 'var(--font-headline)' }}>
-                  招聘与机会
-                </h2>
-              </div>
-              <button onClick={() => onTabChange('招聘')} className="text-sm font-semibold text-accent hover:text-accent-hover">
-                查看招聘
-              </button>
-            </div>
-
-            <PreviewList
-              items={latestJobs}
-              empty="还没有招聘信息，第一条发布后会显示在这里。"
-              renderItem={(job) => (
-                <div key={job.id} className="mt-4 rounded-2xl border border-border bg-surface-muted px-4 py-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <Badge color="#2E7D5A">{job.industry}</Badge>
-                    <span className="text-xs text-text-subtle">{job.created_at?.slice(0, 10)}</span>
+        <aside className="grid gap-6 xl:sticky xl:top-4">
+          {slots.notices.length > 0 && (
+            <section className="grid gap-3">
+              <SectionHeading
+                title="平台公告"
+                actionLabel={user?.is_admin ? '管理' : null}
+                onAction={() => onTabChange('管理')}
+              />
+              <Card padding="none" className="divide-y divide-border">
+                {slots.notices.map((announcement) => (
+                  <div key={announcement.id} className="px-4 py-3">
+                    <h3 className="text-[15px] font-bold leading-6 text-text">
+                      {announcement.is_pinned && (
+                        <span className="mr-1.5 rounded bg-accent-subtle px-1.5 py-px align-middle text-[11px] font-semibold text-accent">
+                          置顶
+                        </span>
+                      )}
+                      {announcement.title}
+                    </h3>
+                    <p className="mt-1 whitespace-pre-line text-[13px] leading-6 text-text-muted">
+                      {announcement.content}
+                    </p>
+                    <p className="mt-1 flex items-center justify-between gap-3 text-[12px] tabular-nums text-text-subtle">
+                      {formatDateTime(announcement.updated_at || announcement.created_at)}
+                      {/^https?:\/\//i.test(announcement.link_url || '') && (
+                        <a
+                          href={announcement.link_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="font-semibold text-accent transition-colors hover:text-accent-hover"
+                        >
+                          {announcement.link_label || '了解详情'}
+                        </a>
+                      )}
+                    </p>
                   </div>
-                  <h3 className="mt-3 text-base font-bold text-text">{job.title}</h3>
-                  <p className="mt-2 text-sm text-text-muted">
-                    {job.location || '地点待补充'}{job.salary_range ? ` · ${job.salary_range}` : ''}
-                  </p>
-                </div>
-              )}
-            />
-          </Card>
-        </div>
-      </section>
+                ))}
+              </Card>
+            </section>
+          )}
 
-      <section className="mt-10 grid gap-6">
-        <Card className="rounded-[30px] border-[#E4D5BF] bg-[linear-gradient(180deg,#fffaf0_0%,#f6efe2_100%)] shadow-[0_22px_54px_rgba(86,60,33,0.12)]">
-          <Badge color="#B8843C">导航</Badge>
-          <h2 className="mt-3 text-2xl font-black tracking-tight text-text" style={{ fontFamily: 'var(--font-headline)' }}>
-            按任务进入页面
-          </h2>
-          <p className="mt-2 text-sm leading-7 text-text-muted">
-            如果你每天只看几件事，可以直接从这里进入最适合的页面，不必先在各个标签之间切换。
-          </p>
+          {announcements.length === 0 && user?.is_admin && (
+            <button
+              type="button"
+              onClick={() => onTabChange('管理')}
+              className="rounded-xl border border-dashed border-border-strong px-4 py-3 text-left text-[13px] text-text-muted transition-colors hover:bg-bg-subtle"
+            >
+              还没有公告或推广，<span className="font-semibold text-accent">去发布</span>
+            </button>
+          )}
 
-          <div className="mt-6 grid gap-3">
-            {[
-              ['先看与华人相关的重要信息', '华人关注', 'arrow_outward'],
-              ['浏览更完整的葡语新闻与分类', '葡萄牙新闻', 'newsstand'],
-              ['查看或发布招聘机会', '招聘', 'work_history'],
-            ].map(([copy, tab, icon]) => (
-              <button
-                key={`${tab}-${copy}`}
-                onClick={() => (tab === '首页' ? onLoginClick() : onTabChange(tab))}
-                className="flex items-center justify-between rounded-2xl border border-white/70 bg-white/92 px-4 py-4 text-left transition-colors hover:bg-white"
-              >
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-text">{tab}</p>
-                  <p className="mt-1 text-xs text-text-muted">{copy}</p>
-                </div>
-                <span className="material-symbols-outlined text-accent" style={{ fontSize: 20 }}>
-                  {icon}
-                </span>
-              </button>
-            ))}
-          </div>
-        </Card>
-      </section>
+          {slots.sidebarPromos.map((slot) => (
+            <SlotCard key={slot.id} slot={slot} layout="stack" />
+          ))}
 
-      <section className="mt-10 pb-4">
-        <div className="relative overflow-hidden rounded-[32px] border border-[#E4D9C9] bg-[linear-gradient(180deg,rgba(255,251,244,0.92)_0%,rgba(244,234,222,0.86)_100%)] px-5 py-6 shadow-[0_18px_48px_rgba(86,60,33,0.08)] sm:px-7 sm:py-8">
-          <div
-            aria-hidden
-            className="absolute inset-x-0 top-0 h-16 bg-[linear-gradient(180deg,rgba(255,255,255,0.45)_0%,rgba(255,255,255,0)_100%)]"
-          />
+          <section className="grid gap-3">
+            <SectionHeading title="热门新闻">
+              <HotWindowToggle value={hotWindow} onChange={setHotWindow} />
+            </SectionHeading>
+            {hotNews.length > 0 ? (
+              <Card padding="none" as="ol" className="divide-y divide-border">
+                {hotNews.map((article, index) => (
+                  <li key={article.link}>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenArticle(article)}
+                      className="group flex w-full gap-3 px-4 py-3 text-left transition-colors hover:bg-bg-subtle"
+                    >
+                      <span className="w-4 shrink-0 text-[15px] font-black tabular-nums leading-6 text-accent">
+                        {index + 1}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="line-clamp-2 text-[14px] font-semibold leading-6 text-text transition-colors group-hover:text-accent">
+                          {article.title_zh || article.title}
+                        </span>
+                        <span className="mt-0.5 block text-[12px] text-text-subtle">
+                          {article.source} · {Number(article.view_count || 0)} 次阅读
+                        </span>
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </Card>
+            ) : (
+              <Card className="text-sm text-text-muted">{hotEmptyLabel(hotWindow)}</Card>
+            )}
+          </section>
 
-          <div className="relative grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-            <div className="max-w-3xl">
-              <Badge color="#9D3D33">Daily Flow</Badge>
-              <h2
-                className="mt-4 text-2xl font-black tracking-tight text-text sm:text-[2rem]"
-                style={{ fontFamily: 'var(--font-headline)' }}
-              >
-                今天先从重点开始，剩下的内容交给平台慢慢补全
-              </h2>
-              <p className="mt-3 text-sm leading-8 text-text-muted sm:text-[15px]">
-                你可以先看华人关注和葡萄牙新闻，再按需要进入招聘、房产、二手或社区。页面底部也会继续保留主要频道、服务信息和版权说明，让整个平台更完整。
-              </p>
-            </div>
+          <section className="grid gap-3">
+            <SectionHeading title="最新招聘" actionLabel="全部" onAction={() => onTabChange('招聘')} />
+            {latestJobs.length > 0 ? (
+              <Card padding="none" className="divide-y divide-border">
+                {latestJobs.map((job) => (
+                  <button
+                    key={job.id}
+                    type="button"
+                    onClick={() => onTabChange('招聘')}
+                    className="group block w-full px-4 py-3 text-left transition-colors hover:bg-bg-subtle"
+                  >
+                    <span className="block text-[14px] font-semibold leading-6 text-text transition-colors group-hover:text-accent">
+                      {job.title}
+                    </span>
+                    <span className="mt-0.5 block text-[12px] text-text-subtle">
+                      {[job.industry, job.location, job.salary_range].filter(Boolean).join(' · ')}
+                    </span>
+                  </button>
+                ))}
+              </Card>
+            ) : (
+              <Card className="text-sm text-text-muted">还没有招聘信息。</Card>
+            )}
+          </section>
 
-            <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-              <Button variant="primary" icon="diversity_3" onClick={() => onTabChange('华人关注')} className="w-full sm:w-auto">
-                进入华人关注
-              </Button>
-              <Button variant="ghost" icon="newspaper" onClick={() => onTabChange('葡萄牙新闻')} className="w-full sm:w-auto">
-                看葡萄牙新闻
-              </Button>
-            </div>
-          </div>
-        </div>
-      </section>
+          {guides.length > 0 && (
+            <section className="grid gap-3">
+              <SectionHeading title="实用指南" actionLabel="全部" onAction={() => onTabChange('实用指南')} />
+              <Card padding="none" className="divide-y divide-border">
+                {guides.map((guide) => (
+                  <button
+                    key={guide.id}
+                    type="button"
+                    onClick={() => (onGuideOpen ? onGuideOpen(guide.id) : onTabChange('实用指南'))}
+                    className="group block w-full px-4 py-3 text-left transition-colors hover:bg-bg-subtle"
+                  >
+                    <span className="line-clamp-2 text-[14px] font-semibold leading-6 text-text transition-colors group-hover:text-accent">
+                      {guide.title}
+                    </span>
+                    <span className="mt-0.5 block text-[12px] text-text-subtle">{guide.category}</span>
+                  </button>
+                ))}
+              </Card>
+            </section>
+          )}
+        </aside>
+      </div>
 
       {selectedArticle && (
-        <ArticleModal
-          article={selectedArticle}
-          onClose={() => setSelectedArticleState(null)}
-        />
+        <ArticleModal article={selectedArticle} onClose={() => setSelectedArticleState(null)} />
       )}
     </div>
   )

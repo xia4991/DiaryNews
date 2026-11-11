@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Badge from '../components/ui/Badge'
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
@@ -134,9 +134,15 @@ function GuideDetail({ item, onBack }) {
   )
 }
 
-export default function PracticalGuideTab() {
+export default function PracticalGuideTab({ initialGuideId = null, onInitialGuideConsumed }) {
   const [activeCategory, setActiveCategory] = useState('全部')
-  const [selectedGuide, setSelectedGuide] = useState(null)
+  // The home page can deep-link to one guide; it opens once, then the id is handed back.
+  const [selectedGuide, setSelectedGuide] = useState(
+    () => (initialGuideId && PRACTICAL_GUIDES.find((item) => item.id === initialGuideId)) || null
+  )
+  useEffect(() => {
+    if (initialGuideId) onInitialGuideConsumed?.()
+  }, [initialGuideId, onInitialGuideConsumed])
   const filteredGuides = useMemo(() => {
     const items = activeCategory === '全部'
       ? PRACTICAL_GUIDES

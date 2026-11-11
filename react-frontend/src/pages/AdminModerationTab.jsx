@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { api } from '../api'
 import Card from '../components/ui/Card'
 import Badge from '../components/ui/Badge'
@@ -11,6 +11,32 @@ const KIND_ZH = { job: '招聘', realestate: '房产', secondhand: '二手' }
 const KIND_COLORS = { job: '#2E7D5A', realestate: '#2B6CB0', secondhand: '#8B5CF6' }
 const STATUS_ZH = { active: '在线', hidden: '隐藏', removed: '删除', expired: '过期' }
 const STATUS_COLORS = { active: '#10B981', hidden: '#F59E0B', removed: '#EF4444', expired: '#6B7280' }
+
+const SLOT_KIND_ZH = { notice: '公告', promo: '推广' }
+const SLOT_KIND_COLORS = { notice: '#9D3D33', promo: '#B7791F' }
+const SLOT_PLACEMENT_ZH = { sidebar: '右侧栏', banner: '顶部横幅', feed: '新闻流中间' }
+
+const pad2 = (value) => String(value).padStart(2, '0')
+
+// Stored expiry (UTC ISO) → local YYYY-MM-DD for <input type="date">.
+function expiryToDateInput(value) {
+  const timestamp = Date.parse(value || '')
+  if (Number.isNaN(timestamp)) return ''
+  const date = new Date(timestamp)
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`
+}
+
+// The slot stays up through the end of the chosen local day.
+function dateInputToExpiry(value) {
+  if (!value) return ''
+  const [year, month, day] = value.split('-').map(Number)
+  return new Date(year, month - 1, day, 23, 59, 59).toISOString()
+}
+
+function isExpired(value) {
+  const timestamp = Date.parse(value || '')
+  return !Number.isNaN(timestamp) && timestamp <= Date.now()
+}
 
 const LOG_TYPE_META = {
   news_fetch: { label: '新闻抓取', color: '#2B6CB0', icon: 'newspaper' },
@@ -147,7 +173,7 @@ export default function AdminModerationTab({ onNewsChanged }) {
               icon="campaign"
               onClick={() => setTab('announcements')}
             >
-              公告 {activeAnnouncementCount > 0 && `(${activeAnnouncementCount})`}
+              公告与推广 {activeAnnouncementCount > 0 && `(${activeAnnouncementCount})`}
             </Button>
             <Button
               variant={tab === 'logs' ? 'primary' : 'ghost'}
@@ -497,8 +523,33 @@ function AnnouncementEditorModal({ announcement, onSave, onClose }) {
   const [title, setTitle] = useState(announcement?.title || '')
   const [content, setContent] = useState(announcement?.content || '')
   const [isPinned, setIsPinned] = useState(Boolean(announcement?.is_pinned))
+  const [kind, setKind] = useState(announcement?.kind || 'notice')
+  const [placement, setPlacement] = useState(announcement?.placement || 'sidebar')
+  const [imageUrl, setImageUrl] = useState(announcement?.image_url || '')
+  const [linkUrl, setLinkUrl] = useState(announcement?.link_url || '')
+  const [linkLabel, setLinkLabel] = useState(announcement?.link_label || '')
+  const [expiresOn, setExpiresOn] = useState(expiryToDateInput(announcement?.expires_at))
+  const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const fileInputRef = useRef(null)
+  const linkInvalid = Boolean(linkUrl.trim()) && !/^https?:\/\//i.test(linkUrl.trim())
+
+  const handleImagePick = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    setUploading(true)
+    setError('')
+    try {
+      const uploaded = await api.uploadMedia(file)
+      setImageUrl(uploaded.url)
+    } catch (err) {
+      setError(err.response?.data?.detail || '图片上传失败')
+    } finally {
+      setUploading(false)
+    }
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -512,6 +563,10 @@ function AnnouncementEditorModal({ announcement, onSave, onClose }) {
       setError('正文不能为空')
       return
     }
+    if (linkInvalid) {
+      setError('链接需要以 http:// 或 https:// 开头')
+      return
+    }
 
     setSaving(true)
     setError('')
@@ -520,6 +575,12 @@ function AnnouncementEditorModal({ announcement, onSave, onClose }) {
         title: nextTitle,
         content: nextContent,
         is_pinned: isPinned,
+        kind,
+        placement,
+        image_url: imageUrl,
+        link_url: linkUrl.trim(),
+        link_label: linkLabel.trim(),
+        expires_at: dateInputToExpiry(expiresOn),
       })
       onClose()
     } catch (err) {
@@ -530,8 +591,25 @@ function AnnouncementEditorModal({ announcement, onSave, onClose }) {
   }
 
   return (
-    <Modal onClose={onClose} title={announcement ? '编辑公告' : '发布公告'} size="md">
+    <Modal onClose={onClose} title={announcement ? '编辑内容' : '发布内容'} size="md">
       <form onSubmit={handleSubmit} className="grid gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="类型" hint={kind === 'promo' ? '首页会带“推广”标记' : undefined}>
+            <select id="announcement-kind" value={kind} onChange={(e) => setKind(e.target.value)}>
+              {Object.entries(SLOT_KIND_ZH).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="首页位置">
+            <select id="announcement-placement" value={placement} onChange={(e) => setPlacement(e.target.value)}>
+              {Object.entries(SLOT_PLACEMENT_ZH).map(([value, label]) => (
+                <option key={value} value={value}>{label}</option>
+              ))}
+            </select>
+          </Field>
+        </div>
+
         <Field label="标题" required error={!title.trim() && error ? error : ''}>
           <input
             id="announcement-title"
@@ -545,11 +623,74 @@ function AnnouncementEditorModal({ announcement, onSave, onClose }) {
         <Field label="正文" required error={title.trim() && !content.trim() && error ? error : ''}>
           <textarea
             id="announcement-content"
-            rows={7}
+            rows={5}
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder="写下你希望首页公告栏展示的内容。"
+            placeholder="写下希望在首页展示的内容。"
             className="resize-none"
+          />
+        </Field>
+
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-semibold text-text-muted">配图（可选）</span>
+          <div className="flex items-center gap-3">
+            {imageUrl ? (
+              <img src={imageUrl} alt="" className="h-16 w-28 rounded-lg border border-border bg-surface-muted object-cover" />
+            ) : null}
+            <Button
+              type="button"
+              variant="subtle"
+              size="sm"
+              icon="add_photo_alternate"
+              loading={uploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {uploading ? '上传中…' : imageUrl ? '更换图片' : '上传图片'}
+            </Button>
+            {imageUrl ? (
+              <Button type="button" variant="ghost" size="sm" icon="close" onClick={() => setImageUrl('')}>
+                移除
+              </Button>
+            ) : null}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handleImagePick}
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_150px]">
+          <Field label="跳转链接（可选）" error={linkInvalid ? '需要以 http:// 或 https:// 开头' : ''}>
+            <input
+              id="announcement-link"
+              type="url"
+              inputMode="url"
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              placeholder="https://"
+            />
+          </Field>
+          <Field label="按钮文字">
+            <input
+              id="announcement-link-label"
+              type="text"
+              maxLength={20}
+              value={linkLabel}
+              onChange={(e) => setLinkLabel(e.target.value)}
+              placeholder="了解详情"
+            />
+          </Field>
+        </div>
+
+        <Field label="到期日（可选）" hint="到这一天结束后自动从首页下线；留空则一直显示">
+          <input
+            id="announcement-expires"
+            type="date"
+            value={expiresOn}
+            onChange={(e) => setExpiresOn(e.target.value)}
           />
         </Field>
 
@@ -560,10 +701,10 @@ function AnnouncementEditorModal({ announcement, onSave, onClose }) {
             onChange={(e) => setIsPinned(e.target.checked)}
             className="h-4 w-4 rounded border border-border-strong"
           />
-          置顶这条公告
+          置顶（同一位置里排在最前）
         </label>
 
-        {error && title.trim() && content.trim() ? (
+        {error && title.trim() && content.trim() && !linkInvalid ? (
           <p className="text-sm text-danger">{error}</p>
         ) : null}
 
@@ -572,7 +713,7 @@ function AnnouncementEditorModal({ announcement, onSave, onClose }) {
             取消
           </Button>
           <Button type="submit" variant="primary" icon="save" loading={saving}>
-            {saving ? '保存中…' : '保存公告'}
+            {saving ? '保存中…' : '保存'}
           </Button>
         </div>
       </form>
@@ -637,30 +778,40 @@ function AnnouncementsSection({ announcements, onCreate, onUpdate, onDelete }) {
       )}
 
       <div className="flex items-center gap-2">
-        <Badge color="#9D3D33">公告</Badge>
         <h2 className="text-xl font-black tracking-tight text-text" style={{ fontFamily: 'var(--font-headline)' }}>
-          平台公告
+          公告与推广
         </h2>
         <Button variant="primary" size="sm" icon="add" onClick={() => setCreating(true)} className="ml-auto">
-          发布公告
+          发布内容
         </Button>
       </div>
 
       {announcements.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3 text-text-muted">
           <span className="material-symbols-outlined text-text-subtle" style={{ fontSize: 40 }}>campaign</span>
-          <p className="text-sm">还没有平台公告，发布后就可以接到首页。</p>
+          <p className="text-sm">还没有公告或推广，发布后会出现在首页对应位置。</p>
         </div>
       ) : (
         announcements.map((announcement) => {
           const statusColor = STATUS_COLORS[announcement.status] || '#6B7280'
           const busy = workingId === announcement.id
+          const kindKey = announcement.kind || 'notice'
+          const kindColor = SLOT_KIND_COLORS[kindKey] || '#9D3D33'
+          const expired = isExpired(announcement.expires_at)
           return (
             <Card key={announcement.id} className="rounded-2xl">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <Badge color="#9D3D33">公告</Badge>
+                    <Badge color={kindColor}>{SLOT_KIND_ZH[kindKey] || kindKey}</Badge>
+                    <span className="rounded bg-bg-subtle px-1.5 py-0.5 text-[10px] font-bold text-text-muted">
+                      {SLOT_PLACEMENT_ZH[announcement.placement] || '右侧栏'}
+                    </span>
+                    {expired ? (
+                      <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={{ background: '#6B728018', color: '#6B7280' }}>
+                        已过期
+                      </span>
+                    ) : null}
                     {announcement.is_pinned ? (
                       <span className="rounded px-1.5 py-0.5 text-[10px] font-bold" style={{ background: '#9D3D3318', color: '#9D3D33' }}>
                         置顶
@@ -680,8 +831,25 @@ function AnnouncementsSection({ announcements, onCreate, onUpdate, onDelete }) {
                   <p className="mt-2 whitespace-pre-wrap text-sm leading-7 text-text-muted">
                     {announcement.content}
                   </p>
+                  {announcement.image_url ? (
+                    <img
+                      src={announcement.image_url}
+                      alt=""
+                      loading="lazy"
+                      className="mt-3 h-20 w-36 rounded-lg border border-border bg-surface-muted object-cover"
+                    />
+                  ) : null}
+                  {announcement.link_url ? (
+                    <p className="mt-2 truncate text-xs text-text-muted">
+                      {announcement.link_label || '链接'}：
+                      <a href={announcement.link_url} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+                        {announcement.link_url}
+                      </a>
+                    </p>
+                  ) : null}
                   <p className="mt-3 text-xs text-text-subtle">
                     {announcement.creator_name || '管理员'} · 更新于 {announcement.updated_at?.slice(0, 16).replace('T', ' ')} · {timeAgo(announcement.updated_at)}
+                    {announcement.expires_at ? ` · ${expired ? '已于' : '将于'} ${expiryToDateInput(announcement.expires_at)} 到期` : ''}
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-wrap justify-end gap-2">
