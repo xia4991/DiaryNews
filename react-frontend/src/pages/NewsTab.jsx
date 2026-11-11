@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import ArticleCardFeatured from '../components/news/ArticleCardFeatured'
 import ArticleCard from '../components/news/ArticleCard'
+import NewsFeedRow from '../components/news/NewsFeedRow'
 import ArticleModal from '../components/news/ArticleModal'
 import DailyBriefGenerateModal from '../components/news/DailyBriefGenerateModal'
 import DailyBriefDetailModal from '../components/news/DailyBriefDetailModal'
@@ -65,8 +66,35 @@ function localDateKey(offsetDays = 0) {
   return `${year}-${month}-${day}`
 }
 
+// Local calendar day of the article, so "今天" matches the reader's clock, not UTC.
 function articleDateKey(article) {
-  return (article.published || '').slice(0, 10)
+  const timestamp = Date.parse(article.published || '')
+  if (Number.isNaN(timestamp)) return (article.published || '').slice(0, 10)
+  const date = new Date(timestamp)
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${date.getFullYear()}-${month}-${day}`
+}
+
+function dayLabel(dateKey) {
+  if (dateKey === localDateKey(0)) return '今天'
+  if (dateKey === localDateKey(-1)) return '昨天'
+  const [year, month, day] = dateKey.split('-').map(Number)
+  if (!year || !month || !day) return dateKey || '未标注日期'
+  const weekday = '日一二三四五六'[new Date(year, month - 1, day).getDay()]
+  return `${month}月${day}日 周${weekday}`
+}
+
+// Consecutive runs of the same day; expects articles already sorted by date.
+function groupArticlesByDay(articles) {
+  const groups = []
+  for (const article of articles) {
+    const key = articleDateKey(article)
+    const last = groups[groups.length - 1]
+    if (last && last.key === key) last.items.push(article)
+    else groups.push({ key, items: [article] })
+  }
+  return groups
 }
 
 function resolveDateFilterKey(value) {
@@ -204,6 +232,7 @@ export default function NewsTab({
   const [briefs, setBriefs] = useState([])
   const [briefsLoading, setBriefsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
+  const [showUntranslated, setShowUntranslated] = useState(false)
   // Client-side search over the in-memory feed (no backend search endpoint exists).
   const viewArticles = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
@@ -331,14 +360,29 @@ export default function NewsTab({
     () => dateFilteredFeed.filter((article) => !hasDetailedArticleContent(article)),
     [dateFilteredFeed]
   )
-  const chinaDetailedFeed = useMemo(
-    () => sortChinaFeedArticles(dateFilteredFeed.filter(hasDetailedArticleContent), chinaFeedSort),
-    [dateFilteredFeed, chinaFeedSort]
+  // 华人关注: one unified feed. Untranslated rows are hidden by default (unless nothing
+  // is translated yet) so the Chinese content is not buried under Portuguese headlines.
+  const chinaDateFiltered = useMemo(
+    () => filterArticlesByDate(viewArticles, selectedDateFilter),
+    [viewArticles, selectedDateFilter]
   )
-  const chinaSummaryFeed = useMemo(
-    () => sortChinaFeedArticles(dateFilteredFeed.filter((article) => !hasDetailedArticleContent(article)), chinaFeedSort),
-    [dateFilteredFeed, chinaFeedSort]
+  const chinaTranslated = useMemo(
+    () => chinaDateFiltered.filter((article) => article.title_zh),
+    [chinaDateFiltered]
   )
+  const chinaCanHideUntranslated = chinaTranslated.length > 0
+  const chinaUntranslatedCount = chinaDateFiltered.length - chinaTranslated.length
+  const chinaFeed = useMemo(
+    () => sortChinaFeedArticles(
+      chinaCanHideUntranslated && !showUntranslated ? chinaTranslated : chinaDateFiltered,
+      chinaFeedSort
+    ),
+    [chinaCanHideUntranslated, showUntranslated, chinaTranslated, chinaDateFiltered, chinaFeedSort]
+  )
+  const chinaHotArticles = useMemo(() => {
+    const pool = viewArticles.filter((article) => article.title_zh)
+    return sortArticlesByHotness(pool.length ? pool : viewArticles, { limit: 5, window: hotWindow })
+  }, [viewArticles, hotWindow])
 
   if (!articles.length) {
     return (
@@ -353,10 +397,27 @@ export default function NewsTab({
 
   const visibleFeed = portugalDetailedFeed.slice(0, visibleCount)
   const hasMoreFeed = portugalDetailedFeed.length > visibleFeed.length
-  const chinaVisibleFeed = chinaDetailedFeed.slice(0, visibleCount)
-  const chinaHasMoreFeed = chinaDetailedFeed.length > chinaVisibleFeed.length
+  const chinaVisibleFeed = chinaFeed.slice(0, visibleCount)
+  const chinaHasMoreFeed = chinaFeed.length > chinaVisibleFeed.length
 
   if (layout === 'china') {
+    const [leadArticle, ...feedAfterLead] = chinaVisibleFeed
+    const groupedByDay = chinaFeedSort === 'date'
+    const feedGroups = groupedByDay
+      ? groupArticlesByDay(feedAfterLead)
+      : [{ key: 'all', items: feedAfterLead }]
+    const briefsCard = (
+      <DailyBriefsSection
+        briefType="china"
+        briefs={briefs}
+        loading={briefsLoading}
+        isAdmin={isAdmin}
+        onSelectBrief={handleOpenBrief}
+        onGenerateClick={() => setBriefModalOpen(true)}
+        compact
+      />
+    )
+
     return (
       <>
         {briefModalOpen && (
@@ -376,200 +437,156 @@ export default function NewsTab({
             onClose={handleCloseBrief}
           />
         )}
-        <div className="grid gap-5 sm:gap-6">
-          <Card className="overflow-hidden rounded-[22px] border-[#E2D2BF] bg-[linear-gradient(135deg,#fff8ef_0%,#f5ead9_100%)] p-0 shadow-[0_16px_34px_rgba(86,60,33,0.08)]">
-            <div className="grid gap-4 px-4 py-4 sm:px-5 sm:py-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(520px,1.05fr)]">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <Badge color="#9D3D33">Chinese Focus</Badge>
-                  {isAdmin && (
-                    <Button variant="ghost" size="sm" icon="edit_calendar" onClick={() => setBriefModalOpen(true)}>
-                      生成日报
-                    </Button>
-                  )}
-                </div>
-                <h1
-                  className="mt-3 text-[1.55rem] font-black tracking-tight text-text sm:text-[2rem]"
-                  style={{ fontFamily: 'var(--font-headline)' }}
-                >
-                  {tabTitle}
-                </h1>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-text-muted sm:text-[14px]">
-                  {tabSubtitle}
-                </p>
 
-                {featured && (
-                  <button
-                    onClick={() => handleOpenArticle(featured)}
-                    className="mt-4 block w-full rounded-[18px] border border-white/75 bg-white/76 px-4 py-3 text-left transition-all hover:-translate-y-0.5 hover:bg-white sm:px-4 sm:py-4"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge color="#9D3D33">{featured.tags_zh?.split(',')[0]?.trim() || '重点关注'}</Badge>
-                      <span className="text-[11px] uppercase tracking-[0.14em] text-text-subtle">
-                        {featured.source} · {featured.published?.slice(0, 10)} · {formatViews(featured.view_count)}
-                      </span>
-                    </div>
-                    <h2
-                      className="mt-3 text-[1.2rem] font-black leading-tight tracking-tight text-text sm:text-[1.55rem]"
-                      style={{ fontFamily: 'var(--font-headline)' }}
-                    >
-                      {featured.title_zh || featured.title}
-                    </h2>
-                    <p className="mt-2 line-clamp-2 text-sm leading-6 text-text-muted">
-                      {featured.summary_zh || featured.content_zh || featured.ai_summary || featured.summary}
-                    </p>
-                    <div className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-accent">
-                      阅读重点
-                      <span className="material-symbols-outlined" style={{ fontSize: 16 }}>arrow_outward</span>
-                    </div>
-                  </button>
-                )}
-              </div>
-
-              <div className="grid items-start gap-3 lg:grid-cols-2 xl:grid-cols-2">
-                <div className="rounded-[18px] border border-white/70 bg-white/85 px-4 py-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-[11px] uppercase tracking-[0.16em] text-text-subtle">热门关注</p>
-                    <HotWindowToggle value={hotWindow} onChange={setHotWindow} />
-                  </div>
-                  <div className="mt-3 grid gap-2">
-                    {hotArticles.length > 0 ? hotArticles.map((article, index) => (
-                      <button
-                        key={article.link}
-                        onClick={() => handleOpenArticle(article)}
-                        className="flex items-start gap-3 rounded-2xl bg-surface-muted px-3 py-2.5 text-left transition-colors hover:bg-surface"
-                      >
-                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-subtle text-xs font-black text-accent">
-                          {index + 1}
-                        </span>
-                        <div className="min-w-0">
-                          <p className="text-[11px] uppercase tracking-[0.14em] text-text-subtle">
-                            {article.source} · {formatViews(article.view_count)}
-                          </p>
-                          <p className="mt-1 line-clamp-2 text-[13px] font-bold leading-5 text-text">
-                            {article.title_zh || article.title}
-                          </p>
-                        </div>
-                      </button>
-                    )) : (
-                      <p className="rounded-2xl bg-surface-muted px-4 py-4 text-sm text-text-muted">
-                        {hotWindowEmptyLabel(hotWindow)}
-                      </p>
-                    )}
-                  </div>
-                </div>
-                <DailyBriefsSection
-                  briefType="china"
-                  briefs={briefs}
-                  loading={briefsLoading}
-                  isAdmin={isAdmin}
-                  onSelectBrief={handleOpenBrief}
-                  onGenerateClick={() => setBriefModalOpen(true)}
-                  compact
-                />
-              </div>
+        <div className="grid gap-4">
+          <header className="flex flex-wrap items-end justify-between gap-3">
+            <div className="min-w-0">
+              <h1
+                className="text-[1.6rem] font-black tracking-tight text-text sm:text-[1.9rem]"
+                style={{ fontFamily: 'var(--font-headline)' }}
+              >
+                {tabTitle}
+              </h1>
+              <p className="mt-1 text-sm text-text-muted">
+                {tabSubtitle} 当前 <strong className="font-semibold text-text">{chinaFeed.length}</strong> 条
+              </p>
             </div>
-          </Card>
+            {isAdmin && (
+              <Button variant="ghost" size="sm" icon="edit_calendar" onClick={() => setBriefModalOpen(true)}>
+                生成日报
+              </Button>
+            )}
+          </header>
 
-          <div className="grid gap-6 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)]">
-            <div>
-              <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <Badge color="#9D3D33">精选内容</Badge>
-                  <h2
-                    className="mt-2 text-[1.35rem] font-black tracking-tight text-text sm:text-2xl"
-                    style={{ fontFamily: 'var(--font-headline)' }}
+          <div className="flex flex-wrap items-center gap-2 border-y border-border py-3">
+            <NewsSearchInput value={searchQuery} onChange={handleSearchChange} />
+            <NewsDateFilter value={selectedDateFilter} onChange={handleDateFilterChange} />
+            <div className="inline-flex rounded-full border border-border bg-white/78 p-1 shadow-[0_10px_24px_rgba(62,45,24,0.08)]">
+              {CHINA_FEED_SORT_OPTIONS.map((option) => {
+                const active = chinaFeedSort === option.value
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setChinaFeedSort(option.value)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors sm:px-4 ${
+                      active
+                        ? 'bg-accent text-white shadow-[0_8px_18px_rgba(157,61,51,0.22)]'
+                        : 'text-text-muted hover:bg-surface hover:text-text'
+                    }`}
                   >
-                    持续关注
-                  </h2>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                  <NewsSearchInput value={searchQuery} onChange={handleSearchChange} />
-                  <NewsDateFilter value={selectedDateFilter} onChange={handleDateFilterChange} />
-                  <div className="inline-flex rounded-full border border-border bg-white/78 p-1 shadow-[0_10px_24px_rgba(62,45,24,0.08)]">
-                    {CHINA_FEED_SORT_OPTIONS.map((option) => {
-                      const active = chinaFeedSort === option.value
-                      return (
-                        <button
-                          key={option.value}
-                          type="button"
-                          onClick={() => setChinaFeedSort(option.value)}
-                          className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors sm:px-4 ${
-                            active
-                              ? 'bg-accent text-white shadow-[0_8px_18px_rgba(157,61,51,0.22)]'
-                              : 'text-text-muted hover:bg-surface hover:text-text'
-                          }`}
-                        >
-                          {option.label}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              </div>
+                    {option.label}
+                  </button>
+                )
+              })}
+            </div>
+            {chinaCanHideUntranslated && chinaUntranslatedCount > 0 && (
+              <button
+                type="button"
+                aria-pressed={showUntranslated}
+                onClick={() => {
+                  setShowUntranslated((value) => !value)
+                  setVisibleCount(INITIAL_FEED_COUNT)
+                }}
+                className={`h-9 rounded-full border px-3 text-xs font-semibold transition-colors ${
+                  showUntranslated
+                    ? 'border-accent bg-accent text-white'
+                    : 'border-border bg-white/78 text-text-muted hover:bg-surface hover:text-text'
+                }`}
+              >
+                {showUntranslated ? '隐藏未翻译' : `显示未翻译 ${chinaUntranslatedCount} 条`}
+              </button>
+            )}
+          </div>
+
+          <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="min-w-0">
+              <div className="mb-4 xl:hidden">{briefsCard}</div>
 
               {chinaVisibleFeed.length === 0 ? (
-                <div className="rounded-2xl border border-border bg-surface-muted px-5 py-8 text-center text-sm text-text-muted">
-                  {isDateFiltered ? '该日期暂无带完整正文的关注内容。' : '暂无带完整正文的关注内容，右侧可先浏览简讯。'}
+                <div className="rounded-2xl border border-border bg-surface-muted px-5 py-10 text-center text-sm text-text-muted">
+                  {searchQuery.trim()
+                    ? '没有匹配的新闻，换个关键词试试。'
+                    : isDateFiltered
+                      ? '该日期暂无关注内容。'
+                      : '暂无关注内容。'}
                 </div>
               ) : (
-                <section className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  {chinaVisibleFeed.map(article => (
-                    <ArticleCard key={article.link} article={article} onClick={handleOpenArticle} />
+                <div className="grid gap-3">
+                  <NewsFeedRow
+                    article={leadArticle}
+                    onClick={handleOpenArticle}
+                    lead
+                    showDate
+                  />
+                  {feedGroups.map((group) => (
+                    <section key={group.key} className="grid gap-3">
+                      {groupedByDay && group.items.length > 0 && (
+                        <h2 className="mt-3 flex items-center gap-3 text-[13px] font-bold text-text">
+                          <span>{dayLabel(group.key)}</span>
+                          <span className="h-px flex-1 bg-border" />
+                        </h2>
+                      )}
+                      {group.items.map((article) => (
+                        <NewsFeedRow
+                          key={article.link}
+                          article={article}
+                          onClick={handleOpenArticle}
+                          showDate={!groupedByDay}
+                        />
+                      ))}
+                    </section>
                   ))}
-                </section>
+                </div>
               )}
 
               {chinaHasMoreFeed && (
-                <div className="mt-6 flex justify-center">
-                  <Button variant="ghost" onClick={() => setVisibleCount(count => count + FEED_STEP)}>
+                <div className="mt-6 flex flex-col items-center gap-2">
+                  <Button variant="ghost" onClick={() => setVisibleCount((count) => count + FEED_STEP)}>
                     加载更多
                   </Button>
+                  <p className="text-[11px] text-text-subtle">
+                    已显示 {chinaVisibleFeed.length} / {chinaFeed.length} 条
+                  </p>
                 </div>
               )}
             </div>
 
-            <div className="grid gap-5">
-              <Card className="rounded-[28px] border-white/80 bg-white/92 shadow-[0_20px_46px_rgba(58,44,31,0.08)]">
-                <Badge color="#B8843C">简讯</Badge>
-                <h2
-                  className="mt-3 text-xl font-black tracking-tight text-text"
-                  style={{ fontFamily: 'var(--font-headline)' }}
-                >
-                  简讯内容
-                </h2>
-                <p className="mt-2 text-xs leading-5 text-text-muted">
-                  这些关注内容较短，直接显示中文正文，适合快速扫读。
-                </p>
-                {chinaSummaryFeed.length === 0 ? (
-                  <p className="mt-4 rounded-2xl bg-surface-muted px-4 py-4 text-sm text-text-muted">
-                    {isDateFiltered ? '该日期暂无摘要简讯。' : '当前没有摘要简讯。'}
-                  </p>
-                ) : (
-                  <div className="mt-4 grid gap-3">
-                    {chinaSummaryFeed.slice(0, 8).map((article) => (
-                      <button
-                        key={`china-summary-${article.link}`}
-                        onClick={() => handleOpenArticle(article)}
-                        className="rounded-2xl border border-border bg-surface-muted px-4 py-3 text-left transition-colors hover:bg-surface"
-                      >
-                        <p className="text-[11px] uppercase tracking-[0.14em] text-text-subtle">
-                          {(article.tags_zh?.split(',')[0]?.trim() || article.source)} · {formatViews(article.view_count)}
+            <aside className="grid gap-4 xl:sticky xl:top-4">
+              <div className="hidden xl:block">{briefsCard}</div>
+
+              <Card className="rounded-2xl">
+                <div className="flex items-center justify-between gap-3">
+                  <Badge color="#9D3D33">热门关注</Badge>
+                  <HotWindowToggle value={hotWindow} onChange={setHotWindow} />
+                </div>
+                <div className="mt-3 grid gap-1">
+                  {chinaHotArticles.length > 0 ? chinaHotArticles.map((article, index) => (
+                    <button
+                      key={article.link}
+                      onClick={() => handleOpenArticle(article)}
+                      className="flex items-start gap-3 rounded-xl px-2 py-2 text-left transition-colors hover:bg-bg-subtle"
+                    >
+                      <span className="w-5 shrink-0 text-center text-base font-black tabular-nums text-accent">
+                        {index + 1}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="line-clamp-2 text-[13px] font-bold leading-5 text-text">
+                          {article.title_zh || article.title}
                         </p>
-                        <p className="mt-2 line-clamp-4 text-sm font-semibold leading-6 text-text">
-                          {briefCardText(article)}
+                        <p className="mt-1 text-[11px] text-text-subtle">
+                          {article.source} · {formatViews(article.view_count)}
                         </p>
-                      </button>
-                    ))}
-                    {chinaSummaryFeed.length > 8 && (
-                      <p className="text-center text-[11px] text-text-subtle">
-                        还有 {chinaSummaryFeed.length - 8} 条摘要简讯
-                      </p>
-                    )}
-                  </div>
-                )}
+                      </div>
+                    </button>
+                  )) : (
+                    <p className="rounded-xl bg-surface-muted px-4 py-4 text-sm text-text-muted">
+                      {hotWindowEmptyLabel(hotWindow)}
+                    </p>
+                  )}
+                </div>
               </Card>
-            </div>
+            </aside>
           </div>
         </div>
 

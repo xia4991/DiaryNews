@@ -7,202 +7,179 @@ import SummaryText from '../SummaryText'
 import { CATEGORY_ZH } from '../../constants/categories'
 import { categoryColor, TAG_COLOR } from '../../constants/colors'
 
-function formatViews(value) {
-  return `${Number(value || 0)} 次`
+function formatPublished(published) {
+  const timestamp = Date.parse(published || '')
+  if (Number.isNaN(timestamp)) return (published || '').slice(0, 16).replace('T', ' ')
+  const date = new Date(timestamp)
+  const pad = (value) => String(value).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+function HeroImage({ src }) {
+  const [failed, setFailed] = useState(false)
+  if (!src || failed) return null
+  return (
+    <img
+      src={src}
+      alt=""
+      decoding="async"
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
+      className="mt-6 aspect-[16/9] max-h-[320px] w-full rounded-2xl bg-bg-subtle object-cover"
+    />
+  )
+}
+
+// Prose sizing for SummaryText output (it renders a flex column of p / ul).
+const PROSE = '[&>div]:gap-4 [&>div]:text-[16px] [&>div]:leading-8 [&>div]:text-text sm:[&>div]:text-[17px] sm:[&>div]:leading-[1.95]'
+
+/**
+ * Article reading view: headline, meta, image, then the Chinese text as plain prose.
+ * The Portuguese original sits behind a toggle; the source link stays in the footer.
+ */
 export default function ArticleModal({ article, onClose, onBack }) {
   const [showOriginal, setShowOriginal] = useState(false)
   if (!article) return null
-  const pub = article.published?.slice(0, 16).replace('T', ' ')
-  const tags = article.tags_zh
-    ? article.tags_zh.split(',').map(t => t.trim()).filter(Boolean)
-    : []
-  const summaryText = article.summary_zh || article.ai_summary || article.summary
-  // Modal prefers the fuller content_zh; falls back only when no summary exists.
-  const bodyText = article.content_zh || (!summaryText ? article.summary : '')
-  const originalText = article.scraped_content || article.summary || ''
+
+  const tags = (article.tags_zh || '').split(',').map((tag) => tag.trim()).filter(Boolean)
+  const translated = Boolean(article.title_zh || article.content_zh)
+  const body = (article.content_zh || '').trim()
+  const summary = (article.summary_zh || article.ai_summary || '').trim()
+  // The lede only earns its place when it adds something the body does not already say.
+  const lede = summary && !(body && body.includes(summary.replace(/[。.]$/, ''))) ? summary : ''
+  const originalText = (article.scraped_content || article.summary || '').trim()
+  const published = formatPublished(article.published)
 
   return (
     <Modal
       onClose={onClose}
       size="xl"
-      className="max-w-4xl rounded-[28px]"
+      className="max-w-3xl rounded-[24px]"
       headerLeading={onBack ? (
         <Button variant="ghost" size="sm" icon="arrow_back" onClick={onBack}>
           返回每日回顾
         </Button>
       ) : null}
+      footer={(
+        <div className="flex w-full flex-wrap items-center justify-between gap-2">
+          <span className="min-w-0 truncate text-xs text-text-subtle">
+            来源：{article.source || '未标注'}
+          </span>
+          <a
+            href={article.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-sm font-semibold text-text-onaccent transition-colors hover:bg-accent-hover"
+          >
+            阅读原文
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>open_in_new</span>
+          </a>
+        </div>
+      )}
     >
-      <div className="flex flex-col gap-7">
-        <div className="relative rounded-[24px] border border-[#E4D9C9] bg-[linear-gradient(135deg,#faf7f0_0%,#f4efe5_100%)] px-4 pb-10 pt-4 sm:rounded-[26px] sm:px-6 sm:pb-11 sm:pt-6">
-          <div className="flex items-center gap-2 mb-4 flex-wrap">
-            <Badge color={categoryColor(article.category)}>
-              {CATEGORY_ZH[article.category] || article.category}
-            </Badge>
-            {tags.map(tag => (
-              <Badge key={tag} color={TAG_COLOR}>{tag}</Badge>
-            ))}
-            <StoryGroupBadge size={article.story_group_size} />
-          </div>
-
-          <div className="min-w-0">
-            <h2
-              className="text-[1.45rem] font-black leading-[1.22] text-text sm:text-[2.15rem]"
-              style={{ fontFamily: 'var(--font-headline)' }}
-            >
-              {article.title_zh || article.title}
-            </h2>
-
-            {article.title_zh && (
-              <p className="mt-3 text-[14px] leading-6 text-text-subtle sm:mt-4 sm:text-[15px] sm:leading-7" lang="pt-PT">
-                {article.title}
-              </p>
-            )}
-
-            {article.story_group_size > 1 && article.story_group_sources?.length > 0 && (
-              <p className="mt-3 text-[12px] leading-5 text-text-subtle sm:text-[13px]">
-                <span className="font-semibold text-text-muted">也被报道：</span>
-                {article.story_group_sources.join(' · ')}
-              </p>
-            )}
-          </div>
-
-          <div className="absolute bottom-3 right-3 max-w-[calc(100%-1.5rem)] rounded-full border border-white/75 bg-white/68 px-2.5 py-1 text-[10px] font-semibold leading-4 text-text-subtle sm:bottom-4 sm:right-5 sm:px-3 sm:text-[11px]">
-            <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-1.5 gap-y-0.5">
-              <span className="max-w-[120px] truncate sm:max-w-[180px]">
-                {article.source || '未标注'}
-              </span>
-              {article.author && (
-                <>
-                  <span>-</span>
-                  <span className="max-w-[100px] truncate sm:max-w-[140px]">{article.author}</span>
-                </>
-              )}
-              <span>-</span>
-              <span>{pub || '暂无时间'}</span>
-              <span>-</span>
-              <span>{formatViews(article.view_count)}</span>
-            </div>
-          </div>
+      <article className="mx-auto max-w-[680px] pb-4 sm:px-2">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          {tags.map((tag) => (
+            <Badge key={tag} color={TAG_COLOR}>{tag}</Badge>
+          ))}
+          <Badge color={categoryColor(article.category)}>
+            {CATEGORY_ZH[article.category] || article.category}
+          </Badge>
+          <StoryGroupBadge size={article.story_group_size} />
         </div>
 
+        <h2
+          className="mt-3 text-[1.5rem] font-black leading-[1.3] tracking-tight text-text sm:text-[2rem]"
+          style={{ fontFamily: 'var(--font-headline)' }}
+          lang={article.title_zh ? undefined : 'pt-PT'}
+        >
+          {article.title_zh || article.title}
+        </h2>
+
+        {article.title_zh && (
+          <p className="mt-2 text-[14px] leading-6 text-text-subtle" lang="pt-PT">
+            {article.title}
+          </p>
+        )}
+
+        <div className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 border-y border-border py-2.5 text-[13px] text-text-muted">
+          <span className="font-semibold text-text">{article.source || '未标注'}</span>
+          {article.author && <span className="max-w-[200px] truncate">{article.author}</span>}
+          {published && <span className="tabular-nums">{published}</span>}
+          <span className="inline-flex items-center gap-1">
+            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>visibility</span>
+            {Number(article.view_count || 0)} 次阅读
+          </span>
+        </div>
+
+        {article.story_group_size > 1 && article.story_group_sources?.length > 0 && (
+          <p className="mt-3 text-[13px] leading-5 text-text-subtle">
+            <span className="font-semibold text-text-muted">也被报道：</span>
+            {article.story_group_sources.join(' · ')}
+          </p>
+        )}
+
+        <HeroImage src={article.image_url} />
+
+        {lede && (
+          <p className="mt-6 border-l-[3px] border-accent pl-4 text-[17px] font-semibold leading-8 text-text sm:text-[18px]">
+            {lede}
+          </p>
+        )}
+
         {article.relevance_reason && (
-          <section>
-            <div className="rounded-[22px] border border-[rgba(194,91,69,0.18)] bg-[rgba(194,91,69,0.06)] px-4 py-4 sm:rounded-[24px] sm:px-6 sm:py-5">
-              <div className="mb-2 flex items-center gap-2">
-                <span
-                  className="material-symbols-outlined"
-                  style={{ fontSize: 18, color: TAG_COLOR, fontVariationSettings: "'FILL' 1" }}
-                >
-                  push_pin
-                </span>
-                <span className="text-xs font-bold uppercase tracking-[0.18em]" style={{ color: TAG_COLOR }}>
-                  为什么值得关注
-                </span>
-              </div>
-              <p className="text-[15px] leading-7 text-text sm:text-[16px]">
-                {article.relevance_reason}
-              </p>
-            </div>
-          </section>
+          <div className="mt-6 flex items-start gap-2 rounded-xl bg-[rgba(194,91,69,0.07)] px-4 py-3">
+            <span
+              className="material-symbols-outlined shrink-0"
+              style={{ fontSize: 18, marginTop: 4, color: TAG_COLOR, fontVariationSettings: "'FILL' 1" }}
+            >
+              push_pin
+            </span>
+            <p className="text-[15px] leading-7 text-text">
+              <span className="font-bold" style={{ color: TAG_COLOR }}>与华人相关：</span>
+              {article.relevance_reason}
+            </p>
+          </div>
         )}
 
-        {summaryText && (
-          <section>
-            <div className="rounded-[22px] border border-[rgba(43,108,176,0.12)] bg-[#F4F8FC] px-4 py-4 sm:rounded-[24px] sm:px-6 sm:py-5">
-              <div className="mb-3 flex items-center gap-2">
-                <span
-                  className="material-symbols-outlined text-[#2B6CB0]"
-                  style={{ fontSize: 18, fontVariationSettings: "'FILL' 1" }}
-                >
-                  subject
-                </span>
-                <span className="text-xs font-bold uppercase tracking-[0.18em] text-[#2B6CB0]">
-                  摘要
-                </span>
-              </div>
-              <div className="[&_div]:text-[15px] [&_div]:leading-7 sm:[&_div]:text-[16px] sm:[&_div]:leading-8 [&_p]:text-text">
-                <SummaryText text={summaryText} />
-              </div>
-            </div>
-          </section>
-        )}
-
-        {bodyText && (
-          <section>
-            <div className="rounded-[22px] border border-[rgba(157,61,51,0.10)] bg-accent-subtle/72 px-4 py-4 sm:rounded-[24px] sm:px-6 sm:py-6">
-              <div className="flex items-center gap-2 mb-4">
-                <span
-                  className="material-symbols-outlined text-accent"
-                  style={{ fontSize: 18, fontVariationSettings: "'FILL' 1" }}
-                >
-                  auto_awesome
-                </span>
-                <span className="text-xs font-bold uppercase tracking-[0.18em] text-accent">
-                  中文内容
-                </span>
-              </div>
-              <p className="mb-4 text-sm leading-7 text-text-muted">
-                先快速看中文整理，再往下阅读原文细节。
-              </p>
-              <div className="[&_div]:text-[15px] [&_div]:leading-7 sm:[&_div]:text-[16px] sm:[&_div]:leading-8 [&_p]:text-text">
-                <SummaryText text={bodyText} />
-              </div>
-            </div>
-          </section>
+        {body ? (
+          <div className={`mt-6 ${PROSE}`}>
+            <SummaryText text={body} />
+          </div>
+        ) : !translated && (
+          <p className="mt-6 rounded-xl bg-surface-muted px-4 py-3 text-sm leading-6 text-text-muted">
+            这篇新闻还没有中文翻译，下面是葡语原文。
+          </p>
         )}
 
         {originalText && (
-          <section className="border-t border-[#E4D9C9] pt-7">
-            <div className="rounded-[22px] border border-[#E3DDD3] bg-white/82 px-4 py-4 sm:rounded-[24px] sm:px-6 sm:py-6">
-              <div className="mb-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-text-muted" style={{ fontSize: 18 }}>
-                    article
-                  </span>
-                  <span className="text-sm font-black uppercase tracking-[0.18em] text-text">
-                    原文
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setShowOriginal((v) => !v)}
-                    aria-expanded={showOriginal}
-                    className="inline-flex items-center gap-1 rounded-full border border-border bg-surface px-3 py-1 text-xs font-semibold text-text-muted transition-colors hover:border-border-strong hover:bg-bg-subtle"
-                  >
-                    <span className="material-symbols-outlined" style={{ fontSize: 14 }}>
-                      {showOriginal ? 'expand_less' : 'expand_more'}
-                    </span>
-                    {showOriginal ? '收起原文' : '展开葡语原文'}
-                  </button>
-                </div>
-                <a
-                  href={article.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-xs font-semibold text-text transition-colors hover:border-border-strong hover:bg-bg-subtle sm:w-auto sm:justify-center sm:py-1.5"
-                >
-                  查看原文链接
-                  <span className="material-symbols-outlined" style={{ fontSize: 14 }}>open_in_new</span>
-                </a>
+          <section className="mt-8 border-t border-border pt-5">
+            {translated ? (
+              <button
+                type="button"
+                onClick={() => setShowOriginal((value) => !value)}
+                aria-expanded={showOriginal}
+                className="inline-flex items-center gap-1 text-sm font-semibold text-text-muted transition-colors hover:text-text"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+                  {showOriginal ? 'expand_less' : 'expand_more'}
+                </span>
+                {showOriginal ? '收起葡语原文' : '对照葡语原文'}
+              </button>
+            ) : (
+              <p className="text-sm font-semibold text-text-muted">葡语原文</p>
+            )}
+            {(showOriginal || !translated) && (
+              <div
+                className="mt-4 whitespace-pre-wrap text-[15px] leading-8 text-text-muted"
+                lang="pt-PT"
+              >
+                {originalText}
               </div>
-              {showOriginal && (
-                <>
-                  <p className="mb-4 text-sm leading-7 text-text-muted">
-                    保留原始正文，方便对照语气、细节和上下文。
-                  </p>
-                  <div
-                    className="whitespace-pre-wrap text-[14px] leading-7 text-text sm:text-[15px] sm:leading-8"
-                    lang="pt-PT"
-                  >
-                    {originalText}
-                  </div>
-                </>
-              )}
-            </div>
+            )}
           </section>
         )}
-      </div>
+      </article>
     </Modal>
   )
 }
