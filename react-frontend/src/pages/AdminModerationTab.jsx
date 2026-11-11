@@ -6,6 +6,7 @@ import Button from '../components/ui/Button'
 import Modal from '../components/ui/Modal'
 import Field from '../components/ui/Field'
 import ArticleModal from '../components/news/ArticleModal'
+import FocusTopicsSection from '../components/admin/FocusTopicsSection'
 
 const KIND_ZH = { job: '招聘', realestate: '房产', secondhand: '二手' }
 const KIND_COLORS = { job: '#2E7D5A', realestate: '#2B6CB0', secondhand: '#8B5CF6' }
@@ -47,6 +48,7 @@ const LOG_TYPE_META = {
   brief_generate: { label: '简报', color: '#8B5CF6', icon: 'summarize' },
   listing_moderate: { label: '管理操作', color: '#F59E0B', icon: 'shield' },
   announcement_manage: { label: '公告', color: '#9D3D33', icon: 'campaign' },
+  focus_topic_manage: { label: '重点关注', color: '#2B6CB0', icon: 'event_note' },
 }
 
 const LOG_FILTERS = [
@@ -176,6 +178,14 @@ export default function AdminModerationTab({ onNewsChanged }) {
               公告与推广 {activeAnnouncementCount > 0 && `(${activeAnnouncementCount})`}
             </Button>
             <Button
+              variant={tab === 'focus' ? 'primary' : 'ghost'}
+              size="sm"
+              icon="event_note"
+              onClick={() => setTab('focus')}
+            >
+              重点关注
+            </Button>
+            <Button
               variant={tab === 'logs' ? 'primary' : 'ghost'}
               size="sm"
               icon="history"
@@ -210,6 +220,8 @@ export default function AdminModerationTab({ onNewsChanged }) {
           onUpdate={handleUpdateAnnouncement}
           onDelete={handleDeleteAnnouncement}
         />
+      ) : tab === 'focus' ? (
+        <FocusTopicsSection />
       ) : tab === 'crawler' ? (
         <CrawlerSection onNewsChanged={onNewsChanged} />
       ) : (

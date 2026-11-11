@@ -208,6 +208,23 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_platform_announcements_status_pinned
                 ON platform_announcements (status, is_pinned DESC, updated_at DESC, created_at DESC);
 
+            CREATE TABLE IF NOT EXISTS focus_topics (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                title       TEXT    NOT NULL,
+                status_text TEXT    NOT NULL DEFAULT '',
+                points      TEXT    NOT NULL DEFAULT '[]',
+                dates       TEXT    NOT NULL DEFAULT '[]',
+                keywords    TEXT    NOT NULL DEFAULT '[]',
+                link_url    TEXT,
+                link_label  TEXT,
+                sort_order  INTEGER NOT NULL DEFAULT 0,
+                status      TEXT    NOT NULL DEFAULT 'active'
+                            CHECK (status IN ('active','hidden','removed')),
+                created_by  INTEGER NOT NULL REFERENCES users(id),
+                created_at  TEXT    NOT NULL,
+                updated_at  TEXT    NOT NULL
+            );
+
             CREATE TABLE IF NOT EXISTS listings (
                 id                INTEGER PRIMARY KEY AUTOINCREMENT,
                 kind              TEXT    NOT NULL CHECK (kind IN ('job','realestate','secondhand')),

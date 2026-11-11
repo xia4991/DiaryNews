@@ -5,6 +5,7 @@ import Card from '../components/ui/Card'
 import HotWindowToggle from '../components/news/HotWindowToggle'
 import NewsFeedRow from '../components/news/NewsFeedRow'
 import SlotCard from '../components/home/SlotCard'
+import FocusTopics from '../components/home/FocusTopics'
 import { sortArticlesByHotness } from '../utils/newsHotness'
 import { DEAL_TYPE_ZH, formatPrice } from '../constants/realestate'
 import { CATEGORY_ZH as SH_CATEGORY_ZH } from '../constants/secondhand'
@@ -263,6 +264,8 @@ export default function HomePage({
           <span>{cnTaggedCount} 条华人相关 · {sourceCount} 个来源</span>
         )}
       </p>
+
+      <FocusTopics onArticleOpen={handleOpenArticle} />
 
       {slots.banner && <SlotCard slot={slots.banner} />}
 

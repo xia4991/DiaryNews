@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 import threading
 import time
 from datetime import date, datetime, timedelta, timezone
@@ -415,6 +416,179 @@ def admin_delete_announcement(
         "announcement_manage",
         "管理员删除公告",
         {"announcement_id": announcement_id, "admin_id": int(admin["sub"])},
+    )
+    return {"ok": True}
+
+
+# ── Focus topics (home-page "重点关注") ──────────────────────────────────────
+
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+class FocusTopicDate(BaseModel):
+    date: str
+    label: str
+
+
+class FocusTopicCreateRequest(BaseModel):
+    title: str
+    status_text: str = ""
+    points: list[str] = []
+    dates: list[FocusTopicDate] = []
+    keywords: list[str] = []
+    link_url: Optional[str] = None
+    link_label: Optional[str] = None
+    sort_order: int = 0
+    status: AnnouncementStatus = "active"
+
+
+class FocusTopicUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    status_text: Optional[str] = None
+    points: Optional[list[str]] = None
+    dates: Optional[list[FocusTopicDate]] = None
+    keywords: Optional[list[str]] = None
+    link_url: Optional[str] = None
+    link_label: Optional[str] = None
+    sort_order: Optional[int] = None
+    status: Optional[AnnouncementStatus] = None
+
+
+def _clean_text_list(values, name: str, max_items: int, max_len: int, min_len: int = 1) -> list:
+    out = []
+    for value in values or []:
+        text = (value or "").strip()
+        if not text:
+            continue
+        if not (min_len <= len(text) <= max_len):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Each {name} entry must be {min_len}-{max_len} characters",
+            )
+        if text not in out:
+            out.append(text)
+    if len(out) > max_items:
+        raise HTTPException(status_code=400, detail=f"{name} is limited to {max_items} entries")
+    return out
+
+
+def _clean_focus_topic(fields: dict) -> dict:
+    """Validate focus-topic fields in place (only the keys present)."""
+    if "title" in fields:
+        title = (fields["title"] or "").strip()
+        if not title:
+            raise HTTPException(status_code=400, detail="Title cannot be empty")
+        if len(title) > 60:
+            raise HTTPException(status_code=400, detail="Title is limited to 60 characters")
+        fields["title"] = title
+    if "status_text" in fields:
+        text = (fields["status_text"] or "").strip()
+        if len(text) > 80:
+            raise HTTPException(status_code=400, detail="status_text is limited to 80 characters")
+        fields["status_text"] = text
+    if "points" in fields:
+        fields["points"] = _clean_text_list(fields["points"], "points", 8, 140)
+    if "keywords" in fields:
+        # 2+ characters: a one-letter keyword would match nearly every headline.
+        fields["keywords"] = _clean_text_list(fields["keywords"], "keywords", 12, 40, min_len=2)
+    if "dates" in fields:
+        dates = []
+        for item in fields["dates"] or []:
+            day = (item.get("date") or "").strip()
+            label = (item.get("label") or "").strip()
+            if not day and not label:
+                continue
+            try:
+                if not _DATE_RE.match(day):
+                    raise ValueError(day)
+                datetime.strptime(day, "%Y-%m-%d")
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Each date must be YYYY-MM-DD")
+            if not label or len(label) > 60:
+                raise HTTPException(status_code=400, detail="Each date needs a label of 1-60 characters")
+            dates.append({"date": day, "label": label})
+        if len(dates) > 12:
+            raise HTTPException(status_code=400, detail="dates is limited to 12 entries")
+        fields["dates"] = sorted(dates, key=lambda d: d["date"])
+    if "link_url" in fields:
+        link = (fields["link_url"] or "").strip()
+        if link and not link.lower().startswith(("http://", "https://")):
+            raise HTTPException(status_code=400, detail="link_url must start with http:// or https://")
+        fields["link_url"] = link
+    if "link_label" in fields:
+        label = (fields["link_label"] or "").strip()
+        if len(label) > 20:
+            raise HTTPException(status_code=400, detail="link_label is limited to 20 characters")
+        fields["link_label"] = label
+    return fields
+
+
+@app.get("/api/focus-topics")
+def list_public_focus_topics():
+    return storage.list_focus_topics(status="public")
+
+
+@app.get("/api/admin/focus-topics")
+def admin_list_focus_topics(_: dict = Depends(require_admin)):
+    return storage.list_focus_topics(status="all")
+
+
+@app.post("/api/admin/focus-topics", status_code=201)
+def admin_create_focus_topic(
+    req: FocusTopicCreateRequest,
+    admin: dict = Depends(require_admin),
+):
+    fields = _clean_focus_topic(req.model_dump())
+    try:
+        topic = storage.create_focus_topic(created_by=int(admin["sub"]), **fields)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    storage.add_log(
+        "focus_topic_manage",
+        f"管理员创建重点关注：{topic['title']}",
+        {"topic_id": topic["id"], "status": topic["status"]},
+    )
+    return topic
+
+
+@app.put("/api/admin/focus-topics/{topic_id}")
+def admin_update_focus_topic(
+    topic_id: int,
+    req: FocusTopicUpdateRequest,
+    admin: dict = Depends(require_admin),
+):
+    patch = req.model_dump(exclude_unset=True)
+    for key in ("title", "points", "dates", "keywords", "sort_order", "status"):
+        if key in patch and patch[key] is None:
+            del patch[key]
+    _clean_focus_topic(patch)
+    try:
+        topic = storage.update_focus_topic(topic_id, patch)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Focus topic {topic_id} not found")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    storage.add_log(
+        "focus_topic_manage",
+        f"管理员更新重点关注：{topic['title']}",
+        {"topic_id": topic_id, "status": topic["status"], "admin_id": int(admin["sub"])},
+    )
+    return topic
+
+
+@app.delete("/api/admin/focus-topics/{topic_id}")
+def admin_delete_focus_topic(
+    topic_id: int,
+    admin: dict = Depends(require_admin),
+):
+    try:
+        storage.delete_focus_topic(topic_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Focus topic {topic_id} not found")
+    storage.add_log(
+        "focus_topic_manage",
+        "管理员删除重点关注",
+        {"topic_id": topic_id, "admin_id": int(admin["sub"])},
     )
     return {"ok": True}
 

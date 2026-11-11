@@ -28,6 +28,14 @@ from backend.storage.news_briefs import (  # noqa: F401
     get_daily_news_brief,
     upsert_daily_news_brief,
 )
+from backend.storage.focus_topics import (  # noqa: F401
+    FOCUS_TOPIC_STATUSES,
+    list_focus_topics,
+    get_focus_topic,
+    create_focus_topic,
+    update_focus_topic,
+    delete_focus_topic,
+)
 from backend.storage.announcements import (  # noqa: F401
     ANNOUNCEMENT_STATUSES,
     ANNOUNCEMENT_KINDS,
