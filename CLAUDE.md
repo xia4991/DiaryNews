@@ -23,13 +23,13 @@ React SPA frontend (`react-frontend/`) + FastAPI backend (`backend/`), connected
 - **Crawler**: `crawler/` package — per-source RSS adapters under `crawler/adapters/`; one module per source with a shared `BaseAdapter`. Tracks per-source health in the `source_health` table.
 - **News (LLM)**: `news.py` does only scraping + LLM enrichment (Chinese translation + classification)
 - **Storage**: `storage/` package — SQLite CRUD split by domain (`news.py`, `health.py`, `ideas.py`, `listings.py`, etc.)
-- **LLM**: `llm.py` wraps MiniMax API; `prompts.py` holds all prompt templates
+- **LLM**: `llm/` package — `minimax.py` wraps the MiniMax API, `article_enrichment.py` builds/parses enrichment calls, `prompts.py` holds all prompt templates
 - **Frontend**: `App.jsx` manages tabs (首页, 华人关注, 葡萄牙新闻, 招聘, Ideas) and state; pages + components render UI
 
 ## Data Flow
 
-1. **Stage A — collect**: POST `/api/news/collect` (admin UI button) or legacy `/api/news/fetch` (A+B inline) → `CrawlerRunner` runs all 9 adapters in parallel → dedupe + age filter → save raw articles as `enrichment_status='pending'` → write `source_health` (status one of `ok | partial_ok | empty | http_error | parse_error`)
-2. **Stage B — enrich**: `services.enrich_pending_news()` (inline at end of `/api/news/fetch`, or standalone via `/api/news/enrich`) → scrape on demand via trafilatura (RSS summary as fallback) → call MiniMax for Chinese title/content/tags → mark `enrichment_status='done'`. Rows failing repeatedly record an `enrichment_error` reason; after `MAX_ENRICHMENT_ATTEMPTS` (env, default 3) the row transitions to `failed` and is no longer retried.
+1. **Stage A — collect**: POST `/api/news/collect` (admin UI button) or the hourly background loop (`NEWS_FETCH_INTERVAL`) → `CrawlerRunner` runs all 8 adapters in parallel → dedupe + age filter → save raw articles as `enrichment_status='pending'` → write `source_health` (status one of `ok | partial_ok | empty | http_error | parse_error`)
+2. **Stage B — enrich**: `services.enrich_pending_news()` (background loop every `NEWS_AUTO_BATCH_LLM_INTERVAL`, or `/api/news/enrich`; `/api/news/enrich/batch` is the manual one-call batch variant) → scrape on demand via trafilatura (RSS summary as fallback) → call MiniMax for Chinese title/content/tags → mark `enrichment_status='done'`. Rows failing repeatedly record an `enrichment_error` reason; after `MAX_ENRICHMENT_ATTEMPTS` (env, default 3) the row transitions to `failed` and is no longer retried. MiniMax account errors (HTTP 401/402/403) abort the cycle without counting an attempt.
 
 ## Key Design Notes
 

@@ -21,6 +21,8 @@ from backend.dedup import group_articles
 from backend.llm import (
     MiniMaxConfigError,
     MiniMaxError,
+    MiniMaxHTTPError,
+    MiniMaxRateLimitError,
     batch_enrich_news_articles,
     enrich_news_article,
 )
@@ -81,8 +83,7 @@ def collect_news(max_new: int = 0, max_age_hours: int = 24) -> dict:
             "stats": {},
         }
     try:
-        data = storage.load_news()
-        existing_urls = {a["link"] for a in data.get("articles", [])}
+        existing_urls = storage.list_article_links()
 
         new_articles, results, stats = run_all(
             existing_urls=existing_urls,
@@ -91,10 +92,7 @@ def collect_news(max_new: int = 0, max_age_hours: int = 24) -> dict:
         )
         stats["rss_fulltext_count"] = _adopt_rss_fulltext(new_articles)
         now = datetime.now(timezone.utc).isoformat()
-        if new_articles:
-            storage.save_raw_articles(new_articles, last_updated=now)
-        else:
-            storage.save_raw_articles([], last_updated=now)
+        storage.save_raw_articles(new_articles, last_updated=now)
 
         health = [
             {
@@ -141,6 +139,28 @@ def _enrichment_failure_reason(updated: dict) -> str:
 def _is_minimax_sensitive_error(exc: BaseException) -> bool:
     message = str(exc).lower()
     return "new_sensitive" in message or "output new_sensitive" in message
+
+
+# LLM statuses that mean "the account/key is the problem", not the article:
+# 401 bad key, 402 insufficient balance, 403 forbidden.
+_LLM_ACCOUNT_STATUSES = {401, 402, 403}
+
+
+def _is_minimax_account_error(exc: BaseException) -> bool:
+    """True for provider-side failures that would hit every article alike.
+
+    Covers account errors and rate limits that survived the wrapper's own retries
+    (on OpenRouter's free tier that usually means the daily quota is used up).
+    """
+    if isinstance(exc, MiniMaxRateLimitError):
+        return True
+    return isinstance(exc, MiniMaxHTTPError) and exc.status_code in _LLM_ACCOUNT_STATUSES
+
+
+def _keep_scraped_body(article: dict, scraped_content: str) -> None:
+    """Persist a body scraped this cycle when the LLM step failed, so the retry reuses it."""
+    if scraped_content and not article.get("scraped_content"):
+        storage.update_scraped_content(article["link"], scraped_content)
 
 
 def _sensitive_error_text(exc: BaseException) -> str:
@@ -191,6 +211,7 @@ def enrich_pending_news(max_retry: int = 20) -> dict:
             llm_called = False
             link = article["link"]
             new_attempts = (article.get("enrichment_attempts") or 0) + 1
+            scraped_content = ""
             try:
                 text_for_llm, scraped_content, scrape_ok = ensure_scraped_content(article)
                 if not _apply_scrape_outcome(article, scrape_ok):
@@ -231,6 +252,19 @@ def enrich_pending_news(max_retry: int = 20) -> dict:
             except MiniMaxError as exc:
                 # Transient (rate-limit, timeout, 5xx) already retried inside call_minimax.
                 # Only flip to failed once the per-row retry ceiling is hit.
+                _keep_scraped_body(article, scraped_content)
+                if _is_minimax_account_error(exc):
+                    # Bad key / no balance fails every article the same way: stop the
+                    # cycle and leave attempts untouched so rows survive until it's fixed.
+                    log.error(
+                        "LLM account/rate-limit error during enrichment, aborting cycle: %s", exc
+                    )
+                    storage.mark_enrichment_status(
+                        link, "pending", increment_attempts=False,
+                        error=f"{type(exc).__name__}: {str(exc)[:300]}",
+                    )
+                    aborted_reason = "account"
+                    break
                 if _is_minimax_sensitive_error(exc):
                     log.warning(
                         "MiniMax sensitive output for '%s'; marking failed permanently: %s",
@@ -396,6 +430,19 @@ def _run_batch_enrichment(
         aborted_reason = "config"
     except MiniMaxError as exc:
         log.warning("MiniMax batch enrichment failed: %s: %s", type(exc).__name__, exc)
+        if _is_minimax_account_error(exc):
+            # Not the articles' fault — don't burn their attempts.
+            result = {
+                "selected_count": len(pending),
+                "done_count": 0,
+                "failed_count": 0,
+                "aborted": "account",
+                "error_type": type(exc).__name__,
+                "error": str(exc)[:300],
+                "auto": auto,
+            }
+            storage.add_log(log_event, f"{failure_label}: LLM 账户错误或限流，已中止", result)
+            return result
         if _is_minimax_sensitive_error(exc) and len(pending) == 1:
             storage.mark_enrichment_status(
                 pending[0]["link"],

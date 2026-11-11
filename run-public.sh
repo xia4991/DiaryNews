@@ -210,7 +210,7 @@ echo
 PIDS+=("$!")
 
 (
-  caddy run --config "$CADDY_CONFIG"
+  DIARYNEWS_DIST="$FRONTEND_DIR/dist" caddy run --config "$CADDY_CONFIG"
 ) >"$LOG_DIR/caddy.log" 2>&1 &
 PIDS+=("$!")
 

@@ -8,12 +8,12 @@
 当前项目已经有：
 
 - 后端 `PUT /api/auth/me`，支持更新 `name` 和 `phone`
-- 头部菜单中的 [ProfileModal.jsx](/Users/yongbinjiang/Desktop/XAB/projects/DiaryNews/react-frontend/src/components/ProfileModal.jsx)
+- 头部菜单中的 [ProfileModal.jsx](../react-frontend/src/components/ProfileModal.jsx)
 
 但现状还不够满足“隐私昵称”目标，因为：
 
 1. 现在是弹窗，不是真正的个人资料页面
-2. Google 登录时，后端 [users.py](/Users/yongbinjiang/Desktop/XAB/projects/DiaryNews/backend/storage/users.py) 会再次把 `name` 更新成 Google 返回的名字
+2. Google 登录时，后端 [users.py](../backend/storage/users.py) 会再次把 `name` 更新成 Google 返回的名字
 
 这意味着用户改过昵称后，下次登录可能又被覆盖，隐私层并不稳定。
 

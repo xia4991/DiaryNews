@@ -28,12 +28,12 @@ paths:
 - Internal retry: `max_retries` (env `MINIMAX_MAX_RETRIES`, default 2) for transient errors (429 / 5xx / timeout / network). Backoff `1s → 3s → 10s`.
 - No internal `time.sleep()`. The legacy 3s pre-call sleep moved to `services.enrich_pending_news`, so one-off brief generation is not silently delayed.
 
-## Prompt Output Contract (article_enrichment_v2)
+## Prompt Output Contract (article_enrichment_v3)
 
 `article_chinese_prompt` returns a strict JSON object. Version tag persisted to `articles.enrichment_prompt_version`:
 
 ```python
-ARTICLE_ENRICHMENT_PROMPT_VERSION = "article_enrichment_v2"
+ARTICLE_ENRICHMENT_PROMPT_VERSION = "article_enrichment_v3"
 ```
 
 Expected shape:
@@ -52,7 +52,8 @@ Expected shape:
 Constraints embedded in the prompt:
 - `tags_zh` is restricted to the 10 allowed tags; `[]` when not relevant to the Chinese-in-Portugal audience.
 - `category` is restricted to the configured Portuguese category set.
-- No fabrication of facts beyond the input; names kept in original spelling.
+- No fabrication of facts beyond the input.
+- Proper nouns (`PROPER_NOUN_RULES`, shared with the batch prompt, added in v3): person names stay in Portuguese, never transliterated; only widely known places (里斯本, 波尔图) use Chinese; institutions, companies, parties and laws are written as `中文译名（原文或缩写）` on first mention.
 
 ## Parser — `_parse_chinese_response()` in `backend/news.py`
 

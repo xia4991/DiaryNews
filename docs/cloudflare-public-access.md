@@ -17,8 +17,8 @@ Recommended architecture:
 
 ## Files added in this repo
 
-- Caddy config: [deploy/cloudflare/Caddyfile](/Users/yongbinjiang/Desktop/XAB/projects/DiaryNews/deploy/cloudflare/Caddyfile)
-- Cloudflare Tunnel config template: [deploy/cloudflare/cloudflared-config.yml.example](/Users/yongbinjiang/Desktop/XAB/projects/DiaryNews/deploy/cloudflare/cloudflared-config.yml.example)
+- Caddy config: [deploy/cloudflare/Caddyfile](../deploy/cloudflare/Caddyfile)
+- Cloudflare Tunnel config template: [deploy/cloudflare/cloudflared-config.yml.example](../deploy/cloudflare/cloudflared-config.yml.example)
 
 ## Prerequisites
 
@@ -43,19 +43,19 @@ Keep `JWT_SECRET`, `GOOGLE_CLIENT_ID`, and `ADMIN_EMAILS` set.
 ## 2. Build the frontend
 
 ```bash
-cd /Users/yongbinjiang/Desktop/XAB/projects/DiaryNews/react-frontend
+cd /Users/yongbinjiang/Documents/Projects/DiaryNews/react-frontend
 npm install
 npm run build
 ```
 
 This creates:
 
-- `/Users/yongbinjiang/Desktop/XAB/projects/DiaryNews/react-frontend/dist`
+- `/Users/yongbinjiang/Documents/Projects/DiaryNews/react-frontend/dist`
 
 ## 3. Run the backend
 
 ```bash
-cd /Users/yongbinjiang/Desktop/XAB/projects/DiaryNews
+cd /Users/yongbinjiang/Documents/Projects/DiaryNews
 source .venv/bin/activate
 python main.py
 ```
@@ -69,7 +69,7 @@ Backend will listen on:
 Use the provided Caddyfile:
 
 ```bash
-caddy run --config /Users/yongbinjiang/Desktop/XAB/projects/DiaryNews/deploy/cloudflare/Caddyfile
+caddy run --config /Users/yongbinjiang/Documents/Projects/DiaryNews/deploy/cloudflare/Caddyfile
 ```
 
 Caddy will listen on:
@@ -107,7 +107,7 @@ Cloudflare will give you a tunnel ID and create a credentials JSON file under `~
 Copy the example:
 
 ```bash
-cp /Users/yongbinjiang/Desktop/XAB/projects/DiaryNews/deploy/cloudflare/cloudflared-config.yml.example ~/.cloudflared/config.yml
+cp /Users/yongbinjiang/Documents/Projects/DiaryNews/deploy/cloudflare/cloudflared-config.yml.example ~/.cloudflared/config.yml
 ```
 
 Then edit `~/.cloudflared/config.yml`:
@@ -167,7 +167,7 @@ Open three terminals:
 ### Terminal 1
 
 ```bash
-cd /Users/yongbinjiang/Desktop/XAB/projects/DiaryNews
+cd /Users/yongbinjiang/Documents/Projects/DiaryNews
 source .venv/bin/activate
 python main.py
 ```
@@ -175,7 +175,7 @@ python main.py
 ### Terminal 2
 
 ```bash
-caddy run --config /Users/yongbinjiang/Desktop/XAB/projects/DiaryNews/deploy/cloudflare/Caddyfile
+caddy run --config /Users/yongbinjiang/Documents/Projects/DiaryNews/deploy/cloudflare/Caddyfile
 ```
 
 ### Terminal 3

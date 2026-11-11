@@ -23,6 +23,19 @@ MINIMAX_RATE_LIMIT_SLEEP_SEC = int(os.environ.get("MINIMAX_RATE_LIMIT_SLEEP_SEC"
 MINIMAX_TIMEOUT_SEC = int(os.environ.get("MINIMAX_TIMEOUT_SEC", "60"))
 MINIMAX_MAX_RETRIES = int(os.environ.get("MINIMAX_MAX_RETRIES", "2"))
 
+# ── LLM provider ─────────────────────────────────────────────────────────────
+# minimax | openrouter. All news enrichment + daily briefs go through llm/client.py.
+LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "minimax").strip().lower()
+OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+# Comma-separated, tried in order (OpenRouter `models` fallback). Free models end in ':free'.
+OPENROUTER_MODELS = [m.strip() for m in os.environ.get(
+    "OPENROUTER_MODELS",
+    "nvidia/nemotron-3-ultra-550b-a55b:free,google/gemma-4-31b-it:free",
+).split(",") if m.strip()]
+# Free models are slow (~15 tokens/s observed) — a multi-article batch needs minutes.
+OPENROUTER_TIMEOUT_SEC = int(os.environ.get("OPENROUTER_TIMEOUT_SEC", "600"))
+OPENROUTER_MAX_RETRIES = int(os.environ.get("OPENROUTER_MAX_RETRIES", "1"))
+
 
 ENABLE_WHISPER_API   = os.environ.get("ENABLE_WHISPER_API", "false").lower() == "true"
 ENABLE_WHISPER_LOCAL = os.environ.get("ENABLE_WHISPER_LOCAL", "false").lower() == "true"
@@ -38,13 +51,19 @@ ADMIN_EMAILS = [e.strip() for e in os.environ.get("ADMIN_EMAILS", "").split(",")
 # ── CORS ─────────────────────────────────────────────────────────────────────
 CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
 
-# ── Media storage ────────────────────────────────────────────────────────────
 # ── News fetch ───────────────────────────────────────────────────────────────
 NEWS_FETCH_INTERVAL = int(os.environ.get("NEWS_FETCH_INTERVAL", "3600"))  # 0 to disable
 NEWS_AUTO_COLLECT_MAX_NEW = int(os.environ.get("NEWS_AUTO_COLLECT_MAX_NEW", "60"))
 NEWS_AUTO_COLLECT_MAX_AGE_HOURS = int(os.environ.get("NEWS_AUTO_COLLECT_MAX_AGE_HOURS", "12"))
 NEWS_AUTO_BATCH_LLM_INTERVAL = int(os.environ.get("NEWS_AUTO_BATCH_LLM_INTERVAL", "900"))  # 0 to disable
 NEWS_AUTO_BATCH_LLM_LIMIT = int(os.environ.get("NEWS_AUTO_BATCH_LLM_LIMIT", "20"))
+# Auto Stage B loop mode: 'single' (one LLM call per article, richer content) or 'batch'
+# (one call for NEWS_AUTO_ENRICH_BATCH_SIZE articles). Default: batch on OpenRouter, whose
+# free tier allows only ~50 requests/day; single on MiniMax.
+NEWS_AUTO_ENRICH_MODE = os.environ.get(
+    "NEWS_AUTO_ENRICH_MODE", "batch" if LLM_PROVIDER == "openrouter" else "single"
+).strip().lower()
+NEWS_AUTO_ENRICH_BATCH_SIZE = int(os.environ.get("NEWS_AUTO_ENRICH_BATCH_SIZE", "8"))
 MAX_ENRICHMENT_ATTEMPTS = int(os.environ.get("MAX_ENRICHMENT_ATTEMPTS", "3"))
 # Stage A drops articles whose RSS summary has fewer than this many whitespace-split tokens.
 # Set to 0 to disable the filter.

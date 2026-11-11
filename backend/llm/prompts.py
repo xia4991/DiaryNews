@@ -5,8 +5,22 @@ so re-enrichment can be triggered by future contract changes without overwriting
 rows produced by an earlier prompt.
 """
 
-ARTICLE_ENRICHMENT_PROMPT_VERSION = "article_enrichment_v2"
-BATCH_ARTICLE_ENRICHMENT_PROMPT_VERSION = "article_batch_enrichment_v2"
+ARTICLE_ENRICHMENT_PROMPT_VERSION = "article_enrichment_v3"
+BATCH_ARTICLE_ENRICHMENT_PROMPT_VERSION = "article_batch_enrichment_v3"
+
+
+# Shared by both enrichment prompts (v3). Readers live in Portugal and meet these names
+# in Portuguese on documents, signs and websites, so the original spelling must survive.
+PROPER_NOUN_RULES = (
+    "- 专有名词保留葡语原文，适用于 title_zh、summary_zh 和 content_zh：\n"
+    "  · 人名：直接写原文，不要音译成中文（写 Luís Montenegro，不写“路易斯·蒙特内格罗”）。\n"
+    "  · 地名：里斯本、波尔图、葡萄牙等通用中文译名可直接用中文；其他市镇、街区、街道等写原文"
+    "（如 Amadora、Vila Nova de Gaia）。\n"
+    "  · 政府部门、机构、公司、政党、法律和项目名称：正文中首次出现时写“中文译名（原文或缩写）”，"
+    "如“移民与庇护局（AIMA）”“税务局（Autoridade Tributária）”，之后可只写缩写或中文；"
+    "标题里优先用缩写或原文，保持简短。\n"
+    "  · 不要自行编造译名；拿不准怎么翻译时直接保留原文。\n"
+)
 
 
 def article_chinese_prompt(title: str, content: str) -> str:
@@ -24,7 +38,7 @@ def article_chinese_prompt(title: str, content: str) -> str:
         "{\n"
         '  "title_zh": "中文标题",\n'
         '  "summary_zh": "2-3 句中文摘要，用于卡片预览，必须简洁",\n'
-        '  "content_zh": "完整复述新闻主要内容的中文正文，保留所有关键事实、人名、地名、数据",\n'
+        '  "content_zh": "完整复述新闻主要内容的中文正文，保留所有关键事实、人名、地名、机构名、数据",\n'
         '  "tags_zh": ["标签1", "标签2"],\n'
         '  "category": "分类名",\n'
         '  "relevance_reason": "为什么与在葡华人有关；如不相关则为空字符串"\n'
@@ -37,7 +51,8 @@ def article_chinese_prompt(title: str, content: str) -> str:
         "  移民签证, 房产租房, 法律法规, 工作就业, 教育留学, 税务财务, 华人社区, 安全治安, 医疗社保, 中葡关系\n"
         "- category 仅可使用以下之一：\n"
         "  Política, Desporto, Economia, Saúde, Tecnologia, Internacional, Cultura, Ambiente, Crime/Justiça, Sociedade, Geral\n"
-        "- 不要编造原文未出现的事实；人名地名保留原文写法。\n"
+        "- 不要编造原文未出现的事实。\n"
+        + PROPER_NOUN_RULES +
         "- 输出必须是合法 JSON，使用双引号，无尾随逗号，无注释。"
     )
 
@@ -76,6 +91,7 @@ def batch_article_chinese_prompt(articles: list[dict]) -> str:
         "- 输出数组的条数和顺序必须与输入新闻列表完全一致，第 1 行对应第 1 条输入新闻。\n"
         "- summary_zh 必须简短，用于卡片，不超过 120 字。\n"
         "- content_zh 是更完整但精炼的中文正文，基于 title、summary 和 content；不要编造原文未出现的事实。\n"
+        + PROPER_NOUN_RULES +
         "- tags_zh 必须是数组，且仅可使用以下标签；若与在葡华人无关，必须为 []：\n"
         "  移民签证, 房产租房, 法律法规, 工作就业, 教育留学, 税务财务, 华人社区, 安全治安, 医疗社保, 中葡关系\n"
         "- category 仅可使用以下之一：\n"

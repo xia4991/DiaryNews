@@ -10,7 +10,9 @@
 		@uploads path /uploads/*
 		reverse_proxy @uploads 127.0.0.1:8000
 
-		root * /Users/yongbinjiang/Desktop/XAB/projects/DiaryNews/react-frontend/dist
+		# run-public.sh exports DIARYNEWS_DIST (= <repo>/react-frontend/dist) so the
+		# project can move without editing this file; the default covers manual runs.
+		root * {$DIARYNEWS_DIST:/Users/yongbinjiang/Documents/Projects/DiaryNews/react-frontend/dist}
 
 		# React SPA fallback
 		try_files {path} /index.html

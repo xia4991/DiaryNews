@@ -31,7 +31,7 @@ class CrawlerRunner:
         """Fetch all sources, dedupe, filter by age.
 
         Returns (articles_as_dicts, per_source_results, stats). `stats` keys:
-        raw_count, existing_skipped, dedupe_skipped, age_skipped, cap_skipped,
+        raw_count, existing_skipped, dedupe_skipped, age_skipped, short_skipped, cap_skipped,
         returned_count — useful for diagnosing 'why fewer articles today?'.
         """
         existing_urls = existing_urls or set()

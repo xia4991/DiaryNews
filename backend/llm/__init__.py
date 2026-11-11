@@ -4,6 +4,7 @@ The package keeps the MiniMax wrapper import-compatible while hosting
 domain-specific LLM workflows under separate modules.
 """
 
+from backend.llm.client import call_llm
 from backend.llm.article_enrichment import batch_enrich_news_articles, enrich_news_article
 from backend.llm.minimax import (
     MiniMaxConfigError,
@@ -23,6 +24,7 @@ __all__ = [
     "MiniMaxResponseError",
     "MiniMaxTimeoutError",
     "call_minimax",
+    "call_llm",
     "batch_enrich_news_articles",
     "enrich_news_article",
 ]

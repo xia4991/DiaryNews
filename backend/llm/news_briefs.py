@@ -4,7 +4,8 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from backend.llm import MiniMaxConfigError, MiniMaxError, call_minimax
+from backend.llm.client import call_llm
+from backend.llm.minimax import MiniMaxConfigError, MiniMaxError
 from backend.llm.prompts import daily_news_brief_prompt
 from backend.storage.news import load_news
 from backend.storage.news_briefs import upsert_daily_news_brief
@@ -214,7 +215,7 @@ def build_daily_news_brief(brief_type: str, brief_date: str) -> Optional[dict]:
     prompt = daily_news_brief_prompt(brief_date, brief_type, _build_digest(selected))
     raw = ""
     try:
-        raw = call_minimax(prompt, max_tokens=900, prompt_version="daily_brief_v1")
+        raw, _model = call_llm(prompt, max_tokens=900, prompt_version="daily_brief_v1")
     except MiniMaxConfigError:
         # Bubble config errors so admins see them; they're operator-fixable.
         raise

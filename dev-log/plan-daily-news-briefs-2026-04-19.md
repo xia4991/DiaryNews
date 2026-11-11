@@ -271,7 +271,7 @@ Status:
 
 ## `T-BRIEF-07`
 
-在 [NewsTab.jsx](/Users/yongbinjiang/Desktop/XAB/projects/DiaryNews/react-frontend/src/pages/NewsTab.jsx) 中接入：
+在 [NewsTab.jsx](../react-frontend/src/pages/NewsTab.jsx) 中接入：
 
 - `layout === 'china'` 时请求 `china`
 - `layout === 'portugal'` 时请求 `portugal`

@@ -55,7 +55,7 @@ class FetchResult:
     articles: list = field(default_factory=list)
     entries_count: int = 0
     error: Optional[str] = None
-    status: str = "ok"            # ok | http_error | parse_error | empty
+    status: str = "ok"            # ok | partial_ok | empty | http_error | parse_error
     duration_ms: int = 0
 
 
@@ -164,7 +164,7 @@ class BaseAdapter(ABC):
                     duration_ms=duration_ms,
                 )
             except requests.HTTPError as exc:
-                last_err = f"HTTP {exc.response.status_code if exc.response else '?'}: {exc}"
+                last_err = f"HTTP {exc.response.status_code if exc.response is not None else '?'}: {exc}"
                 last_status = "http_error"
             except requests.RequestException as exc:
                 last_err = f"{type(exc).__name__}: {exc}"

@@ -16,7 +16,7 @@
 
 ### 展示位置
 
-- 放在 [HomePage.jsx](/Users/yongbinjiang/Desktop/XAB/projects/DiaryNews/react-frontend/src/pages/HomePage.jsx) 右侧栏
+- 放在 [HomePage.jsx](../react-frontend/src/pages/HomePage.jsx) 右侧栏
 - 位于 `今日概览` 上方
 - 风格上更像一块“站内公告卡”，而不是新闻卡
 
@@ -51,7 +51,7 @@
 
 ### 前端管理入口
 
-推荐放进 [AdminModerationTab.jsx](/Users/yongbinjiang/Desktop/XAB/projects/DiaryNews/react-frontend/src/pages/AdminModerationTab.jsx)：
+推荐放进 [AdminModerationTab.jsx](../react-frontend/src/pages/AdminModerationTab.jsx)：
 
 - 新增一个 `公告` 子页签
 - 管理员可以：

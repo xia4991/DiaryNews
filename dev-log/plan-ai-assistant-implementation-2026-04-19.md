@@ -4,8 +4,8 @@ Date: 2026-04-19
 
 Related:
 
-- [plan-ai-assistant-rag-2026-04-19.md](/Users/yongbinjiang/Desktop/XAB/projects/DiaryNews/dev-log/plan-ai-assistant-rag-2026-04-19.md)
-- [CHAT_PLAN.md](/Users/yongbinjiang/Desktop/XAB/projects/DiaryNews/backend/chat/CHAT_PLAN.md)
+- [plan-ai-assistant-rag-2026-04-19.md](../dev-log/plan-ai-assistant-rag-2026-04-19.md)
+- [CHAT_PLAN.md](../backend/chat/CHAT_PLAN.md)
 
 ## Progress
 

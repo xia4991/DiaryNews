@@ -28,6 +28,8 @@ from backend.config import (
     NEWS_AUTO_COLLECT_MAX_NEW,
     NEWS_AUTO_BATCH_LLM_INTERVAL,
     NEWS_AUTO_BATCH_LLM_LIMIT,
+    NEWS_AUTO_ENRICH_BATCH_SIZE,
+    NEWS_AUTO_ENRICH_MODE,
     NEWS_FETCH_INTERVAL,
 )
 from backend.sources import RSS_SOURCES
@@ -79,16 +81,29 @@ async def _news_auto_enrich_loop():
     await asyncio.sleep(90)
     while True:
         try:
-            result = await asyncio.to_thread(
-                services.enrich_pending_news,
-                NEWS_AUTO_BATCH_LLM_LIMIT,
-            )
-            log.info(
-                "Auto enrich: retried=%d done=%d status=%s",
-                result.get("retried_count", 0),
-                result.get("done_count", 0),
-                result.get("status", "ok"),
-            )
+            if NEWS_AUTO_ENRICH_MODE == "batch":
+                # One LLM request per cycle — fits quota-limited providers (OpenRouter free tier).
+                result = await asyncio.to_thread(
+                    services.batch_enrich_pending_news,
+                    NEWS_AUTO_ENRICH_BATCH_SIZE,
+                )
+                log.info(
+                    "Auto enrich (batch): selected=%d done=%d status=%s",
+                    result.get("selected_count", 0),
+                    result.get("done_count", 0),
+                    result.get("status") or result.get("aborted") or "ok",
+                )
+            else:
+                result = await asyncio.to_thread(
+                    services.enrich_pending_news,
+                    NEWS_AUTO_BATCH_LLM_LIMIT,
+                )
+                log.info(
+                    "Auto enrich: retried=%d done=%d status=%s",
+                    result.get("retried_count", 0),
+                    result.get("done_count", 0),
+                    result.get("status") or result.get("aborted") or "ok",
+                )
         except Exception:
             log.exception("Auto enrich failed")
         await asyncio.sleep(NEWS_AUTO_BATCH_LLM_INTERVAL)

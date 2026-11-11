@@ -11,7 +11,6 @@ import logging
 import re
 from datetime import datetime, timezone
 
-from backend.config import MINIMAX_MODEL
 from backend.llm.prompts import (
     ARTICLE_ENRICHMENT_PROMPT_VERSION,
     BATCH_ARTICLE_ENRICHMENT_PROMPT_VERSION,
@@ -19,7 +18,8 @@ from backend.llm.prompts import (
     batch_article_chinese_prompt,
 )
 from backend.sources import CATEGORIES, CN_TAG_KEYWORDS
-from backend.llm.minimax import MiniMaxResponseError, call_minimax
+from backend.llm.client import call_llm
+from backend.llm.minimax import MiniMaxResponseError
 
 log = logging.getLogger("diarynews.llm.article_enrichment")
 
@@ -35,7 +35,7 @@ def enrich_news_article(
 ) -> dict:
     """Run MiniMax enrichment for an already prepared article body."""
     zh_prompt = article_chinese_prompt(article["title"], text_for_llm)
-    zh_raw = call_minimax(
+    zh_raw, model_used = call_llm(
         zh_prompt,
         max_tokens=1536,
         prompt_version=ARTICLE_ENRICHMENT_PROMPT_VERSION,
@@ -70,7 +70,7 @@ def enrich_news_article(
         "content_zh": content_zh,
         "relevance_reason": zh_fields.get("relevance_reason", "") or article.get("relevance_reason", ""),
         "enriched_at": enriched_at,
-        "enrichment_model": MINIMAX_MODEL,
+        "enrichment_model": model_used,
         "enrichment_prompt_version": ARTICLE_ENRICHMENT_PROMPT_VERSION,
         "enrichment_input_hash": input_hash,
     }
@@ -90,9 +90,10 @@ def batch_enrich_news_articles(articles: list[dict]) -> dict:
         return {"enriched": [], "matched_indexes": set(), "invalid_rows": 0, "extra_rows": 0}
 
     prompt = batch_article_chinese_prompt(articles)
-    raw = call_minimax(
+    raw, model_used = call_llm(
         prompt,
-        max_tokens=4096,
+        # ~520 output tokens per article observed; keep MiniMax's old 4096 floor.
+        max_tokens=max(4096, 650 * len(articles) + 512),
         prompt_version=BATCH_ARTICLE_ENRICHMENT_PROMPT_VERSION,
     )
     rows = _parse_batch_response(raw)
@@ -114,7 +115,7 @@ def batch_enrich_news_articles(articles: list[dict]) -> dict:
             continue
 
         matched_indexes.add(index)
-        enriched.append(_build_enriched_article_from_fields(articles[index], fields))
+        enriched.append(_build_enriched_article_from_fields(articles[index], fields, model_used))
 
     return {
         "enriched": enriched,
@@ -125,7 +126,7 @@ def batch_enrich_news_articles(articles: list[dict]) -> dict:
     }
 
 
-def _build_enriched_article_from_fields(article: dict, fields: dict) -> dict:
+def _build_enriched_article_from_fields(article: dict, fields: dict, model_used: str) -> dict:
     text_for_hash = "\n".join([
         article.get("summary", "") or "",
         article.get("scraped_content", "") or "",
@@ -155,7 +156,7 @@ def _build_enriched_article_from_fields(article: dict, fields: dict) -> dict:
         "content_zh": resolved_content_zh,
         "relevance_reason": fields.get("relevance_reason", "") or article.get("relevance_reason", ""),
         "enriched_at": enriched_at,
-        "enrichment_model": MINIMAX_MODEL,
+        "enrichment_model": model_used,
         "enrichment_prompt_version": BATCH_ARTICLE_ENRICHMENT_PROMPT_VERSION,
         "enrichment_input_hash": input_hash,
     }

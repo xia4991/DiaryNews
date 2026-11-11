@@ -26,7 +26,7 @@
 确认实现位置与排序规则，建立开发分支与计划文档。
 
 ### T2
-在 [NewsTab.jsx](/Users/yongbinjiang/Desktop/XAB/projects/DiaryNews/react-frontend/src/pages/NewsTab.jsx) 中为 `layout === 'china'` 的 `持续关注` 区块增加排序状态、排序按钮与派生列表。
+在 [NewsTab.jsx](../react-frontend/src/pages/NewsTab.jsx) 中为 `layout === 'china'` 的 `持续关注` 区块增加排序状态、排序按钮与派生列表。
 
 状态：已完成
 

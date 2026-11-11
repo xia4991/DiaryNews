@@ -21,6 +21,17 @@ def load_news() -> dict:
     }
 
 
+def list_article_links() -> set:
+    """Every stored article link — Stage A's existing-URL set.
+
+    Link-only on purpose: load_news() pulls whole rows (bodies included) and stops at
+    NEWS_FEED_LIMIT, which is both heavier and incomplete for this check.
+    """
+    _ensure_db()
+    with get_db() as conn:
+        return {r["link"] for r in conn.execute("SELECT link FROM articles")}
+
+
 def _collapse_story_groups(articles: list) -> list:
     """Collapse cross-source story groups to one representative card + an 'N sources' badge.
 
@@ -60,9 +71,8 @@ def _collapse_story_groups(articles: list) -> list:
 def load_news_feed() -> dict:
     """Public feed — like load_news() but collapses cross-source story groups.
 
-    Kept separate from load_news() because collect_news() relies on load_news() returning
-    every stored link for its existing-URL set; collapsing there would re-collect the
-    grouped non-representative articles.
+    Kept separate from load_news() so other callers (e.g. brief generation) still see
+    every article in the window, not just one representative per story group.
     """
     data = load_news()
     return {

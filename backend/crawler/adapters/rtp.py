@@ -75,7 +75,7 @@ class RTPAdapter(BaseAdapter):
                 feed = feedparser.parse(content)
                 return feed.entries or [], None
             except requests.HTTPError as exc:
-                status = exc.response.status_code if exc.response else "?"
+                status = exc.response.status_code if exc.response is not None else "?"
                 last_err = f"HTTP {status}: {exc}"
             except requests.RequestException as exc:
                 last_err = f"{type(exc).__name__}: {exc}"

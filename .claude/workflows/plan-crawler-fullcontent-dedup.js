@@ -8,7 +8,7 @@ export const meta = {
   ],
 }
 
-const ROOT = '/Users/yongbinjiang/Desktop/XAB/projects/DiaryNews'
+const ROOT = '/Users/yongbinjiang/Documents/Projects/DiaryNews'
 
 const CODE_FINDINGS = {
   type: 'object',
