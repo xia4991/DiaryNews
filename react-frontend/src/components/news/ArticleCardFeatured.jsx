@@ -3,12 +3,14 @@ import Badge from '../ui/Badge'
 import StoryGroupBadge from './StoryGroupBadge'
 import { CATEGORY_ZH } from '../../constants/categories'
 import { categoryColor, TAG_COLOR } from '../../constants/colors'
+import { useShowViewCounts } from '../../siteSettings'
 
 function formatViews(value) {
   return `${Number(value || 0)} 次阅读`
 }
 
 export default function ArticleCardFeatured({ article, onClick }) {
+  const showViews = useShowViewCounts()
   if (!article) return null
   const pub = article.published?.slice(0, 10)
   const tags = article.tags_zh
@@ -62,10 +64,12 @@ export default function ArticleCardFeatured({ article, onClick }) {
           </div>
           <span className="text-xs font-semibold text-text-muted">{article.source}</span>
         </div>
-        <span className="inline-flex items-center gap-1 text-[11px] text-text-subtle">
-          <span className="material-symbols-outlined" style={{ fontSize: 14 }}>visibility</span>
-          {formatViews(article.view_count)}
-        </span>
+        {showViews && (
+          <span className="inline-flex items-center gap-1 text-[11px] text-text-subtle">
+            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>visibility</span>
+            {formatViews(article.view_count)}
+          </span>
+        )}
       </div>
     </Card>
   )

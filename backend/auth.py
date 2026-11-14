@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 from datetime import datetime, timezone, timedelta
 
 import jwt
@@ -57,6 +58,19 @@ async def get_current_user(
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     return payload
+
+
+async def get_optional_user(
+    credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+) -> Optional[dict]:
+    """JWT payload when a valid token is sent, else None. For public endpoints that
+    only want to know who the visitor is (analytics), never to authorize."""
+    if not credentials:
+        return None
+    try:
+        return decode_jwt(credentials.credentials)
+    except jwt.InvalidTokenError:
+        return None
 
 
 async def require_admin(user: dict = Depends(get_current_user)) -> dict:

@@ -85,3 +85,6 @@ Create a `.env` file in the project root:
 | Variable | Required | Purpose |
 |---|---|---|
 | `MINIMAX_API_KEY` | No | AI summaries and Chinese translations for articles |
+| `TRUSTED_PROXY_IPS` | No | Socket peers allowed to supply the visitor IP via `CF-Connecting-IP` / `X-Forwarded-For` (default `127.0.0.1,::1`, i.e. the local Caddy) |
+| `ANALYTICS_RETENTION_DAYS` | No | Days visit events (IP, pages, clicks) are kept before the daily sweep deletes them (default `90`; the privacy policy states 90) |
+| `ANALYTICS_MAX_EVENTS_PER_MINUTE` | No | Per-IP cap on recorded visit events per minute (default `60`) |

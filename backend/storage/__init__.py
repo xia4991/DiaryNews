@@ -72,6 +72,18 @@ from backend.storage.users import (  # noqa: F401
     update_user_profile,
 )
 from backend.storage.admin_logs import add_log, list_logs  # noqa: F401
+from backend.storage.analytics import (  # noqa: F401
+    ANALYTICS_EVENT_TYPES,
+    record_site_event,
+    prune_site_events,
+    analytics_summary,
+    list_site_events,
+)
+from backend.storage.site_settings import (  # noqa: F401
+    SITE_SETTING_DEFAULTS,
+    get_site_settings,
+    update_site_settings,
+)
 from backend.storage.listings import (  # noqa: F401
     create_listing,
     get_listing,

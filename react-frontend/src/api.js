@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { analyticsContext } from './analytics'
 
 const http = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
@@ -37,6 +38,19 @@ export const api = {
   // Status
   getStatus: () => http.get('/status').then(r => r.data),
 
+  // Analytics — fire and forget; a failed beacon must never surface to the visitor.
+  track: (eventType, fields = {}) => http.post('/track', {
+    event_type: eventType,
+    ...analyticsContext(),
+    ...fields,
+  }).catch(() => {}),
+  getAnalyticsSummary: (params) => http.get('/admin/analytics/summary', { params }).then(r => r.data),
+  listAnalyticsEvents: (params) => http.get('/admin/analytics/events', { params }).then(r => r.data),
+
+  // Site settings
+  getSiteSettings: () => http.get('/site-settings').then(r => r.data),
+  updateSiteSettings: (data) => http.put('/admin/site-settings', data).then(r => r.data),
+
   // AI Assistant
   reindexAssistantWiki: () => http.post('/chat/admin/reindex-wiki').then(r => r.data),
   listChatConversations: () => http.get('/chat/conversations').then(r => r.data),
@@ -48,7 +62,7 @@ export const api = {
   // News
   getNews: () => http.get('/news').then(r => r.data),
   listAnnouncements: (params) => http.get('/announcements', { params }).then(r => r.data),
-  recordNewsView: (link) => http.post('/news/view', { link }).then(r => r.data),
+  recordNewsView: (link) => http.post('/news/view', { link, ...analyticsContext() }).then(r => r.data),
   listNewsBriefs: (params) => http.get('/news/briefs', { params }).then(r => r.data),
   generateNewsBrief: (params) => http.post('/news/briefs/generate', null, { params, timeout: LONG_TASK_TIMEOUT }).then(r => r.data),
   collectNews: () => http.post('/news/collect', null, { timeout: LONG_TASK_TIMEOUT }).then(r => r.data),

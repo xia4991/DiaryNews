@@ -103,6 +103,15 @@ def export_user_data(user_id: int) -> Optional[dict]:
         ).fetchall()
         data["listing_reports"] = [{k: v for k, v in dict(r).items() if k != "reporter_id"} for r in reports]
 
+        # GDPR access right: the visit log rows tied to this account (anonymous visits
+        # can't be attributed to a user and aren't included).
+        visits = conn.execute(
+            "SELECT created_at, event_type, page, target, title, referrer, ip, country, device, user_agent"
+            " FROM site_events WHERE user_id = ? ORDER BY created_at DESC",
+            (user_id,),
+        ).fetchall()
+        data["site_visits"] = [dict(r) for r in visits]
+
         return data
 
 
@@ -126,6 +135,7 @@ def delete_user(user_id: int) -> bool:
             conn.execute("DELETE FROM listing_secondhand WHERE listing_id = ?", (lid,))
             conn.execute("DELETE FROM listing_reports WHERE listing_id = ?", (lid,))
         conn.execute("DELETE FROM listings WHERE owner_id = ?", (user_id,))
+        conn.execute("DELETE FROM site_events WHERE user_id = ?", (user_id,))
         conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
         log.info("Deleted user %d and all associated data", user_id)
         return True

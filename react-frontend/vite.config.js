@@ -14,14 +14,17 @@ const httpsConfig = (() => {
   }
 })()
 
+// Backend the dev server proxies to; override to run a second backend side by side.
+const apiProxyTarget = process.env.VITE_API_PROXY_TARGET || 'http://localhost:8000'
+
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     host: '0.0.0.0',
     ...(httpsConfig ? { https: httpsConfig } : {}),
     proxy: {
-      '/api': 'http://localhost:8000',
-      '/uploads': 'http://localhost:8000',
+      '/api': apiProxyTarget,
+      '/uploads': apiProxyTarget,
     },
   },
 })

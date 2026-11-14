@@ -3,6 +3,7 @@ import Card from '../ui/Card'
 import StoryGroupBadge from './StoryGroupBadge'
 import { CATEGORY_ZH } from '../../constants/categories'
 import { categoryColor, TAG_COLOR } from '../../constants/colors'
+import { useShowViewCounts } from '../../siteSettings'
 
 // Short translated bodies read better in full than the one-line summary.
 const INLINE_BODY_MAX_CHARS = 240
@@ -58,6 +59,7 @@ function Thumbnail({ src, lead }) {
  * date to the meta line when the list is not grouped by day.
  */
 function NewsFeedRow({ article, onClick, lead = false, showDate = false }) {
+  const showViews = useShowViewCounts()
   const tags = (article.tags_zh || '').split(',').map((tag) => tag.trim()).filter(Boolean)
   const translated = Boolean(article.title_zh)
   const time = formatTime(article.published)
@@ -113,10 +115,12 @@ function NewsFeedRow({ article, onClick, lead = false, showDate = false }) {
           <span className="font-semibold text-text-muted">{article.source}</span>
           {showDate && <span className="tabular-nums">{article.published?.slice(0, 10)}</span>}
           {time && <span className="tabular-nums">{time}</span>}
-          <span className="inline-flex items-center gap-1">
-            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>visibility</span>
-            {Number(article.view_count || 0)}
-          </span>
+          {showViews && (
+            <span className="inline-flex items-center gap-1">
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>visibility</span>
+              {Number(article.view_count || 0)}
+            </span>
+          )}
           <StoryGroupBadge size={article.story_group_size} />
         </div>
       </div>

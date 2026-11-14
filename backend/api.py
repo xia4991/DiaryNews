@@ -6,24 +6,30 @@ import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal, Optional
+from urllib.parse import urlparse
 
 log = logging.getLogger("diarynews.api")
 
 from fastapi import FastAPI, HTTPException, Depends, Query, Request, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, StrictBool
 
 from backend import services, storage
 from backend.auth import (
     verify_google_token,
     create_jwt,
     get_current_user,
+    get_optional_user,
     require_admin,
 )
+from backend.request_meta import client_country, client_ip, device_type, is_bot
 from backend.config import (
     ADMIN_EMAILS, CORS_ORIGINS,
+    ANALYTICS_MAX_EVENTS_PER_MINUTE,
+    ANALYTICS_RETENTION_DAYS,
+    SITE_URL,
     MEDIA_BACKEND, MEDIA_LOCAL_ROOT, MEDIA_PUBLIC_URL,
     NEWS_AUTO_COLLECT_MAX_AGE_HOURS,
     NEWS_AUTO_COLLECT_MAX_NEW,
@@ -50,6 +56,18 @@ async def _listing_expiry_loop():
         except Exception:
             log.exception("Listing expiry sweep failed")
         await asyncio.sleep(JOB_EXPIRY_SWEEP_INTERVAL_SECONDS)
+
+
+async def _analytics_retention_loop():
+    """Background task: delete visit events past ANALYTICS_RETENTION_DAYS, at boot then daily."""
+    while True:
+        try:
+            removed = await asyncio.to_thread(storage.prune_site_events, ANALYTICS_RETENTION_DAYS)
+            if removed:
+                log.info("Pruned %d site events older than %d days", removed, ANALYTICS_RETENTION_DAYS)
+        except Exception:
+            log.exception("Analytics retention sweep failed")
+        await asyncio.sleep(24 * 60 * 60)
 
 
 async def _news_collect_loop():
@@ -117,6 +135,7 @@ app.include_router(chat_router, prefix="/api/chat")
 @app.on_event("startup")
 async def _start_background_tasks():
     asyncio.create_task(_listing_expiry_loop())
+    asyncio.create_task(_analytics_retention_loop())
     if NEWS_FETCH_INTERVAL > 0:
         asyncio.create_task(_news_collect_loop())
         log.info(
@@ -156,6 +175,9 @@ class GoogleLoginRequest(BaseModel):
 
 class NewsViewRequest(BaseModel):
     link: str
+    # Analytics context; optional so old clients keep working.
+    visitor_id: str = Field("", max_length=64)
+    page: str = Field("", max_length=64)
 
 
 @app.post("/api/auth/google")
@@ -306,6 +328,37 @@ def _clean_announcement_extras(fields: dict) -> dict:
             raw = parsed.astimezone(timezone.utc).isoformat()
         fields["expires_at"] = raw
     return fields
+
+
+# ── Site settings ────────────────────────────────────────────────────────────
+
+class SiteSettingsUpdate(BaseModel):
+    view_counts_public: Optional[StrictBool] = None
+
+
+@app.get("/api/site-settings")
+def get_site_settings():
+    return storage.get_site_settings()
+
+
+@app.put("/api/admin/site-settings")
+def admin_update_site_settings(
+    req: SiteSettingsUpdate,
+    admin: dict = Depends(require_admin),
+):
+    changes = req.model_dump(exclude_none=True)
+    if not changes:
+        raise HTTPException(status_code=400, detail="No settings to update")
+    try:
+        settings = storage.update_site_settings(changes)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    storage.add_log(
+        "site_settings",
+        "管理员修改站点设置：" + ", ".join(f"{k}={v}" for k, v in changes.items()),
+        {"changes": changes, "admin_email": admin.get("email")},
+    )
+    return settings
 
 
 @app.get("/api/announcements")
@@ -873,6 +926,118 @@ def delete_community_post_reply(reply_id: int, user: dict = Depends(get_current_
     return {"ok": True}
 
 
+# ── Site analytics ───────────────────────────────────────────────────────────
+
+_track_rate: dict[str, tuple[float, int]] = {}
+_track_rate_lock = threading.Lock()
+_TRACK_RATE_MAX_ENTRIES = 10_000
+
+
+def _track_allowed(ip: str) -> bool:
+    """Fixed one-minute window per IP; keeps a misbehaving client from flooding the table."""
+    now = time.monotonic()
+    with _track_rate_lock:
+        start, count = _track_rate.get(ip, (now, 0))
+        if now - start >= 60:
+            start, count = now, 0
+        if count >= ANALYTICS_MAX_EVENTS_PER_MINUTE:
+            return False
+        _track_rate[ip] = (start, count + 1)
+        if len(_track_rate) > _TRACK_RATE_MAX_ENTRIES:
+            for key, (ts, _) in list(_track_rate.items()):
+                if now - ts >= 60:
+                    del _track_rate[key]
+        return True
+
+
+def _record_site_event(request: Request, user: Optional[dict], event_type: str, **fields) -> None:
+    """Best effort: analytics must never fail the request that triggered it."""
+    ip = client_ip(request)
+    if not _track_allowed(ip):
+        return
+    ua = request.headers.get("user-agent", "")
+    try:
+        storage.record_site_event(
+            event_type,
+            ip=ip,
+            country=client_country(request),
+            user_id=int(user["sub"]) if user and str(user.get("sub", "")).isdigit() else None,
+            is_admin=bool(user and user.get("is_admin")),
+            is_bot=is_bot(ua),
+            device=device_type(ua),
+            user_agent=ua,
+            **fields,
+        )
+    except Exception:
+        log.exception("Failed to record site event %s", event_type)
+
+
+def _own_hosts() -> tuple:
+    hosts = {"localhost", "127.0.0.1"}
+    for url in [SITE_URL, *CORS_ORIGINS]:
+        host = (urlparse(url).hostname or "").lower()
+        if host:
+            hosts.add(host[4:] if host.startswith("www.") else host)
+    return tuple(hosts)
+
+
+class TrackRequest(BaseModel):
+    # article_open is recorded by /api/news/view so the view counter and the log agree.
+    event_type: Literal["pageview", "tab", "outbound"]
+    page: str = Field("", max_length=64)
+    target: str = Field("", max_length=1000)
+    title: str = Field("", max_length=300)
+    referrer: str = Field("", max_length=1000)
+    visitor_id: str = Field("", max_length=64)
+
+
+@app.post("/api/track", status_code=204)
+def track_event(
+    req: TrackRequest,
+    request: Request,
+    user: Optional[dict] = Depends(get_optional_user),
+):
+    _record_site_event(
+        request, user, req.event_type,
+        page=req.page, target=req.target, title=req.title,
+        referrer=req.referrer, visitor_id=req.visitor_id,
+    )
+    return Response(status_code=204)
+
+
+@app.get("/api/admin/analytics/summary")
+def admin_analytics_summary(
+    days: int = Query(7, ge=1, le=90),
+    include_admin: bool = Query(False),
+    include_bots: bool = Query(False),
+    _admin: dict = Depends(require_admin),
+):
+    return storage.analytics_summary(
+        days,
+        include_admin=include_admin,
+        include_bots=include_bots,
+        own_hosts=_own_hosts(),
+    )
+
+
+@app.get("/api/admin/analytics/events")
+def admin_analytics_events(
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    ip: Optional[str] = Query(None, max_length=64),
+    event_type: Optional[str] = Query(None),
+    include_admin: bool = Query(False),
+    include_bots: bool = Query(False),
+    _admin: dict = Depends(require_admin),
+):
+    if event_type and event_type not in storage.ANALYTICS_EVENT_TYPES:
+        raise HTTPException(status_code=400, detail="Unknown event_type")
+    return storage.list_site_events(
+        limit=limit, offset=offset, ip=ip or None, event_type=event_type,
+        include_admin=include_admin, include_bots=include_bots,
+    )
+
+
 # ── News (public) ────────────────────────────────────────────────────────────
 
 BriefType = Literal["china", "portugal"]
@@ -884,8 +1049,8 @@ def get_news():
 
 # In-process (client, link) dedup for view counting. One vote per hour per client.
 # Single-process scope by design — multi-worker deployments would need a shared store.
-# Uses request.client.host only; X-Forwarded-For is ignored to keep dedup unspoofable
-# until we add an explicit TRUST_PROXY_HEADERS toggle.
+# The client is the real visitor IP (see request_meta.client_ip): forwarding headers are
+# only trusted from the local proxy, so a direct caller can't spoof them.
 _VIEW_DEDUP_WINDOW_SEC = 60 * 60
 _VIEW_DEDUP_MAX_ENTRIES = 10_000
 _view_dedup: dict[tuple[str, str], float] = {}
@@ -909,15 +1074,22 @@ def _should_count_view(client_id: str, link: str) -> bool:
 
 
 @app.post("/api/news/view")
-def record_news_view(req: NewsViewRequest, request: Request):
+def record_news_view(
+    req: NewsViewRequest,
+    request: Request,
+    user: Optional[dict] = Depends(get_optional_user),
+):
     link = (req.link or "").strip()
     if not link:
         raise HTTPException(status_code=400, detail="link is required")
-    client_id = request.client.host if request.client else "unknown"
-    should_count = _should_count_view(client_id, link)
+    should_count = _should_count_view(client_ip(request), link)
     result = storage.increment_article_view(link, increment=should_count)
     if not result:
         raise HTTPException(status_code=404, detail="Article not found")
+    _record_site_event(
+        request, user, "article_open",
+        page=req.page, target=link, visitor_id=req.visitor_id,
+    )
     return result
 
 

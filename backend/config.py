@@ -48,6 +48,16 @@ GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET")
 ADMIN_EMAILS = [e.strip() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()]
 
+# ── Client identity / analytics ──────────────────────────────────────────────
+# Socket peers allowed to set CF-Connecting-IP / X-Forwarded-For (the local Caddy).
+TRUSTED_PROXY_IPS = {
+    ip.strip() for ip in os.environ.get("TRUSTED_PROXY_IPS", "127.0.0.1,::1").split(",") if ip.strip()
+}
+# Site visit events (IP, page, clicks) older than this are deleted. Stated in the privacy policy.
+ANALYTICS_RETENTION_DAYS = int(os.environ.get("ANALYTICS_RETENTION_DAYS", "90"))
+# Per-IP cap on /api/track events per minute; extra events are dropped silently.
+ANALYTICS_MAX_EVENTS_PER_MINUTE = int(os.environ.get("ANALYTICS_MAX_EVENTS_PER_MINUTE", "60"))
+
 # ── CORS ─────────────────────────────────────────────────────────────────────
 CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
 

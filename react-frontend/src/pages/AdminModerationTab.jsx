@@ -7,6 +7,8 @@ import Modal from '../components/ui/Modal'
 import Field from '../components/ui/Field'
 import ArticleModal from '../components/news/ArticleModal'
 import FocusTopicsSection from '../components/admin/FocusTopicsSection'
+import SiteSettingsSection from '../components/admin/SiteSettingsSection'
+import AnalyticsSection from '../components/admin/AnalyticsSection'
 
 const KIND_ZH = { job: '招聘', realestate: '房产', secondhand: '二手' }
 const KIND_COLORS = { job: '#2E7D5A', realestate: '#2B6CB0', secondhand: '#8B5CF6' }
@@ -152,7 +154,7 @@ export default function AdminModerationTab({ onNewsChanged }) {
             审核用户举报和管理平台上的信息发布。
           </p>
 
-          <div className="mt-6 flex gap-2">
+          <div className="mt-6 flex flex-wrap gap-2">
             <Button
               variant={tab === 'reports' ? 'primary' : 'ghost'}
               size="sm"
@@ -186,6 +188,14 @@ export default function AdminModerationTab({ onNewsChanged }) {
               重点关注
             </Button>
             <Button
+              variant={tab === 'analytics' ? 'primary' : 'ghost'}
+              size="sm"
+              icon="monitoring"
+              onClick={() => setTab('analytics')}
+            >
+              访问统计
+            </Button>
+            <Button
               variant={tab === 'logs' ? 'primary' : 'ghost'}
               size="sm"
               icon="history"
@@ -200,6 +210,14 @@ export default function AdminModerationTab({ onNewsChanged }) {
               onClick={() => setTab('crawler')}
             >
               爬虫
+            </Button>
+            <Button
+              variant={tab === 'settings' ? 'primary' : 'ghost'}
+              size="sm"
+              icon="tune"
+              onClick={() => setTab('settings')}
+            >
+              站点设置
             </Button>
           </div>
         </div>
@@ -224,6 +242,10 @@ export default function AdminModerationTab({ onNewsChanged }) {
         <FocusTopicsSection />
       ) : tab === 'crawler' ? (
         <CrawlerSection onNewsChanged={onNewsChanged} />
+      ) : tab === 'settings' ? (
+        <SiteSettingsSection />
+      ) : tab === 'analytics' ? (
+        <AnalyticsSection />
       ) : (
         <LogsSection />
       )}

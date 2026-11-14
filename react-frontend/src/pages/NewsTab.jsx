@@ -15,6 +15,7 @@ import { CATEGORY_ZH } from '../constants/categories'
 import { categoryColor } from '../constants/colors'
 import { api } from '../api'
 import { sortArticlesByHotness } from '../utils/newsHotness'
+import { useShowViewCounts } from '../siteSettings'
 
 const INITIAL_FEED_COUNT = 24
 const FEED_STEP = 24
@@ -225,6 +226,9 @@ export default function NewsTab({
   const [briefInitialScrollTop, setBriefInitialScrollTop] = useState(0)
   const [visibleCount, setVisibleCount] = useState(INITIAL_FEED_COUNT)
   const [chinaFeedSort, setChinaFeedSort] = useState('date')
+  const showViews = useShowViewCounts()
+  // Sorting by views would leak the hidden counts' order, so it only exists when counts are visible.
+  const effectiveChinaSort = showViews ? chinaFeedSort : 'date'
   const [selectedDateFilter, setSelectedDateFilter] = useState('all')
   const [hotWindow, setHotWindow] = useState('week')
   const [briefModalOpen, setBriefModalOpen] = useState(false)
@@ -375,9 +379,9 @@ export default function NewsTab({
   const chinaFeed = useMemo(
     () => sortChinaFeedArticles(
       chinaCanHideUntranslated && !showUntranslated ? chinaTranslated : chinaDateFiltered,
-      chinaFeedSort
+      effectiveChinaSort
     ),
-    [chinaCanHideUntranslated, showUntranslated, chinaTranslated, chinaDateFiltered, chinaFeedSort]
+    [chinaCanHideUntranslated, showUntranslated, chinaTranslated, chinaDateFiltered, effectiveChinaSort]
   )
   const chinaHotArticles = useMemo(() => {
     const pool = viewArticles.filter((article) => article.title_zh)
@@ -402,7 +406,7 @@ export default function NewsTab({
 
   if (layout === 'china') {
     const [leadArticle, ...feedAfterLead] = chinaVisibleFeed
-    const groupedByDay = chinaFeedSort === 'date'
+    const groupedByDay = effectiveChinaSort === 'date'
     const feedGroups = groupedByDay
       ? groupArticlesByDay(feedAfterLead)
       : [{ key: 'all', items: feedAfterLead }]
@@ -444,25 +448,27 @@ export default function NewsTab({
           <div className="flex flex-wrap items-center gap-2 border-b border-border pb-3">
             <NewsSearchInput value={searchQuery} onChange={handleSearchChange} />
             <NewsDateFilter value={selectedDateFilter} onChange={handleDateFilterChange} />
-            <div className="inline-flex rounded-full border border-border bg-white/78 p-1 shadow-[0_10px_24px_rgba(62,45,24,0.08)]">
-              {CHINA_FEED_SORT_OPTIONS.map((option) => {
-                const active = chinaFeedSort === option.value
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setChinaFeedSort(option.value)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors sm:px-4 ${
-                      active
-                        ? 'bg-accent text-white shadow-[0_8px_18px_rgba(157,61,51,0.22)]'
-                        : 'text-text-muted hover:bg-surface hover:text-text'
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                )
-              })}
-            </div>
+            {showViews && (
+              <div className="inline-flex rounded-full border border-border bg-white/78 p-1 shadow-[0_10px_24px_rgba(62,45,24,0.08)]">
+                {CHINA_FEED_SORT_OPTIONS.map((option) => {
+                  const active = chinaFeedSort === option.value
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() => setChinaFeedSort(option.value)}
+                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors sm:px-4 ${
+                        active
+                          ? 'bg-accent text-white shadow-[0_8px_18px_rgba(157,61,51,0.22)]'
+                          : 'text-text-muted hover:bg-surface hover:text-text'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
             {chinaCanHideUntranslated && chinaUntranslatedCount > 0 && (
               <button
                 type="button"
@@ -563,7 +569,7 @@ export default function NewsTab({
                           {article.title_zh || article.title}
                         </p>
                         <p className="mt-1 text-[11px] text-text-subtle">
-                          {article.source} · {formatViews(article.view_count)}
+                          {article.source}{showViews && ` · ${formatViews(article.view_count)}`}
                         </p>
                       </div>
                     </button>
@@ -641,7 +647,7 @@ export default function NewsTab({
                         {CATEGORY_ZH[featured.category] || featured.category}
                       </Badge>
                       <span className="text-[11px] uppercase tracking-[0.14em] text-text-subtle">
-                        {featured.source} · {featured.published?.slice(0, 10)} · {formatViews(featured.view_count)}
+                        {featured.source} · {featured.published?.slice(0, 10)}{showViews && ` · ${formatViews(featured.view_count)}`}
                       </span>
                     </div>
                     <h2
@@ -700,7 +706,7 @@ export default function NewsTab({
                         </span>
                         <div className="min-w-0">
                           <p className="text-[11px] uppercase tracking-[0.14em] text-text-subtle">
-                            {article.source} · {formatViews(article.view_count)}
+                            {article.source}{showViews && ` · ${formatViews(article.view_count)}`}
                           </p>
                           <p className="mt-1 line-clamp-2 text-[13px] font-bold leading-5 text-text">
                             {article.title_zh || article.title}
@@ -786,7 +792,7 @@ export default function NewsTab({
                             {CATEGORY_ZH[article.category] || article.category}
                           </Badge>
                           <span className="min-w-0 truncate text-[11px] text-text-subtle">
-                            {article.source} · {formatViews(article.view_count)}
+                            {article.source}{showViews && ` · ${formatViews(article.view_count)}`}
                           </span>
                         </div>
                         <p className="mt-2 line-clamp-4 text-sm font-semibold leading-6 text-text">

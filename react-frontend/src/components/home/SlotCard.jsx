@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Card from '../ui/Card'
+import { api } from '../../api'
 
 function SlotImage({ src, className }) {
   const [failed, setFailed] = useState(false)
@@ -26,6 +27,7 @@ export default function SlotCard({ slot, layout = 'row' }) {
   const row = layout === 'row'
   const link = /^https?:\/\//i.test(slot.link_url || '') ? slot.link_url : ''
   const rel = isPromo ? 'noopener sponsored' : 'noopener noreferrer'
+  const trackClick = () => api.track('outbound', { target: link, title: `${isPromo ? '推广' : '公告'}：${slot.title}` })
 
   return (
     <Card padding="none" className={`overflow-hidden ${row ? 'sm:flex' : ''}`}>
@@ -41,7 +43,7 @@ export default function SlotCard({ slot, layout = 'row' }) {
             </span>
           )}
           {link ? (
-            <a href={link} target="_blank" rel={rel} className="transition-colors hover:text-accent">
+            <a href={link} target="_blank" rel={rel} onClick={trackClick} className="transition-colors hover:text-accent">
               {slot.title}
             </a>
           ) : slot.title}
@@ -52,6 +54,7 @@ export default function SlotCard({ slot, layout = 'row' }) {
             href={link}
             target="_blank"
             rel={rel}
+            onClick={trackClick}
             className="mt-2 inline-flex items-center gap-1 text-[13px] font-semibold text-accent transition-colors hover:text-accent-hover"
           >
             {slot.link_label || '了解详情'}

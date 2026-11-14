@@ -114,3 +114,11 @@ Background loops in `api.py` run A every `NEWS_FETCH_INTERVAL` and B every `NEWS
 1. Add URL + name to `backend/sources.py` `RSS_SOURCES` and `SOURCE_PRIORITY`
 2. Create `backend/crawler/adapters/<source>.py` subclassing `BaseAdapter`; set `name`, `url`, override extractors only if the feed has quirks
 3. Register the class in `backend/crawler/adapters/__init__.py`'s `ADAPTER_CLASSES` list
+
+## Client IP, Site Analytics & Site Settings
+
+- **Client IP**: production runs cloudflared → Caddy → uvicorn, so `request.client.host` is always `127.0.0.1`. Always use `request_meta.client_ip(request)` — it trusts `CF-Connecting-IP` / `X-Forwarded-For` only when the socket peer is in `TRUSTED_PROXY_IPS`. `/api/news/view`'s per-hour view dedup keys on it.
+- **`site_events` table** (`storage/analytics.py`): one row per `pageview` (site entry, with external referrer) / `tab` / `article_open` / `outbound` click — `ip`, `country` (`CF-IPCountry`), `visitor_id` (per-browser-session random id from sessionStorage), `user_id`, `is_admin`, `is_bot`, `device`, `user_agent`. Written by `POST /api/track` (public, per-IP rate-limited, always 204) and by `/api/news/view` (article opens — so the counter and the log agree). Pruned daily after `ANALYTICS_RETENTION_DAYS`; deleted with the user on account deletion and included in `/api/auth/me/export`. The privacy policy (`LegalModal.jsx`) describes this — keep them in sync.
+- **Admin analytics**: `GET /api/admin/analytics/summary?days=&include_admin=&include_bots=` (aggregated in Python, day buckets in Europe/Lisbon) and `GET /api/admin/analytics/events?ip=&event_type=&limit=&offset=`. Admin and bot events are excluded unless asked for.
+- **Site settings** (`storage/site_settings.py`): typed defaults in `SITE_SETTING_DEFAULTS`, stored as `setting.<name>` JSON rows in `metadata`. `GET /api/site-settings` (public), `PUT /api/admin/site-settings` (StrictBool-validated, logged). Current: `view_counts_public` — article "N 次阅读" is admin-only while false.
+- Storage functions are re-exported flat from `storage/__init__.py`; prefix new names by domain (`*_site_events`) — a bare `list_events` already belongs to community events.

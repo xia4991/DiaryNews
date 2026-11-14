@@ -4,12 +4,14 @@ import Badge from '../ui/Badge'
 import StoryGroupBadge from './StoryGroupBadge'
 import { CATEGORY_ZH } from '../../constants/categories'
 import { categoryColor, TAG_COLOR } from '../../constants/colors'
+import { useShowViewCounts } from '../../siteSettings'
 
 function formatViews(value) {
   return `${Number(value || 0)} 次阅读`
 }
 
 function ArticleCard({ article, onClick }) {
+  const showViews = useShowViewCounts()
   const pub = article.published?.slice(0, 10)
   const tags = article.tags_zh
     ? article.tags_zh.split(',').map(t => t.trim()).filter(Boolean)
@@ -55,10 +57,12 @@ function ArticleCard({ article, onClick }) {
       <div className="mt-auto flex items-center justify-between">
         <span className="text-[11px] text-text-subtle">{article.source}</span>
         <div className="flex items-center gap-3">
-          <span className="inline-flex items-center gap-1 text-[11px] text-text-subtle">
-            <span className="material-symbols-outlined" style={{ fontSize: 14 }}>visibility</span>
-            {formatViews(article.view_count)}
-          </span>
+          {showViews && (
+            <span className="inline-flex items-center gap-1 text-[11px] text-text-subtle">
+              <span className="material-symbols-outlined" style={{ fontSize: 14 }}>visibility</span>
+              {formatViews(article.view_count)}
+            </span>
+          )}
           <span className="text-[11px] font-semibold text-accent tracking-wider">阅读 →</span>
         </div>
       </div>

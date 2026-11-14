@@ -316,6 +316,30 @@ def init_db() -> None:
 
             CREATE INDEX IF NOT EXISTS idx_admin_logs_created ON admin_logs (created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_admin_logs_type    ON admin_logs (event_type, created_at DESC);
+
+            -- Site visit analytics: one row per page view / tab switch / article open /
+            -- outbound click. Pruned after ANALYTICS_RETENTION_DAYS (privacy policy).
+            CREATE TABLE IF NOT EXISTS site_events (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at  TEXT    NOT NULL,
+                event_type  TEXT    NOT NULL,
+                page        TEXT    NOT NULL DEFAULT '',
+                target      TEXT    NOT NULL DEFAULT '',
+                title       TEXT    NOT NULL DEFAULT '',
+                referrer    TEXT    NOT NULL DEFAULT '',
+                ip          TEXT    NOT NULL DEFAULT '',
+                country     TEXT    NOT NULL DEFAULT '',
+                visitor_id  TEXT    NOT NULL DEFAULT '',
+                user_id     INTEGER,
+                is_admin    INTEGER NOT NULL DEFAULT 0,
+                is_bot      INTEGER NOT NULL DEFAULT 0,
+                device      TEXT    NOT NULL DEFAULT '',
+                user_agent  TEXT    NOT NULL DEFAULT ''
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_site_events_created ON site_events (created_at);
+            CREATE INDEX IF NOT EXISTS idx_site_events_ip      ON site_events (ip, created_at);
+            CREATE INDEX IF NOT EXISTS idx_site_events_user    ON site_events (user_id);
         """)
         _migrate(conn)
         # Indexes that depend on migrated columns must run after _migrate

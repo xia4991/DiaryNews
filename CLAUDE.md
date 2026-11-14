@@ -1,5 +1,13 @@
 # CLAUDE.md
 
+## Ownership
+
+这个代码库归 Claude 负责：做成什么样由 Claude 决定，以后也由 Claude 接着维护（用户 2026-11-11 明确说明）。
+
+- 设计、结构、命名、重构这类技术决定，自己拿主意并执行，不必逐项征求意见；把理由写进 dev-log 或提交信息。
+- 按“以后还要自己维护”的标准写：宁可现在做对，不留自己都不想接手的临时方案。
+- 发现的问题（bug、过时文档、技术债）主动处理或记录，不等用户指出。
+
 ## Commands
 
 ```bash
@@ -38,6 +46,8 @@ React SPA frontend (`react-frontend/`) + FastAPI backend (`backend/`), connected
 - MiniMax rate limiting is tight — enrichment runs sequentially with a 3s sleep between calls
 - `collect_news` and `enrich_pending_news` are guarded by process-local `threading.Lock`s; concurrent invocations return HTTP 409 `Crawler already running`
 - Data stored in SQLite at `data/diarynews.db` (auto-created)
+- Real visitor IP comes from `backend/request_meta.client_ip()` (Cloudflare tunnel → Caddy means the socket peer is always 127.0.0.1); site visit analytics live in `site_events` and the admin 访问统计 tab
+- Article view counts are admin-only unless the admin flips 站点设置 → 公开新闻阅读数 (`view_counts_public`); frontend gates them with `useShowViewCounts()`
 
 ## Workflow
 

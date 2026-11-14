@@ -14,6 +14,7 @@ import SecondHandSidebar from './components/listings/SecondHandSidebar'
 import CookieConsent from './components/CookieConsent'
 import LegalModal from './components/LegalModal'
 import { api } from './api'
+import { setAnalyticsPage } from './analytics'
 
 // Code-split the gated / heavy tabs so a first-time visitor landing on 首页 doesn't
 // download the admin console, AI assistant, community, listing CRUD, or guide bundles.
@@ -128,6 +129,17 @@ export default function App() {
     try {
       localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, activeTab)
     } catch {}
+  }, [activeTab])
+
+  // Visit analytics: the first tab shown is the site entry (with the external referrer),
+  // later switches are tab events. The ref also absorbs StrictMode's double effect run.
+  const trackedTabRef = useRef(null)
+  useEffect(() => {
+    setAnalyticsPage(activeTab)
+    if (trackedTabRef.current === activeTab) return
+    const isEntry = trackedTabRef.current === null
+    trackedTabRef.current = activeTab
+    api.track(isEntry ? 'pageview' : 'tab', isEntry ? { referrer: document.referrer } : {})
   }, [activeTab])
 
   // If user logs out while on a protected tab, switch to news

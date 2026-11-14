@@ -7,6 +7,7 @@ import NewsFeedRow from '../components/news/NewsFeedRow'
 import SlotCard from '../components/home/SlotCard'
 import FocusTopics from '../components/home/FocusTopics'
 import { sortArticlesByHotness } from '../utils/newsHotness'
+import { useShowViewCounts } from '../siteSettings'
 import { DEAL_TYPE_ZH, formatPrice } from '../constants/realestate'
 import { CATEGORY_ZH as SH_CATEGORY_ZH } from '../constants/secondhand'
 
@@ -121,6 +122,7 @@ export default function HomePage({
   onArticleOpen,
   onGuideOpen,
 }) {
+  const showViews = useShowViewCounts()
   const [selectedArticleState, setSelectedArticleState] = useState(null)
   const [hotWindow, setHotWindow] = useState('week')
   const [boards, setBoards] = useState(EMPTY_BOARDS)
@@ -407,7 +409,7 @@ export default function HomePage({
                           {article.title_zh || article.title}
                         </span>
                         <span className="mt-0.5 block text-[12px] text-text-subtle">
-                          {article.source} · {Number(article.view_count || 0)} 次阅读
+                          {article.source}{showViews && ` · ${Number(article.view_count || 0)} 次阅读`}
                         </span>
                       </span>
                     </button>

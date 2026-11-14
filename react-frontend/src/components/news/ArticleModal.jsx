@@ -6,6 +6,8 @@ import StoryGroupBadge from './StoryGroupBadge'
 import SummaryText from '../SummaryText'
 import { CATEGORY_ZH } from '../../constants/categories'
 import { categoryColor, TAG_COLOR } from '../../constants/colors'
+import { useShowViewCounts } from '../../siteSettings'
+import { api } from '../../api'
 
 function formatPublished(published) {
   const timestamp = Date.parse(published || '')
@@ -39,6 +41,7 @@ const PROSE = '[&>div]:gap-4 [&>div]:text-[16px] [&>div]:leading-8 [&>div]:text-
  */
 export default function ArticleModal({ article, onClose, onBack }) {
   const [showOriginal, setShowOriginal] = useState(false)
+  const showViews = useShowViewCounts()
   if (!article) return null
 
   const tags = (article.tags_zh || '').split(',').map((tag) => tag.trim()).filter(Boolean)
@@ -69,6 +72,7 @@ export default function ArticleModal({ article, onClose, onBack }) {
             href={article.link}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={() => api.track('outbound', { target: article.link, title: article.title_zh || article.title })}
             className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3.5 py-2 text-sm font-semibold text-text-onaccent transition-colors hover:bg-accent-hover"
           >
             阅读原文
@@ -106,10 +110,12 @@ export default function ArticleModal({ article, onClose, onBack }) {
           <span className="font-semibold text-text">{article.source || '未标注'}</span>
           {article.author && <span className="max-w-[200px] truncate">{article.author}</span>}
           {published && <span className="tabular-nums">{published}</span>}
-          <span className="inline-flex items-center gap-1">
-            <span className="material-symbols-outlined" style={{ fontSize: 15 }}>visibility</span>
-            {Number(article.view_count || 0)} 次阅读
-          </span>
+          {showViews && (
+            <span className="inline-flex items-center gap-1">
+              <span className="material-symbols-outlined" style={{ fontSize: 15 }}>visibility</span>
+              {Number(article.view_count || 0)} 次阅读
+            </span>
+          )}
         </div>
 
         {article.story_group_size > 1 && article.story_group_sources?.length > 0 && (
